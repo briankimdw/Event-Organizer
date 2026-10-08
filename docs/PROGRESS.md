@@ -13,6 +13,7 @@ Where the project stands, what was decided, and what's next. Update this file at
 | Product plan | `docs/PLAN.md` (features) and `architecture.md` (Tim's service design). They still disagree on a few points, listed in the README. |
 | Frontend | Clickable **React web prototype** in `frontend/`. **Sign-in and posting photos work against Supabase** (branch `posting`); everything else still runs on mock data. |
 | Database + auth | **Supabase project "Event Organizer" is set up and tested** (phases 0–2). Design and status: `docs/DATABASE.md`. |
+| Discover ML (SigLIP) | Photo embeddings, auto-tags and the `discover_feed()` ranking are built and tested (branch `siglip`). The Discover screen isn't connected to them yet. |
 | Payments (Stripe) | Not started |
 | Mobile app (Expo / React Native) | Not started. The web prototype is the reference design. |
 
@@ -95,6 +96,24 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
   - Not yet tested: a real end-to-end post from a signed-in browser, and reading settings from a real camera file.
 - **Not yet:** watermarking, the AI-image check, editing or deleting posts, and showing real photographers on Home, Search and Discover (those are still mock).
 
+### Discover ML: SigLIP (branch `siglip`, built on `posting`)
+- **`services/ml/`**, a Python service using `google/siglip-base-patch16-224` (open weights, runs locally, no API fees). For each photo it produces a 768-number embedding (its visual style) and auto-tags (color, light, mood, style, subject). Black & white is detected from the pixels.
+- **Database** (2 migrations): pgvector, `photo_embeddings` (server-only), `photos.auto_tags`, `ml_pending_photos` / `ml_save_photo_analysis` (service role only), and **`discover_feed()`**. The feed:
+  - builds a taste from your likes and saves, nudged away from passes
+  - ranks unseen photos by similarity, one per album, alternating photographers
+  - mixes in about 15% "something new"
+  - respects "Not into this"
+  - explains each pick ("Because you liked golden hour shots")
+  - shows the newest photos to users with fewer than 3 likes.
+- **Running it:** `python -m app.worker` (polls for new photos), or the FastAPI app (`/process-pending` for a Supabase webhook). See `services/ml/README.md` for setup and hosting options.
+- **Tested:**
+  - Feed test passes 10/10 (`supabase/tests/feed_test.sql`).
+  - 6 unit tests pass.
+  - On 11 sample photos the tags and "most similar" results were sensible, and the text search "moody black and white city" found the right photo.
+  - The API endpoints work.
+  - The worker hasn't yet run against the real database; it needs the service role key in `services/ml/.env`.
+- **Next:** connect the Discover screen (log swipes to `swipes`, get cards from `discover_feed`), and add a "% match" for photographers based on the same taste vector.
+
 ---
 
 ## Decisions made (defaults; revisit with Tim)
@@ -110,6 +129,9 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
 ---
 
 ## Open items / known issues
+
+- **ML worker setup:** put `SUPABASE_SERVICE_ROLE_KEY` and `ML_WEBHOOK_SECRET` in `services/ml/.env` (template: `.env.example`), then run `python -m app.worker --once` after posting photos. Choose a host later (see `services/ml/README.md`).
+- **Supabase advisor:** turn on *leaked password protection* (Authentication → password security), now that accounts use passwords. It may require a paid plan.
 
 - **Supabase Auth dashboard settings (needed for sign-in to work end to end):**
   - Authentication → URL Configuration: Site URL `http://localhost:5173`. Redirect URLs: `http://localhost:5173/**`, plus your computer's network address (e.g. `http://10.250.251.86:5173/**`) for phone testing.
