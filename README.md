@@ -8,9 +8,9 @@ The main rule across all the docs: **the booking core is category-agnostic from 
 
 | Part | State |
 |---|---|
-| `frontend/` | Clickable mobile prototype on mock data (no backend) |
-| Backend | Not started |
-| Docs | Two design docs, not yet reconciled (see below) |
+| `frontend/` | Clickable mobile prototype on mock data (not yet connected to the database) |
+| Database + auth | Supabase set up and tested (`supabase/`, design in [`docs/DATABASE.md`](docs/DATABASE.md)) |
+| Docs | Two design docs, not yet reconciled (see below). Session-by-session status: [`docs/PROGRESS.md`](docs/PROGRESS.md) |
 
 ## Docs
 
