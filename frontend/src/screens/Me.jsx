@@ -6,58 +6,117 @@ import {
 } from 'lucide-react'
 import Sheet from '../components/Sheet.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
-import { IdVerified, VerifiedClient } from '../components/Badges.jsx'
+import { IdVerified } from '../components/Badges.jsx'
 import { StatusPill } from '../components/Booking.jsx'
 import Dashboard from './Dashboard.jsx'
 import { useStore } from '../store.jsx'
+import { useAuth } from '../auth.jsx'
+import { supabase } from '../lib/supabase.js'
 import { collections, discoverCards, findPackage, getProvider, img, me, myCalendar, myPackages, myPosts } from '../data/mock.js'
 
 const ACTIVE = ['requested', 'countered', 'accepted', 'confirmed', 'in_progress', 'delivered', 'disputed']
 
 export default function Me() {
   const { mode } = useStore()
+  const { user, loading } = useAuth()
   return (
     <div className="me">
       <header className="home-header">
         <div className="title-lg">Profile</div>
-        <Link to="/settings" className="icon-btn" aria-label="Settings">
-          <Settings size={22} />
-        </Link>
+        {user && (
+          <Link to="/settings" className="icon-btn" aria-label="Settings">
+            <Settings size={22} />
+          </Link>
+        )}
       </header>
-      <ProfileHero />
-      <RoleSwitch />
-      {mode === 'provider' ? <ProviderView /> : <ClientView />}
+      {loading ? (
+        <div className="center-col pad"><div className="spinner" /></div>
+      ) : !user ? (
+        <SignedOut />
+      ) : (
+        <>
+          <ProfileHero />
+          <RoleSwitch />
+          {mode === 'provider' ? <ProviderView /> : <ClientView />}
+        </>
+      )}
     </div>
   )
 }
 
+function SignedOut() {
+  return (
+    <div className="pad">
+      <div className="signed-out">
+        <div className="signed-out-art">
+          {['maya-2', 'p3-album-1-0', 'sofia-1'].map((s) => <img key={s} src={img(s, 200, 240)} alt="" />)}
+        </div>
+        <h3>Your bookings, favorites and messages, in one place</h3>
+        <p className="muted small">Sign in to request bookings, message photographers and keep your shortlist across devices.</p>
+        <Link to="/sign-in?next=/me" className="btn accent block mt">Sign in or create an account</Link>
+      </div>
+    </div>
+  )
+}
+
+// Initials avatar until profile photos are uploaded to the avatars bucket.
+function Avatar({ profile, className }) {
+  if (profile?.avatar_path) {
+    const { data } = supabase.storage.from('avatars').getPublicUrl(profile.avatar_path)
+    return <img className={className} src={data.publicUrl} alt="" />
+  }
+  const name = profile?.display_name || profile?.username || '?'
+  const initials = name.split(/s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+  return <div className={`${className} avatar-initials`}>{initials}</div>
+}
+
 function ProfileHero() {
-  const { mode, profile, updateProfile, identityStatus, toast } = useStore()
+  const { mode, identityStatus, toast } = useStore()
+  const { user, profile, refreshProfile } = useAuth()
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(profile)
+  const [draft, setDraft] = useState({ display_name: '', city: '', bio: '' })
+  const [saving, setSaving] = useState(false)
   const isProvider = mode === 'provider'
 
-  const save = () => {
-    updateProfile(draft)
+  const openEdit = () => {
+    setDraft({ display_name: profile?.display_name || '', city: profile?.city || '', bio: profile?.bio || '' })
+    setEditing(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ display_name: draft.display_name.trim(), city: draft.city.trim() || null, bio: draft.bio.trim() || null })
+      .eq('id', user.id)
+    setSaving(false)
+    if (error) {
+      toast('Couldn’t save: ' + error.message)
+      return
+    }
+    await refreshProfile()
     setEditing(false)
     toast('Profile updated')
   }
 
+  if (!profile) return null
+  const clientRating = profile.client_rating_avg
+
   return (
     <section className="me-hero">
       <div className="row gap-xs top">
-        <img className="avatar xl" src={me.avatar} alt="" />
+        <Avatar profile={profile} className="avatar xl" />
         <div className="grow">
-          <h2>{profile.name}</h2>
+          <h2>{profile.display_name || profile.username}</h2>
           <div className="muted small inline-icon">
-            @{me.username} · <MapPin size={12} /> {profile.city}
+            @{profile.username}
+            {profile.city && <> · <MapPin size={12} /> {profile.city}</>}
           </div>
           <div className="row gap-xs wrap mt-xs">
             {identityStatus === 'verified' && <IdVerified label />}
-            {me.verifiedClient && <VerifiedClient />}
           </div>
         </div>
-        <button className="pill-btn" onClick={() => { setDraft(profile); setEditing(true) }}>
+        <button className="pill-btn" onClick={openEdit}>
           <Pencil size={13} /> Edit
         </button>
       </div>
@@ -67,8 +126,8 @@ function ProfileHero() {
       {/* Both ratings are always visible; the one for the current role is highlighted. */}
       <div className="rating-pair">
         <div className={`rating-cell ${!isProvider ? 'on' : ''}`}>
-          <b><Star size={14} className="star-on" fill="currentColor" /> {me.clientRating}</b>
-          <span>as a client · {me.clientReviews} reviews</span>
+          <b><Star size={14} className="star-on" fill="currentColor" /> {clientRating ?? 'New'}</b>
+          <span>as a client · {profile.client_rating_count} reviews</span>
         </div>
         <div className={`rating-cell ${isProvider ? 'on' : ''}`}>
           <b><Star size={14} className="star-on" fill="currentColor" /> {me.providerRating}</b>
@@ -77,10 +136,10 @@ function ProfileHero() {
       </div>
 
       <Sheet open={editing} onClose={() => setEditing(false)} title="Edit profile">
-        <label className="field"><span>Name</span><input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
-        <label className="field mt-sm"><span>City</span><input className="input" value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} /></label>
-        <label className="field mt-sm"><span>Bio</span><textarea className="input" rows={3} value={draft.bio} onChange={(e) => setDraft({ ...draft, bio: e.target.value })} /></label>
-        <button className="btn block mt" disabled={!draft.name.trim()} onClick={save}>Save</button>
+        <label className="field"><span>Name</span><input className="input" maxLength={80} value={draft.display_name} onChange={(e) => setDraft({ ...draft, display_name: e.target.value })} /></label>
+        <label className="field mt-sm"><span>City</span><input className="input" maxLength={80} value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} /></label>
+        <label className="field mt-sm"><span>Bio</span><textarea className="input" rows={3} maxLength={500} value={draft.bio} onChange={(e) => setDraft({ ...draft, bio: e.target.value })} /></label>
+        <button className="btn block mt" disabled={saving || !draft.display_name.trim()} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
       </Sheet>
     </section>
   )

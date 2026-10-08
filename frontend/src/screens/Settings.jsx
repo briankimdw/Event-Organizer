@@ -1,15 +1,23 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ChevronRight, CreditCard, Download, LogOut, ShieldCheck, Stamp, Trash2 } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ChevronRight, CreditCard, Download, KeyRound, LogOut, ShieldCheck, Stamp, Trash2 } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Sheet from '../components/Sheet.jsx'
 import { useStore } from '../store.jsx'
+import { useAuth } from '../auth.jsx'
 
 export default function Settings() {
   const {
     identityStatus, payoutsConnected, setPayoutsConnected, watermarkDefault, setWatermarkDefault, toast,
   } = useStore()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const navigate = useNavigate()
+  const { signOut, user } = useAuth()
+  const logOut = async () => {
+    await signOut()
+    toast('Signed out')
+    navigate('/', { replace: true })
+  }
   const verified = identityStatus === 'verified'
 
   return (
@@ -18,6 +26,14 @@ export default function Settings() {
       <div className="pad">
         <div className="section-label">Account</div>
         <div className="settings-group">
+          <Link to="/reset-password" className="list-row">
+            <span className="round-icon"><KeyRound size={18} /></span>
+            <div className="grow">
+              <div>Set or change password</div>
+              <div className="muted tiny">Signed in as {user?.email}</div>
+            </div>
+            <ChevronRight size={16} className="muted" />
+          </Link>
           <Link to={verified ? '#' : '/verify'} className="list-row" onClick={(e) => verified && e.preventDefault()}>
             <span className="round-icon"><ShieldCheck size={18} /></span>
             <div className="grow">
@@ -62,7 +78,7 @@ export default function Settings() {
           </button>
         </div>
 
-        <button className="btn ghost block mt-lg" onClick={() => toast('Logged out')}>
+        <button className="btn ghost block mt-lg" onClick={logOut}>
           <LogOut size={16} /> Log out
         </button>
       </div>

@@ -1,4 +1,4 @@
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import TabBar from './components/TabBar.jsx'
 import Toast from './components/Toast.jsx'
 import useHorizontalScroll from './components/useHorizontalScroll.js'
@@ -19,18 +19,28 @@ import Upload from './screens/Upload.jsx'
 import Verify from './screens/Verify.jsx'
 import Settings from './screens/Settings.jsx'
 import AiReview from './screens/AiReview.jsx'
+import SignIn from './screens/SignIn.jsx'
+import AuthCallback from './screens/AuthCallback.jsx'
+import Welcome from './screens/Welcome.jsx'
+import ResetPassword from './screens/ResetPassword.jsx'
+import { useAuth } from './auth.jsx'
 
 const TAB_ROUTES = ['/', '/discover', '/bookings', '/inbox', '/me']
+const AUTH_ROUTES = ['/sign-in', '/auth/callback', '/welcome', '/reset-password']
 
 export default function App() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
+  const { needsWelcome } = useAuth()
   useHorizontalScroll('phone')
   const showTabs = TAB_ROUTES.includes(pathname)
+  // A brand-new account picks a name before using the app.
+  const welcomeRedirect = needsWelcome && !AUTH_ROUTES.includes(pathname)
 
   return (
     <div className="stage">
       <div className="phone" id="phone">
         <div className={`viewport ${showTabs ? 'with-tabs' : ''}`} key={pathname}>
+          {welcomeRedirect && <Navigate to={`/welcome?next=${encodeURIComponent(pathname + search)}`} replace />}
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/post/:id" element={<PostRedirect />} />
@@ -50,6 +60,10 @@ export default function App() {
             <Route path="/verify" element={<Verify />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/ai-review/:id" element={<AiReview />} />
+            <Route path="/sign-in" element={<SignIn />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/welcome" element={<Welcome />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
           </Routes>
         </div>
         {showTabs && <TabBar />}
