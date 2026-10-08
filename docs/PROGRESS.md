@@ -11,7 +11,7 @@ Where the project stands, what was decided, and what's next. Update this file at
 | Area | State |
 |---|---|
 | Product plan | `docs/PLAN.md` (features) and `architecture.md` (Tim's service design). They still disagree on a few points, listed in the README. |
-| Frontend | Clickable **React web prototype** in `frontend/`, running on mock data. Not connected to the database yet. |
+| Frontend | Clickable **React web prototype** in `frontend/`. **Sign-in works against Supabase** (branch `sign-in`); everything else still runs on mock data. |
 | Database + auth | **Supabase project "Event Organizer" is set up and tested** (phases 0–2). Design and status: `docs/DATABASE.md`. |
 | Payments (Stripe) | Not started |
 | Mobile app (Expo / React Native) | Not started. The web prototype is the reference design. |
@@ -60,6 +60,20 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
   - Generated types are in `frontend/src/lib/database.types.ts`.
   - Keys go in `frontend/.env.local`, which is git-ignored; `frontend/.env.example` is the template.
 
+### Sign-in (branch `sign-in`, built on `database-setup`)
+- **Sign-in screen** (`/sign-in`):
+  - Email with no password: Supabase emails a link and a code, and you can tap the link or type the code.
+  - "Continue with Google" is shown, but stays greyed out until Google is switched on in Supabase. The screen checks the project settings, so nobody lands on an error page.
+- **Link landing page** (`/auth/callback`): where email links and Google send people back. It shows a friendly message if a link has expired.
+- **Welcome step** (`/welcome`): new accounts choose a display name and username, saved to `profiles`. Taken usernames are caught.
+- **Me tab:**
+  - Signed out: a sign-in prompt.
+  - Signed in: the real name, username, city, bio and client rating from the database. "Edit profile" saves to Supabase.
+  - The rest of the tab (photographer stats, requests and so on) is still mock data.
+- **Elsewhere:** Settings → Log out signs out for real. Sending a booking request while signed out goes to sign-in, then back to the same form.
+- **Code:** `src/auth.jsx` (`AuthProvider` / `useAuth`: session + profile), plus `SignIn.jsx`, `AuthCallback.jsx` and `Welcome.jsx`.
+- **Tested in Chrome:** signed-out Me, the sign-in screen, the Google-off state, email validation, the booking gate, the welcome redirect and the expired-link message. The real email round-trip hasn't been tested yet; it needs the dashboard settings below.
+
 ---
 
 ## Decisions made (defaults; revisit with Tim)
@@ -76,6 +90,12 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
 
 ## Open items / known issues
 
+- **Supabase Auth dashboard settings (needed for sign-in to work end to end):**
+  - Authentication → URL Configuration: Site URL `http://localhost:5173`. Redirect URLs: `http://localhost:5173/**`, plus your computer's network address (e.g. `http://10.250.251.86:5173/**`) for phone testing.
+  - Authentication → Emails → Magic Link template: add `{{ .Token }}` so the email includes the code as well as the link.
+  - Google: create an OAuth client in Google Cloud and enable it under Authentication → Providers → Google.
+  - Supabase's built-in email only sends to team members of the project. Invite Tim, or set up your own SMTP (e.g. Resend), before other people can sign in.
+
 - **Not merged yet:** the database work is on branch `database-setup`. Open a PR to merge it into `main`.
 - **Optional, not applied:** `supabase/pending/split_owner_policies.sql`, a performance tidy-up flagged by Supabase. It was declined when proposed; apply it later as a new migration if wanted.
 - **The frontend isn't wired to the database.** Screens still read `mock.js`.
@@ -90,7 +110,7 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
 ## Next steps (suggested order)
 
 1. Merge `database-setup` into `main`, and invite Tim to Supabase.
-2. **Sign-in screen** (email magic link + Google) using `supabase.auth`.
+2. ~~Sign-in screen~~ (done on branch `sign-in`). Finish the dashboard settings above, then merge.
 3. Replace mock data screen by screen: categories + Search (`search_providers`), then profiles/packages/albums, then the booking request flow (`request_booking`), then Bookings, then Inbox (Realtime).
 4. Provider onboarding: `become_provider`, packages, availability, album upload to Storage.
 5. Stripe phase: payments/payouts/disputes tables, Connect onboarding, Stripe Identity, webhooks (Edge Functions), deposit → `confirmed`.

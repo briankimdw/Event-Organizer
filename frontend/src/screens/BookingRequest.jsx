@@ -6,6 +6,7 @@ import PersonRow from '../components/PersonRow.jsx'
 import { PolicyTable, money, priceLabel } from '../components/Booking.jsx'
 import { AvailabilityStrip } from './Profile.jsx'
 import { useStore } from '../store.jsx'
+import { useAuth } from '../auth.jsx'
 import { getProvider } from '../data/mock.js'
 import { fmtBooking, fromKey, parseDates } from '../data/dates.js'
 
@@ -23,6 +24,7 @@ export default function BookingRequest() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { addBooking, toast } = useStore()
+  const { user } = useAuth()
   const p = getProvider(providerId)
 
   const [pkgId, setPkgId] = useState(params.get('pkg') || p.packages[0].id)
@@ -47,6 +49,11 @@ export default function BookingRequest() {
   const deposit = Math.round((total * pkg.depositPct) / 100)
 
   const send = () => {
+    // Requests need an account: sign in, then come straight back to this form.
+    if (!user) {
+      navigate(`/sign-in?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+      return
+    }
     const ids = dates.map((date, i) => {
       const id = `b${Date.now()}${i}`
       addBooking({
@@ -178,7 +185,7 @@ export default function BookingRequest() {
         </div>
 
         <button className="btn accent block mt-lg" disabled={!dates.length} onClick={send}>
-          {dates.length === 0 ? 'Pick a date' : dates.length === 1 ? `Send request · ${dates[0]}` : `Send ${dates.length} requests`}
+          {dates.length === 0 ? 'Pick a date' : !user ? 'Sign in to send request' : dates.length === 1 ? `Send request · ${dates[0]}` : `Send ${dates.length} requests`}
         </button>
       </div>
     </div>
