@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { EyeOff } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Stars from '../components/Stars.jsx'
+import ProfileLink from '../components/ProfileLink.jsx'
 import { useStore } from '../store.jsx'
 import { findPackage } from '../data/mock.js'
 
@@ -25,7 +26,7 @@ export default function Review() {
     <div>
       <TopBar title="Leave a review" />
       <div className="pad center-col">
-        <img className="avatar xl" src={p.avatar} alt="" />
+        <ProfileLink id={p.id}><img className="avatar xl" src={p.avatar} alt="" /></ProfileLink>
         <h3>How was your shoot with {p.name.split(' ')[0]}?</h3>
         <div className="muted small">{pkg.name} · {b.date}</div>
         <div className="mt">

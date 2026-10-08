@@ -7,6 +7,7 @@ import { PolicyTable, money, priceLabel } from '../components/Booking.jsx'
 import { AvailabilityStrip } from './Profile.jsx'
 import { useStore } from '../store.jsx'
 import { getProvider } from '../data/mock.js'
+import { fmtBooking, fromKey, parseDates } from '../data/dates.js'
 
 const LOCATIONS = [
   { label: 'Downtown Los Angeles', extraKm: 0 },
@@ -26,7 +27,10 @@ export default function BookingRequest() {
 
   const [pkgId, setPkgId] = useState(params.get('pkg') || p.packages[0].id)
   const [hours, setHours] = useState(null)
-  const [date, setDate] = useState(null)
+  // Dates picked in a date search arrive pre-selected; each selected date becomes its own request.
+  const [requestedDates] = useState(() => parseDates(params.get('dates')).map((k) => fmtBooking(fromKey(k))))
+  const [dates, setDates] = useState(requestedDates)
+  const toggleDate = (d) => setDates(dates.includes(d) ? dates.filter((x) => x !== d) : [...dates, d])
   const [time, setTime] = useState('2:00 PM')
   const [loc, setLoc] = useState(LOCATIONS[0].label)
   const [addons, setAddons] = useState([])
@@ -43,14 +47,18 @@ export default function BookingRequest() {
   const deposit = Math.round((total * pkg.depositPct) / 100)
 
   const send = () => {
-    const id = `b${Date.now()}`
-    addBooking({
-      id, providerId, packageId: pkgId, addonIds: addons, date, time, location: loc, travelFee,
-      total: isQuote ? null : total, depositPaid: false, status: 'requested', policy: p.cancellationPolicy,
-      expiresIn: '48h', note, history: [{ status: 'requested', at: 'Just now' }],
+    const ids = dates.map((date, i) => {
+      const id = `b${Date.now()}${i}`
+      addBooking({
+        id, providerId, packageId: pkgId, addonIds: addons, date, time, location: loc, travelFee,
+        total: isQuote ? null : total, depositPaid: false, status: 'requested', policy: p.cancellationPolicy,
+        expiresIn: '48h', note, history: [{ status: 'requested', at: 'Just now' }],
+      })
+      return id
     })
-    toast(`Request sent. ${p.name.split(' ')[0]} has 48h to respond.`)
-    navigate(`/bookings/${id}`, { replace: true })
+    const first = p.name.split(' ')[0]
+    toast(ids.length > 1 ? `${ids.length} requests sent. ${first} has 48h to respond.` : `Request sent. ${first} has 48h to respond.`)
+    navigate(ids.length > 1 ? '/bookings' : `/bookings/${ids[0]}`, { replace: true })
   }
 
   return (
@@ -85,8 +93,21 @@ export default function BookingRequest() {
           </div>
         )}
 
-        <h4 className="section-title">Date</h4>
-        <AvailabilityStrip unavailable={p.unavailable} selected={date} onSelect={setDate} />
+        <h4 className="section-title">{dates.length > 1 ? `Dates (${dates.length})` : 'Date'}</h4>
+        {requestedDates.length > 0 && (
+          <>
+            <div className="muted tiny">Your dates where {p.name.split(' ')[0]} is free</div>
+            <div className="chips mt-xs mb-sm">
+              {requestedDates.map((d) => (
+                <button key={d} className={`chip toggle ${dates.includes(d) ? 'on' : ''}`} onClick={() => toggleDate(d)}>
+                  {new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                </button>
+              ))}
+            </div>
+            <div className="muted tiny mt-sm">Or pick from the next 2 weeks</div>
+          </>
+        )}
+        <AvailabilityStrip unavailable={p.unavailable} selected={dates} onSelect={toggleDate} />
         <div className="chips mt-sm">
           {TIMES.map((t) => (
             <button key={t} className={`chip toggle ${time === t ? 'on' : ''}`} onClick={() => setTime(t)}>
@@ -138,8 +159,11 @@ export default function BookingRequest() {
             {travelFee > 0 && (
               <div className="row between"><span>Travel fee ({extraKm} km)</span><span>{money(travelFee)}</span></div>
             )}
-            <div className="row between total"><span>Total</span><span>{money(total)}</span></div>
-            <div className="row between muted small"><span>Deposit due on acceptance ({pkg.depositPct}%)</span><span>{money(deposit)}</span></div>
+            <div className="row between total"><span>{dates.length > 1 ? 'Per date' : 'Total'}</span><span>{money(total)}</span></div>
+            {dates.length > 1 && (
+              <div className="row between total"><span>Total for {dates.length} dates</span><span>{money(total * dates.length)}</span></div>
+            )}
+            <div className="row between muted small"><span>Deposit due on acceptance ({pkg.depositPct}%){dates.length > 1 && ', per date'}</span><span>{money(deposit)}</span></div>
             <div className="row between muted small"><span>Balance due 14 days before</span><span>{money(total - deposit)}</span></div>
           </div>
         )}
@@ -153,8 +177,8 @@ export default function BookingRequest() {
           You won't be charged until {p.name.split(' ')[0]} accepts. Your payment is held until your photos are delivered.
         </div>
 
-        <button className="btn accent block mt-lg" disabled={!date} onClick={send}>
-          {date ? `Send request · ${date}` : 'Pick a date'}
+        <button className="btn accent block mt-lg" disabled={!dates.length} onClick={send}>
+          {dates.length === 0 ? 'Pick a date' : dates.length === 1 ? `Send request · ${dates[0]}` : `Send ${dates.length} requests`}
         </button>
       </div>
     </div>

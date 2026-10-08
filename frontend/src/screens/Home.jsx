@@ -1,9 +1,11 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
-  Building2, Camera, ChevronRight, GraduationCap, Heart, Layers, MapPin, Package, PartyPopper, Search,
+  Building2, Camera, ChevronRight, GraduationCap, Heart, Layers, Package, PartyPopper,
   Star, Users, UserSquare, Presentation,
 } from 'lucide-react'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
+import ProfileLink from '../components/ProfileLink.jsx'
+import SearchLauncher from '../components/SearchLauncher.jsx'
 import { StatusPill, money, startingPrice } from '../components/Booking.jsx'
 import { useStore } from '../store.jsx'
 import { findPackage, img, me, providers, tasteProfile } from '../data/mock.js'
@@ -31,7 +33,6 @@ const NEEDS_ACTION = {
 const WEEKEND = [2, 3]
 
 export default function Home() {
-  const navigate = useNavigate()
   const { bookings } = useStore()
 
   const actionItems = bookings.filter((b) => NEEDS_ACTION[b.status])
@@ -50,11 +51,7 @@ export default function Home() {
       </header>
 
       <div className="pad-x">
-        <button className="search" onClick={() => navigate('/search')}>
-          <Search size={16} />
-          <span className="grow left-text">Search styles, occasions, names</span>
-          <span className="loc-chip"><MapPin size={12} /> LA</span>
-        </button>
+        <SearchLauncher placeholder="Search styles, occasions, names" />
       </div>
 
       {(actionItems.length > 0 || upcoming.length > 0) && (
@@ -65,10 +62,10 @@ export default function Home() {
               const { provider, pkg } = findPackage(b.packageId)
               return (
                 <Link key={b.id} to={`/bookings/${b.id}`} className={`booking-tile ${NEEDS_ACTION[b.status] ? 'action' : ''}`}>
-                  <div className="row gap-xs">
+                  <ProfileLink id={provider.id} className="row gap-xs">
                     <img className="avatar sm" src={provider.avatar} alt="" />
                     <b className="small grow ellipsis">{provider.name}</b>
-                  </div>
+                  </ProfileLink>
                   <div className="small mt-xs">{pkg.name}</div>
                   <div className="muted tiny">{b.date}</div>
                   <div className="mt-sm">

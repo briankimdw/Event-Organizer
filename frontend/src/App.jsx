@@ -1,8 +1,9 @@
 import { Route, Routes, useLocation } from 'react-router-dom'
 import TabBar from './components/TabBar.jsx'
 import Toast from './components/Toast.jsx'
+import useHorizontalScroll from './components/useHorizontalScroll.js'
 import Home from './screens/Home.jsx'
-import PostDetail from './screens/PostDetail.jsx'
+import Gallery, { PostRedirect } from './screens/Gallery.jsx'
 import Discover from './screens/Discover.jsx'
 import Search from './screens/Search.jsx'
 import Bookings from './screens/Bookings.jsx'
@@ -16,12 +17,14 @@ import Chat from './screens/Chat.jsx'
 import Me from './screens/Me.jsx'
 import Upload from './screens/Upload.jsx'
 import Verify from './screens/Verify.jsx'
+import Settings from './screens/Settings.jsx'
 import AiReview from './screens/AiReview.jsx'
 
 const TAB_ROUTES = ['/', '/discover', '/bookings', '/inbox', '/me']
 
 export default function App() {
   const { pathname } = useLocation()
+  useHorizontalScroll('phone')
   const showTabs = TAB_ROUTES.includes(pathname)
 
   return (
@@ -30,7 +33,8 @@ export default function App() {
         <div className={`viewport ${showTabs ? 'with-tabs' : ''}`} key={pathname}>
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/post/:id" element={<PostDetail />} />
+            <Route path="/post/:id" element={<PostRedirect />} />
+            <Route path="/gallery/:personId" element={<Gallery />} />
             <Route path="/discover" element={<Discover />} />
             <Route path="/search" element={<Search />} />
             <Route path="/u/:id" element={<Profile />} />
@@ -44,6 +48,7 @@ export default function App() {
             <Route path="/me" element={<Me />} />
             <Route path="/upload" element={<Upload />} />
             <Route path="/verify" element={<Verify />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/ai-review/:id" element={<AiReview />} />
           </Routes>
         </div>

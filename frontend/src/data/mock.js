@@ -12,6 +12,8 @@ export const me = {
   bio: 'Weekend street shooter. Grad + headshot sessions around LA.',
   clientRating: 4.8,
   clientReviews: 9,
+  providerRating: 4.9,
+  providerReviews: 23,
   verifiedClient: true,
   followers: 312,
   following: 188,
@@ -311,6 +313,17 @@ export const getPerson = (id) =>
 
 export const getProvider = (id) => providers.find((p) => p.id === id)
 
+// Is this provider free on a given date? The next 14 days come from each provider's
+// `unavailable` list (offset 0 = Oct 8, 2026); later dates are faked with a stable hash.
+const AVAILABILITY_START = new Date(2026, 9, 8)
+export const isAvailable = (provider, date) => {
+  const offset = Math.round((date - AVAILABILITY_START) / 86400000)
+  if (offset >= 0 && offset < 14) return !provider.unavailable.includes(offset)
+  let h = 7
+  for (const ch of `${provider.id}-${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`) h = (h * 31 + ch.charCodeAt(0)) % 997
+  return h % 100 >= 22
+}
+
 export const findPackage = (pkgId) => {
   for (const p of providers) {
     const pkg = p.packages.find((x) => x.id === pkgId)
@@ -378,6 +391,66 @@ export const posts = [
     comments: [],
   },
 ]
+
+// A portfolio is a list of albums: one post per shoot (a wedding, a grad session...) with
+// several photos. Real posts come first, then generated albums titled from the person's specialties.
+const ALBUM_TITLES = {
+  Wedding: ['Nguyen–Park wedding', 'Garden wedding at Descanso', 'Courthouse elopement', 'Vineyard wedding in Malibu'],
+  Portrait: ['Golden hour portraits', 'Studio portraits', 'Family session'],
+  Engagement: ['Beach engagement', 'Downtown engagement'],
+  Street: ['Rainy night downtown', 'Little Tokyo walk'],
+  Event: ['Product launch party', 'Rooftop birthday'],
+  Nightlife: ['Club night in Hollywood'],
+  Graduation: ['UCLA class of 2026', 'USC grad session'],
+  Headshots: ['Team headshots', 'Actor headshots'],
+  Family: ['Family at the park'],
+  'Real estate': ['Venice modern listing', 'Craftsman in Pasadena'],
+  Product: ['Skincare launch', 'Coffee brand catalog'],
+  Architecture: ['Downtown towers'],
+  Landscape: ['Eastern Sierra', 'Big Sur coast'],
+  Coaching: ['Long exposure workshop'],
+  Meetups: ['Sunrise meetup'],
+  Quinceañera: ['Sofia’s quinceañera'],
+  Editorial: ['Editorial: monochrome'],
+}
+const SHUTTERS = ['1/250s', '1/500s', '1/125s', '1/1000s', '1/60s']
+const ISOS = ['100', '200', '400', '800', '1600']
+const MONTHS = ['Sep 2026', 'Aug 2026', 'Jul 2026', 'Jun 2026', 'May 2026']
+
+// Small variations per photo so an album doesn't show identical settings on every frame.
+const vary = (exif, i) => (i === 0 ? exif : { ...exif, shutter: SHUTTERS[(i + 1) % SHUTTERS.length], iso: ISOS[(i + 2) % ISOS.length] })
+
+export const galleryFor = (personId) => {
+  const person = getPerson(personId)
+  const real = posts
+    .filter((p) => p.authorId === personId)
+    .map((p) => ({
+      id: p.id, title: p.caption.split('.')[0], location: p.location, date: p.exif.date, type: p.type,
+      photos: p.photos.map((seed, i) => ({ seed, exif: vary(p.exif, i) })),
+      genre: p.genre, tags: p.tags, autoTags: p.autoTags, caption: p.caption, realPhoto: p.realPhoto,
+    }))
+  const gear = person.gear || { bodies: ['Camera'], lenses: ['50mm f/1.8'] }
+  const specialties = person.specialties || ['Portrait']
+  const generated = Array.from({ length: 5 }, (_, a) => {
+    const genre = specialties[a % specialties.length]
+    const titles = ALBUM_TITLES[genre] || [`${genre} session`]
+    const lens = gear.lenses[a % gear.lenses.length]
+    const exif = {
+      body: gear.bodies[a % gear.bodies.length], lens,
+      focal: (lens.match(/(\d+)(?:-\d+)?mm/) || [, '50'])[1] + 'mm',
+      aperture: (lens.match(/f\/[\d.]+/) || ['f/2.8'])[0],
+      shutter: SHUTTERS[a % SHUTTERS.length], iso: ISOS[a % ISOS.length], flash: 'Off', date: MONTHS[a],
+    }
+    const count = 2 + ((personId.charCodeAt(1) + a * 3) % 5) // 2–6 photos
+    return {
+      id: `${personId}-album-${a}`, title: titles[Math.floor(a / specialties.length) % titles.length],
+      location: person.city, date: MONTHS[a], type: 'photo',
+      photos: Array.from({ length: count }, (_, i) => ({ seed: `${personId}-album-${a}-${i}`, exif: vary(exif, i) })),
+      genre, tags: [], autoTags: [], caption: null, realPhoto: false,
+    }
+  })
+  return [...real, ...generated]
+}
 
 // My own posts (shown on my profile). One is held in the AI-review queue.
 export const myPosts = [

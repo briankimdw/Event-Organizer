@@ -12,6 +12,9 @@ export function StoreProvider({ children }) {
   const [following, setFollowing] = useState(new Set(['p1', 'p2', 'p5', 'u5']))
   const [mode, setMode] = useState('client') // client | provider
   const [identityStatus, setIdentityStatus] = useState('unverified') // unverified | verified
+  const [payoutsConnected, setPayoutsConnected] = useState(false)
+  const [watermarkDefault, setWatermarkDefault] = useState(true)
+  const [profile, setProfile] = useState({ name: mock.me.name, city: mock.me.city, bio: mock.me.bio })
   const [discoverHistory, setDiscoverHistory] = useState([]) // [{ id, action: like | pass | save }]
   const [corrections, setCorrections] = useState(mock.tasteProfile.corrections)
   const [toastMsg, setToastMsg] = useState(null)
@@ -71,6 +74,9 @@ export function StoreProvider({ children }) {
     removeCorrection: (tag) => setCorrections((prev) => prev.filter((t) => t !== tag)),
     mode, setMode,
     identityStatus, setIdentityStatus,
+    payoutsConnected, setPayoutsConnected,
+    watermarkDefault, setWatermarkDefault,
+    profile, updateProfile: (patch) => setProfile((prev) => ({ ...prev, ...patch })),
     toast, toastMsg,
   }
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

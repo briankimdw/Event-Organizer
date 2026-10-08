@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, Clock, CreditCard, Images, Plus, ShieldCheck, ShieldAlert, Stamp, Star } from 'lucide-react'
+import { Clock, Images, Plus, ShieldAlert, Star } from 'lucide-react'
 import Segmented from '../components/Segmented.jsx'
 import Sheet from '../components/Sheet.jsx'
 import { VerifiedClient } from '../components/Badges.jsx'
@@ -8,62 +8,27 @@ import { money, priceLabel } from '../components/Booking.jsx'
 import { useStore } from '../store.jsx'
 import { img, myCalendar, myPackages, myPosts } from '../data/mock.js'
 
-export default function Dashboard() {
-  const { identityStatus, requests } = useStore()
-  const [tab, setTab] = useState('requests')
+// Provider work tabs, shown inside the profile page in Photographer mode.
+export default function Dashboard({ tab, onTabChange }) {
+  const { requests } = useStore()
   const pending = requests.filter((r) => r.status === 'requested').length
 
   return (
-    <div className="pad">
-      {identityStatus !== 'verified' ? (
-        <Link to="/verify" className="callout danger link-callout">
-          <ShieldAlert size={20} />
-          <div className="grow">
-            <b>Verify your identity</b>
-            <div className="small muted">Required before you can accept paid bookings or get paid.</div>
-          </div>
-          <ChevronRight size={16} />
-        </Link>
-      ) : (
-        <div className="callout">
-          <div className="inline-icon"><ShieldCheck size={16} /> <b>Identity verified</b></div>
-        </div>
-      )}
-      <PayoutsRow />
-
-      <div className="mt">
-        <Segmented
-          options={[
-            { value: 'requests', label: `Requests${pending ? ` (${pending})` : ''}` },
-            { value: 'calendar', label: 'Calendar' },
-            { value: 'packages', label: 'Packages' },
-            { value: 'portfolio', label: 'Portfolio' },
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
-      </div>
+    <div className="pad-x">
+      <Segmented
+        options={[
+          { value: 'requests', label: pending ? `Requests · ${pending}` : 'Requests' },
+          { value: 'calendar', label: 'Calendar' },
+          { value: 'packages', label: 'Packages' },
+          { value: 'portfolio', label: 'Portfolio' },
+        ]}
+        value={tab}
+        onChange={onTabChange}
+      />
       {tab === 'requests' && <Requests />}
       {tab === 'calendar' && <ProviderCalendar />}
       {tab === 'packages' && <Packages />}
       {tab === 'portfolio' && <Portfolio />}
-    </div>
-  )
-}
-
-function PayoutsRow() {
-  const { toast } = useStore()
-  const [connected, setConnected] = useState(false)
-  return (
-    <div className="list-row">
-      <span className="round-icon"><CreditCard size={18} /></span>
-      <div className="grow">
-        <div>Payouts</div>
-        <div className="muted tiny">{connected ? 'Bank account ••6789 connected' : 'Connect a bank account with Stripe'}</div>
-      </div>
-      {!connected && (
-        <button className="btn sm" onClick={() => { setConnected(true); toast('Payout account connected') }}>Set up</button>
-      )}
     </div>
   )
 }
@@ -272,7 +237,6 @@ function Packages() {
 }
 
 function Portfolio() {
-  const [watermarkDefault, setWatermarkDefault] = useState(true)
   return (
     <div className="mt-sm">
       <div className="muted small">This is what clients see on your profile.</div>
@@ -291,14 +255,6 @@ function Portfolio() {
             <img key={p.id} src={img(p.seed, 300, 300)} alt="" loading="lazy" />
           ),
         )}
-      </div>
-      <div className="toggle-row mt">
-        <Stamp size={18} />
-        <div className="grow">
-          <div>Watermark new uploads by default</div>
-          <div className="muted tiny">Originals always stay private.</div>
-        </div>
-        <input type="checkbox" className="switch" checked={watermarkDefault} onChange={(e) => setWatermarkDefault(e.target.checked)} />
       </div>
     </div>
   )

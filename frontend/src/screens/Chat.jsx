@@ -4,6 +4,7 @@ import { Calendar, ChevronRight, MoreHorizontal, SendHorizontal } from 'lucide-r
 import TopBar from '../components/TopBar.jsx'
 import { StatusPill } from '../components/Booking.jsx'
 import { ModerationSheet } from '../components/PostSheets.jsx'
+import ProfileLink from '../components/ProfileLink.jsx'
 import { conversationTitle } from './Inbox.jsx'
 import { useStore } from '../store.jsx'
 import { findPackage, getPerson, img, posts } from '../data/mock.js'
@@ -30,7 +31,7 @@ export default function Chat() {
   return (
     <div className="chat">
       <TopBar
-        title={conversationTitle(c)}
+        title={c.kind === 'group' ? conversationTitle(c) : <ProfileLink id={other.id}>{conversationTitle(c)}</ProfileLink>}
         subtitle={c.kind === 'group' ? `${c.memberIds.length + 1} members` : `@${other.username}`}
         right={
           <button className="icon-btn" onClick={() => setMenu({ what: 'conversation', username: c.kind === 'group' ? null : other.username })}>
@@ -61,9 +62,9 @@ export default function Chat() {
           const shared = m.sharedPostId && posts.find((p) => p.id === m.sharedPostId)
           return (
             <div key={i} className={`msg ${mine ? 'mine' : ''}`}>
-              {!mine && <img className="avatar sm" src={author.avatar} alt="" />}
+              {!mine && <ProfileLink id={author.id}><img className="avatar sm" src={author.avatar} alt="" /></ProfileLink>}
               <div className="msg-col">
-                {!mine && c.kind === 'group' && <div className="muted tiny">{author.name}</div>}
+                {!mine && c.kind === 'group' && <ProfileLink id={author.id} className="muted tiny">{author.name}</ProfileLink>}
                 {shared && (
                   <Link to={`/post/${shared.id}`} className="shared-post">
                     <img src={img(shared.photos[0], 400, 400)} alt="" />

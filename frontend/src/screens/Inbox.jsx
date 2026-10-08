@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Briefcase, Search, Users } from 'lucide-react'
+import ProfileLink from '../components/ProfileLink.jsx'
 import { useStore } from '../store.jsx'
 import { getPerson } from '../data/mock.js'
 
@@ -31,7 +32,7 @@ export default function Inbox() {
           return (
             <Link key={c.id} to={`/inbox/${c.id}`} className="convo">
               <div className="convo-avatar">
-                <img className="avatar" src={first.avatar} alt="" />
+                <ProfileLink id={first.id}><img className="avatar" src={first.avatar} alt="" /></ProfileLink>
                 {c.kind === 'group' && <img className="avatar stacked" src={getPerson(c.memberIds[1]).avatar} alt="" />}
               </div>
               <div className="grow ellipsis">

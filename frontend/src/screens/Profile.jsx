@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Camera, CircleDot, MapPin, MessageCircle, MoreHorizontal, Send, Clock, Images, Sparkles } from 'lucide-react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { CalendarCheck, CalendarX, Camera, CircleDot, Copy, MapPin, MessageCircle, MoreHorizontal, Send, Clock, Images, Sparkles } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Segmented from '../components/Segmented.jsx'
 import Stars from '../components/Stars.jsx'
@@ -8,7 +8,8 @@ import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { PolicyTable, priceLabel } from '../components/Booking.jsx'
 import { ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
 import { useStore } from '../store.jsx'
-import { getPerson, img, posts } from '../data/mock.js'
+import { galleryFor, getPerson, img, isAvailable } from '../data/mock.js'
+import { fmtChip, fromKey, parseDates } from '../data/dates.js'
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
@@ -24,7 +25,7 @@ export function AvailabilityStrip({ unavailable, selected, onSelect }) {
         return (
           <button
             key={i}
-            className={`avail-day ${busy ? 'busy' : ''} ${selected === label ? 'on' : ''}`}
+            className={`avail-day ${busy ? 'busy' : ''} ${(Array.isArray(selected) ? selected.includes(label) : selected === label) ? 'on' : ''}`}
             disabled={busy || !onSelect}
             onClick={() => onSelect?.(label)}
           >
@@ -39,6 +40,7 @@ export function AvailabilityStrip({ unavailable, selected, onSelect }) {
 
 export default function Profile() {
   const { id } = useParams()
+  const [params] = useSearchParams()
   const navigate = useNavigate()
   const { following, toggleFollow, startConversation } = useStore()
   const person = getPerson(id)
@@ -47,10 +49,12 @@ export default function Profile() {
   const [share, setShare] = useState(false)
   const [menu, setMenu] = useState(false)
 
-  const portfolio = [
-    ...posts.filter((p) => p.authorId === id).map((p) => ({ seed: p.photos[0], postId: p.id })),
-    ...Array.from({ length: 9 }, (_, i) => ({ seed: `${id}-grid-${i}` })),
-  ]
+  const portfolio = galleryFor(id)
+
+  // Dates carried over from a date search: show which ones this provider is free on.
+  const dates = parseDates(params.get('dates'))
+  const freeDates = isProvider ? dates.filter((k) => isAvailable(person, fromKey(k))) : []
+  const datesQuery = freeDates.length ? `dates=${freeDates.join(',')}` : ''
 
   const contact = () => navigate(`/inbox/${startConversation(id)}`)
 
@@ -100,11 +104,29 @@ export default function Profile() {
           </button>
         </div>
         {isProvider && (
-          <Link to={`/book/${id}`} className="btn accent block mt-sm">
+          <Link to={`/book/${id}${datesQuery && `?${datesQuery}`}`} className="btn accent block mt-sm">
             Book {person.name.split(' ')[0]}
           </Link>
         )}
       </div>
+
+      {isProvider && dates.length > 0 && (
+        <div className="pad-x">
+          <div className="info-card your-dates">
+            <div className="small"><b>Your dates</b></div>
+            <div className="chips mt-sm">
+              {dates.map((k) => {
+                const free = freeDates.includes(k)
+                return (
+                  <span key={k} className={`chip avail-chip ${free ? 'free' : 'busy'}`}>
+                    {free ? <CalendarCheck size={12} /> : <CalendarX size={12} />} {fmtChip(fromKey(k))} · {free ? 'Free' : 'Booked'}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isProvider && (
         <div className="pad-x">
@@ -135,15 +157,14 @@ export default function Profile() {
 
       {tab === 'portfolio' && (
         <div className="grid3 mt-sm">
-          {portfolio.map((p) =>
-            p.postId ? (
-              <Link key={p.seed} to={`/post/${p.postId}`}>
-                <img src={img(p.seed, 300, 300)} alt="" loading="lazy" />
-              </Link>
-            ) : (
-              <img key={p.seed} src={img(p.seed, 300, 300)} alt="" loading="lazy" />
-            ),
-          )}
+          {portfolio.map((a) => (
+            <Link key={a.id} to={`/gallery/${id}?post=${a.id}`} className="album-tile" title={a.title}>
+              <img src={img(a.photos[0].seed, 300, 300)} alt="" loading="lazy" />
+              {a.photos.length > 1 && (
+                <span className="album-count"><Copy size={12} /> {a.photos.length}</span>
+              )}
+            </Link>
+          ))}
         </div>
       )}
 
@@ -163,7 +184,7 @@ export default function Profile() {
               {pkg.editingLevel && <div className="muted small">Editing: {pkg.editingLevel}</div>}
               <div className="muted small">Includes: {pkg.deliverables.join(', ')}</div>
               <div className="muted small">{pkg.depositPct}% deposit to confirm</div>
-              <Link to={`/book/${id}?pkg=${pkg.id}`} className="btn sm mt-sm">Select</Link>
+              <Link to={`/book/${id}?pkg=${pkg.id}${datesQuery && `&${datesQuery}`}`} className="btn sm mt-sm">Select</Link>
             </div>
           ))}
           {person.addons.length > 0 && (

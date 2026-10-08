@@ -22,7 +22,7 @@ const exifDefaults = [
 
 export default function Upload() {
   const navigate = useNavigate()
-  const { toast } = useStore()
+  const { toast, watermarkDefault } = useStore()
   const [type, setType] = useState('carousel')
   const [selected, setSelected] = useState(['roll-2', 'roll-5'])
   const [exif, setExif] = useState(exifDefaults.map((f) => ({ ...f, hidden: false })))
@@ -30,7 +30,8 @@ export default function Upload() {
   const [tags, setTags] = useState('')
   const [location, setLocation] = useState('Little Tokyo, Los Angeles')
   const [caption, setCaption] = useState('')
-  const [watermark, setWatermark] = useState(true)
+  const [title, setTitle] = useState('')
+  const [watermark, setWatermark] = useState(watermarkDefault)
 
   const limit = LIMITS[type]
   const changeType = (t) => {
@@ -64,7 +65,7 @@ export default function Upload() {
         <Segmented
           options={[
             { value: 'single', label: 'Single' },
-            { value: 'carousel', label: 'Carousel' },
+            { value: 'carousel', label: 'Album' },
             { value: 'beforeafter', label: 'Before / After' },
           ]}
           value={type}
@@ -105,7 +106,10 @@ export default function Upload() {
           })}
         </div>
 
-        <textarea className="input mt" rows={3} placeholder="Write a caption…" value={caption} onChange={(e) => setCaption(e.target.value)} />
+        {type === 'carousel' && (
+          <input className="input mt" placeholder="Album title, e.g. Nguyen–Park wedding" value={title} onChange={(e) => setTitle(e.target.value)} />
+        )}
+        <textarea className={`input ${type === 'carousel' ? 'mt-sm' : 'mt'}`} rows={3} placeholder="Write a caption…" value={caption} onChange={(e) => setCaption(e.target.value)} />
 
         <h4 className="section-title">Gear & settings</h4>
         <div className="muted small">Auto-filled from your photo's EXIF. Edit or hide any field.</div>

@@ -2,10 +2,12 @@ import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Bookmark, Briefcase, Compass, Heart, Info, MessageCircle, RotateCcw, Sparkles, Star, ThumbsDown, X,
+  Bookmark, Briefcase, ChevronLeft, ChevronRight, Compass, Heart, Info, MessageCircle, RotateCcw, Sparkles, Star, ThumbsDown, X,
 } from 'lucide-react'
 import Sheet from '../components/Sheet.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
+import ProfileLink from '../components/ProfileLink.jsx'
+import SearchLauncher from '../components/SearchLauncher.jsx'
 import { money, priceLabel, startingPrice } from '../components/Booking.jsx'
 import { AvailabilityStrip } from './Profile.jsx'
 import { useStore } from '../store.jsx'
@@ -23,6 +25,7 @@ export default function Discover() {
 
   const [category, setCategory] = useState(null)
   const [shot, setShot] = useState(0)
+  const [tappedSides, setTappedSides] = useState(false) // hide the photo hint once used
   const [drag, setDrag] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const [exit, setExit] = useState(null) // like | pass | save
@@ -92,8 +95,9 @@ export default function Discover() {
     const { x, y } = drag
     if (Math.abs(x) < 6 && Math.abs(y) < 6) {
       const rel = (e.clientX - left) / width
-      if (rel < 0.3) setShot((s) => Math.max(0, s - 1))
-      else if (rel > 0.7) setShot((s) => Math.min(card.seeds.length - 1, s + 1))
+      // Tap the edges to flip through photos; the last photo wraps back to the first.
+      if (rel < 0.3) { setShot((s) => Math.max(0, s - 1)); setTappedSides(true) }
+      else if (rel > 0.7) { setShot((s) => (s + 1) % card.seeds.length); setTappedSides(true) }
       else setSheet('details')
       setDrag({ x: 0, y: 0 })
     } else if (x > THRESHOLD) decide('like')
@@ -134,6 +138,10 @@ export default function Discover() {
         </div>
       </header>
 
+      <div className="pad-x mb-sm">
+        <SearchLauncher />
+      </div>
+
       <div className="chips scroll-x pad-x">
         <button className={`chip toggle ${!category ? 'on' : ''}`} onClick={() => { setCategory(null); setShot(0) }}>All styles</button>
         {CATEGORIES.map((c) => (
@@ -172,6 +180,16 @@ export default function Discover() {
           >
             <img src={img(card.seeds[shot], 600, 860)} alt="" draggable={false} />
 
+            {card.seeds.length > 1 && (
+              <>
+                {shot > 0 && <span className="edge-hint left"><ChevronLeft size={18} /></span>}
+                <span className="edge-hint right"><ChevronRight size={18} /></span>
+              </>
+            )}
+            {!tappedSides && card.seeds.length > 1 && (
+              <div className="tap-hint">Tap the edges for {card.seeds.length} photos · swipe to like or pass</div>
+            )}
+
             <div className="shot-bars">
               {card.seeds.map((s, i) => (
                 <span key={s} className={i === shot ? 'on' : ''} />
@@ -193,10 +211,12 @@ export default function Discover() {
 
             <div className="card-foot">
               <div className="row gap-xs">
-                <img className="avatar" src={p.avatar} alt="" />
+                <ProfileLink id={p.id} className="card-profile">
+                  <img className="avatar" src={p.avatar} alt="" />
+                </ProfileLink>
                 <div className="grow">
                   <div className="row gap-xs">
-                    <b>{p.name}</b>
+                    <ProfileLink id={p.id} className="card-profile"><b>{p.name}</b></ProfileLink>
                     {p.idVerified && <IdVerified />}
                     {p.pro && <ProBadge />}
                   </div>
@@ -243,7 +263,7 @@ export default function Discover() {
                 <img key={s} src={img(s, 300, 400)} alt="" />
               ))}
             </div>
-            <div className="row gap-xs mt">
+            <Link to={`/u/${p.id}`} className="row gap-xs mt">
               <img className="avatar" src={p.avatar} alt="" />
               <div className="grow">
                 <div className="person-name">
@@ -252,7 +272,7 @@ export default function Discover() {
                 <div className="muted tiny">{p.city} · ★ {p.rating} ({p.reviewCount})</div>
               </div>
               <div className="match"><b>{p.tasteMatch}%</b><span>match</span></div>
-            </div>
+            </Link>
             <div className="note mt-sm"><Sparkles size={14} /> {card.reason}</div>
             <div className="row between mt-sm small">
               <span className="muted">Settings</span>
@@ -332,7 +352,7 @@ export default function Discover() {
         )}
         {shortlist.map(({ provider: sp, cards }) => (
           <div key={sp.id} className="shortlist-item">
-            <div className="row gap-xs">
+            <Link to={`/u/${sp.id}`} className="row gap-xs">
               <img className="avatar" src={sp.avatar} alt="" />
               <div className="grow">
                 <div className="person-name">{sp.name} {sp.pro && <ProBadge />}</div>
@@ -341,11 +361,12 @@ export default function Discover() {
                 </div>
               </div>
               <div className="match"><b>{sp.tasteMatch}%</b><span>match</span></div>
-            </div>
+            </Link>
             <div className="shortlist-shots">
               {cards.map((c) => <img key={c.id} src={img(c.seeds[0], 200, 200)} alt="" />)}
             </div>
             <div className="row gap-xs">
+              <Link className="btn ghost sm grow" to={`/u/${sp.id}`}>Profile</Link>
               <button className="btn ghost sm grow" onClick={() => message(sp.id)}>Message</button>
               <Link className="btn sm grow" to={`/book/${sp.id}`}>Book</Link>
             </div>
@@ -366,9 +387,11 @@ function MatchOverlay({ provider, cards, onClose, onMessage }) {
           {cards.slice(0, 2).map((c, i) => (
             <img key={c.id} src={img(c.seeds[0], 300, 400)} alt="" className={i ? 'r' : 'l'} />
           ))}
-          <img className="match-avatar" src={provider.avatar} alt="" />
+          <Link to={`/u/${provider.id}`}>
+            <img className="match-avatar" src={provider.avatar} alt="" />
+          </Link>
         </div>
-        <h2>You keep liking {provider.name.split(' ')[0]}'s work</h2>
+        <h2>You keep liking <Link to={`/u/${provider.id}`} className="underline-link">{provider.name.split(' ')[0]}</Link>'s work</h2>
         <p className="muted small">
           {provider.tasteMatch}% taste match · {provider.specialties.join(', ')} · from {money(startingPrice(provider))}
         </p>
