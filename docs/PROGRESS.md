@@ -62,8 +62,13 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
 
 ### Sign-in (branch `sign-in`, built on `database-setup`)
 - **Sign-in screen** (`/sign-in`):
-  - Email with no password: Supabase emails a link and a code, and you can tap the link or type the code.
+  - **Log in** and **Create account** tabs, with email and password.
+  - New accounts confirm their email first (Supabase's "Confirm email" setting is on), and the screen can resend the confirmation.
+  - Signing up with an email that already has an account switches to Log in with a note.
+  - "Forgot password?" emails a reset link.
+  - "Email me a sign-in link instead" keeps the passwordless option (link or code).
   - "Continue with Google" is shown, but stays greyed out until Google is switched on in Supabase. The screen checks the project settings, so nobody lands on an error page.
+- **New password page** (`/reset-password`): where reset links land. It's also reachable from Settings → Set or change password, which accounts created with an email link need in order to start logging in with a password.
 - **Link landing page** (`/auth/callback`): where email links and Google send people back. It shows a friendly message if a link has expired.
 - **Welcome step** (`/welcome`): new accounts choose a display name and username, saved to `profiles`. Taken usernames are caught.
 - **Me tab:**
@@ -93,7 +98,12 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
 - **Supabase Auth dashboard settings (needed for sign-in to work end to end):**
   - Authentication → URL Configuration: Site URL `http://localhost:5173`. Redirect URLs: `http://localhost:5173/**`, plus your computer's network address (e.g. `http://10.250.251.86:5173/**`) for phone testing.
   - Authentication → Emails → Magic Link template: add `{{ .Token }}` so the email includes the code as well as the link.
-  - Google: create an OAuth client in Google Cloud and enable it under Authentication → Providers → Google.
+  - **Google** (has to be done by a person, because it involves a client secret):
+    1. Google Cloud Console → APIs & Services → OAuth consent screen. Choose External, enter app name and support email, and add yourself as a test user.
+    2. Credentials → Create credentials → OAuth client ID → Web application.
+       - Authorized JavaScript origin: `http://localhost:5173`
+       - Authorized redirect URI: `https://ktjvbajrfrbwpndforcy.supabase.co/auth/v1/callback`
+    3. Supabase → Authentication → Sign In / Providers → Google: switch it on and paste the Client ID and Client secret. The app's Google button turns on by itself once that's done.
   - Supabase's built-in email only sends to team members of the project. Invite Tim, or set up your own SMTP (e.g. Resend), before other people can sign in.
 
 - **Not merged yet:** the database work is on branch `database-setup`. Open a PR to merge it into `main`.

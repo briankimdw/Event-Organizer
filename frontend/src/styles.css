@@ -756,3 +756,7 @@ input[type=date].filter { width: 130px; }
 .signed-out-art img:nth-child(2) { transform: translateY(-8px); z-index: 1; }
 .signed-out-art img:nth-child(3) { transform: rotate(8deg) translateX(-10px); }
 .avatar-initials { display: grid; place-items: center; background: linear-gradient(135deg, #ffb199, var(--accent)); color: #fff; font-weight: 700; font-size: 26px; }
+
+.form-notice { padding: 10px 12px; border-radius: 10px; background: #ecfdf5; color: #15803d; font-size: 13px; }
+.center-self { align-self: center; }
+.field > span.row { display: flex; }

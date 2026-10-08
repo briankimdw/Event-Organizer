@@ -22,10 +22,11 @@ import AiReview from './screens/AiReview.jsx'
 import SignIn from './screens/SignIn.jsx'
 import AuthCallback from './screens/AuthCallback.jsx'
 import Welcome from './screens/Welcome.jsx'
+import ResetPassword from './screens/ResetPassword.jsx'
 import { useAuth } from './auth.jsx'
 
 const TAB_ROUTES = ['/', '/discover', '/bookings', '/inbox', '/me']
-const AUTH_ROUTES = ['/sign-in', '/auth/callback', '/welcome']
+const AUTH_ROUTES = ['/sign-in', '/auth/callback', '/welcome', '/reset-password']
 
 export default function App() {
   const { pathname, search } = useLocation()
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="/sign-in" element={<SignIn />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/welcome" element={<Welcome />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
           </Routes>
         </div>
         {showTabs && <TabBar />}
