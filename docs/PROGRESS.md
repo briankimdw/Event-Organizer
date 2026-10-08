@@ -11,7 +11,7 @@ Where the project stands, what was decided, and what's next. Update this file at
 | Area | State |
 |---|---|
 | Product plan | `docs/PLAN.md` (features) and `architecture.md` (Tim's service design). They still disagree on a few points, listed in the README. |
-| Frontend | Clickable **React web prototype** in `frontend/`. **Sign-in works against Supabase** (branch `sign-in`); everything else still runs on mock data. |
+| Frontend | Clickable **React web prototype** in `frontend/`. **Sign-in and posting photos work against Supabase** (branch `posting`); everything else still runs on mock data. |
 | Database + auth | **Supabase project "Event Organizer" is set up and tested** (phases 0–2). Design and status: `docs/DATABASE.md`. |
 | Payments (Stripe) | Not started |
 | Mobile app (Expo / React Native) | Not started. The web prototype is the reference design. |
@@ -78,6 +78,22 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
 - **Elsewhere:** Settings → Log out signs out for real. Sending a booking request while signed out goes to sign-in, then back to the same form.
 - **Code:** `src/auth.jsx` (`AuthProvider` / `useAuth`: session + profile), plus `SignIn.jsx`, `AuthCallback.jsx` and `Welcome.jsx`.
 - **Tested in Chrome:** signed-out Me, the sign-in screen, the Google-off state, email validation, the booking gate, the welcome redirect and the expired-link message. The real email round-trip hasn't been tested yet; it needs the dashboard settings below.
+
+### Posting photos (branch `posting`, built on `sign-in`)
+- **Where to post:** a **Post** button on Home, a **+** on the Profile header, and "Post photos" in Photographer → Portfolio.
+- **First-time setup:** you create a photographer profile (name clients see, profile link, city, what you shoot). It is created with `become_provider` and published right away, since albums belong to a photographer listing.
+- **Posting:** single photo, album (up to 10) or before/after. You add a title, category, caption, location and date. Camera settings are read from the photo (`exifr`), and each one can be hidden.
+- **Photo handling:**
+  - The public copy is resized to 2048px and re-encoded as JPEG, which removes all metadata including GPS. It goes to the `portfolio` bucket.
+  - The untouched original goes to the private `portfolio-originals` bucket.
+  - The album and photo rows are saved to the database. If anything fails partway, everything uploaded so far is removed.
+- **Your posts:** the Portfolio tab shows your real albums. `/my-work` opens them in the full-screen album viewer, which became a reusable `AlbumViewer` component.
+- **Code:** `src/api/portfolio.js` (data layer), `src/lib/images.js` (photo processing), plus `Upload.jsx` and `MyWork.jsx`.
+- **Tested:**
+  - A rolled-back database test passes 7/7: publish the listing, album/photo/cover save, upload allowed to your own folder only, others can't add to your album, the public can see it, hidden settings aren't exposed.
+  - In Chrome: a 4000px test image became a 2048px JPEG with no metadata.
+  - Not yet tested: a real end-to-end post from a signed-in browser, and reading settings from a real camera file.
+- **Not yet:** watermarking, the AI-image check, editing or deleting posts, and showing real photographers on Home, Search and Discover (those are still mock).
 
 ---
 

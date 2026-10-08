@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Briefcase, Camera, Check, ChevronRight, CreditCard, Images, Info, Layers, MapPin, Package, Pencil, Settings,
+  Briefcase, Camera, Check, ChevronRight, CreditCard, Images, Info, Layers, MapPin, Package, Pencil, PlusSquare, Settings,
   ShieldCheck, Star,
 } from 'lucide-react'
 import Sheet from '../components/Sheet.jsx'
@@ -24,9 +24,14 @@ export default function Me() {
       <header className="home-header">
         <div className="title-lg">Profile</div>
         {user && (
-          <Link to="/settings" className="icon-btn" aria-label="Settings">
-            <Settings size={22} />
-          </Link>
+          <div className="row">
+            <Link to="/upload" className="icon-btn" aria-label="Post photos">
+              <PlusSquare size={22} />
+            </Link>
+            <Link to="/settings" className="icon-btn" aria-label="Settings">
+              <Settings size={22} />
+            </Link>
+          </div>
         )}
       </header>
       {loading ? (

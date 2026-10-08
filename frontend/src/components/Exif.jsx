@@ -2,7 +2,7 @@ import { Aperture, Camera, CircleDot, Calendar, Gauge, Timer, Zap, Ruler } from 
 
 export const exifLine = (e) => [e.body, e.focal, e.aperture, e.shutter, `ISO ${e.iso}`].join(' · ')
 
-export default function ExifPanel({ exif }) {
+export default function ExifPanel({ exif = {} }) {
   const rows = [
     { Icon: Camera, label: 'Body', value: exif.body },
     { Icon: CircleDot, label: 'Lens', value: exif.lens },
@@ -15,7 +15,7 @@ export default function ExifPanel({ exif }) {
   ]
   return (
     <div className="exif-panel">
-      {rows.map(({ Icon, label, value }) => (
+      {rows.filter((r) => r.value).map(({ Icon, label, value }) => (
         <div key={label} className={`exif-cell ${label === 'Body' || label === 'Lens' ? 'wide' : ''}`}>
           <Icon size={15} />
           <div>

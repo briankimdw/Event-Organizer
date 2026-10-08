@@ -23,6 +23,7 @@ import SignIn from './screens/SignIn.jsx'
 import AuthCallback from './screens/AuthCallback.jsx'
 import Welcome from './screens/Welcome.jsx'
 import ResetPassword from './screens/ResetPassword.jsx'
+import MyWork from './screens/MyWork.jsx'
 import { useAuth } from './auth.jsx'
 
 const TAB_ROUTES = ['/', '/discover', '/bookings', '/inbox', '/me']
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/my-work" element={<MyWork />} />
           </Routes>
         </div>
         {showTabs && <TabBar />}

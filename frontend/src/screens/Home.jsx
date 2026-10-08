@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import {
-  Building2, Camera, ChevronRight, GraduationCap, Heart, Layers, Package, PartyPopper,
+  Building2, Camera, ChevronRight, Plus, GraduationCap, Heart, Layers, Package, PartyPopper,
   Star, Users, UserSquare, Presentation,
 } from 'lucide-react'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
@@ -48,6 +48,9 @@ export default function Home() {
           <div className="muted small">Hi {me.name.split(' ')[0]}</div>
           <div className="title-lg">Find your photographer</div>
         </div>
+        <Link to="/upload" className="post-btn" aria-label="Post photos">
+          <Plus size={18} /> Post
+        </Link>
       </header>
 
       <div className="pad-x">

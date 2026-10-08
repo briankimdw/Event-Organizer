@@ -29,13 +29,14 @@ export function Carousel({ seeds, aspect = '4 / 5' }) {
 }
 
 // Paired before/after viewer. The "before" is the same frame with an unedited look.
-export function BeforeAfter({ seed, aspect = '4 / 5' }) {
+// Real uploads pass src (after) + beforeSrc; mock photos fake the "before" with a filter.
+export function BeforeAfter({ seed, src, beforeSrc, aspect = '4 / 5' }) {
   const [pos, setPos] = useState(50)
   return (
     <div className="before-after" style={{ aspectRatio: aspect }}>
-      <img src={img(seed)} alt="After" draggable={false} />
-      <div className="ba-before" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
-        <img src={img(seed)} alt="Before" draggable={false} />
+      <img src={src || img(seed)} alt="After" draggable={false} />
+      <div className={`ba-before ${beforeSrc ? 'real' : ''}`} style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
+        <img src={beforeSrc || img(seed)} alt="Before" draggable={false} />
       </div>
       <div className="ba-divider" style={{ left: `${pos}%` }}>
         <span className="ba-knob">⇆</span>

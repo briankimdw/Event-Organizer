@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Clock, Images, Plus, ShieldAlert, Star } from 'lucide-react'
+import { Clock, Copy, Images, Plus, Star } from 'lucide-react'
 import Segmented from '../components/Segmented.jsx'
 import Sheet from '../components/Sheet.jsx'
 import { VerifiedClient } from '../components/Badges.jsx'
 import { money, priceLabel } from '../components/Booking.jsx'
 import { useStore } from '../store.jsx'
-import { img, myCalendar, myPackages, myPosts } from '../data/mock.js'
+import { useAuth } from '../auth.jsx'
+import { getMyProvider, listMyAlbums, publicUrl } from '../api/portfolio.js'
+import { myCalendar, myPackages } from '../data/mock.js'
 
 // Provider work tabs, shown inside the profile page in Photographer mode.
 export default function Dashboard({ tab, onTabChange }) {
@@ -236,26 +238,47 @@ function Packages() {
   )
 }
 
+// Your real albums from Supabase. Tap one to open it in the viewer.
 function Portfolio() {
+  const { user } = useAuth()
+  const [albums, setAlbums] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!user) return
+    getMyProvider(user.id)
+      .then((p) => (p ? listMyAlbums(p.id) : []))
+      .then(setAlbums)
+      .catch((e) => setError(e.message))
+  }, [user])
+
+  const cover = (a) => {
+    const photos = [...(a.photos || [])].sort((x, y) => x.position - y.position)
+    const pick = a.kind === 'before_after' ? photos.find((p) => p.pair_role === 'after') || photos[0] : photos[0]
+    return pick ? publicUrl('portfolio', pick.display_path) : null
+  }
+
   return (
     <div className="mt-sm">
       <div className="muted small">This is what clients see on your profile.</div>
+      {error && <div className="form-error mt-sm">{error}</div>}
       <div className="grid3 mt-sm rounded-grid">
         <Link to="/upload" className="add-tile">
           <Plus size={22} />
-          <span className="tiny">Add work</span>
+          <span className="tiny">Post photos</span>
         </Link>
-        {myPosts.map((p) =>
-          p.status === 'under_ai_review' ? (
-            <Link key={p.id} to={`/ai-review/${p.id}`} className="grid-flag">
-              <img src={img(p.seed, 300, 300)} alt="" />
-              <span><ShieldAlert size={14} /> In review</span>
-            </Link>
-          ) : (
-            <img key={p.id} src={img(p.seed, 300, 300)} alt="" loading="lazy" />
-          ),
-        )}
+        {albums === null && !error && <div className="add-tile muted"><div className="spinner" /></div>}
+        {albums?.filter((a) => a.photos?.length).map((a) => (
+          <Link key={a.id} to={`/my-work?post=${a.id}`} className="album-tile" title={a.title}>
+            <img src={cover(a)} alt="" loading="lazy" />
+            {a.photos.length > 1 && a.kind !== 'before_after' && (
+              <span className="album-count"><Copy size={12} /> {a.photos.length}</span>
+            )}
+            {a.kind === 'before_after' && <span className="album-count">B/A</span>}
+          </Link>
+        ))}
       </div>
+      {albums?.length === 0 && <p className="muted small mt-sm">Nothing posted yet. Your albums will appear here.</p>}
     </div>
   )
 }

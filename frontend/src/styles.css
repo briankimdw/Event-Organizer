@@ -760,3 +760,20 @@ input[type=date].filter { width: 130px; }
 .form-notice { padding: 10px 12px; border-radius: 10px; background: #ecfdf5; color: #15803d; font-size: 13px; }
 .center-self { align-self: center; }
 .field > span.row { display: flex; }
+
+.ba-before.real img { filter: none; }
+.avatar-initials.small-initials { font-size: 14px; }
+
+/* ---------- Posting ---------- */
+.post-btn { display: inline-flex; align-items: center; gap: 4px; padding: 7px 12px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; }
+.upload-drop { width: 100%; aspect-ratio: 4 / 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 2px dashed #d6d6d6; border-radius: 16px; background: var(--soft); color: var(--ink); }
+.upload-drop:hover { border-color: var(--ink); }
+.upload-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.upload-grid.one { grid-template-columns: 1fr; }
+.upload-thumb { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--soft); }
+.upload-grid.one .upload-thumb { aspect-ratio: 4 / 5; }
+.upload-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.upload-num { position: absolute; left: 6px; top: 6px; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; font-weight: 700; }
+.upload-remove { position: absolute; right: 6px; top: 6px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; display: grid; place-items: center; }
+.upload-add { aspect-ratio: 1; border-radius: 10px; border: 2px dashed #d6d6d6; display: grid; place-items: center; color: var(--muted); }
+.upload .input-prefix span { white-space: nowrap; }

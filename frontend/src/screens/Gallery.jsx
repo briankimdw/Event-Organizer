@@ -11,7 +11,7 @@ import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { useStore } from '../store.jsx'
 import { galleryFor, getPerson, img, posts } from '../data/mock.js'
 
-const shortExif = (e) => [e.focal, e.aperture, e.shutter, `ISO ${e.iso}`].join('  ·  ')
+const shortExif = (e = {}) => [e.focal, e.aperture, e.shutter, e.iso && `ISO ${e.iso}`].filter(Boolean).join('  ·  ')
 const PAGE = 70 // px of drag needed to change album (vertical) or photo (horizontal)
 const EXIT = 90 // px of drag needed to close
 const HOLD_MS = 220 // press this long to hide the overlays
@@ -25,21 +25,39 @@ const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
 // Swipe left/right through an album's photos, up/down between albums. To close: the ✕,
 // swipe right on an album's first photo, or pull down on the first album.
 // Pinch / double-tap / ctrl+wheel to zoom; press and hold to see just the photo.
+// Route for a (mock) photographer's portfolio: /gallery/:personId?post=<album id>
 export default function Gallery() {
   const { personId } = useParams()
   const [params] = useSearchParams()
+  const person = getPerson(personId)
+  return (
+    <AlbumViewer
+      albums={galleryFor(personId)}
+      owner={{ name: person.name, avatar: person.avatar, idVerified: person.idVerified, pro: person.pro, username: person.username, profileId: personId }}
+      book={person.packages ? {
+        to: `/book/${personId}`,
+        label: `Book ${person.name.split(' ')[0]}`,
+        line: `from ${money(startingPrice(person))} · ★ ${person.rating}`,
+      } : null}
+      startPost={params.get('post')}
+      startPhoto={params.get('photo')}
+      closeFallback={`/u/${personId}`}
+    />
+  )
+}
+
+// The full-screen viewer. albums: [{ id, title, location, date, type, caption, genre, tags, autoTags,
+// realPhoto, photos: [{ seed, src?, exif }] }]. Photos with a src (real uploads) use it directly.
+// owner: { name, avatar?, username, idVerified?, pro?, profileId? | profileTo? }. book: { to, label, line } or null.
+export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeFallback }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { saved } = useStore()
-  const person = getPerson(personId)
-  const albums = galleryFor(personId)
-  const isProvider = !!person.packages
-  const first = person.name.split(' ')[0]
 
-  // Open at ?post=<album id>, or ?photo=<seed> for older links.
+  // Open at a given album (or photo, for older links).
   const [index, setIndex] = useState(() => {
-    const byPost = albums.findIndex((a) => a.id === params.get('post'))
-    const byPhoto = albums.findIndex((a) => a.photos.some((p) => p.seed === params.get('photo')))
+    const byPost = albums.findIndex((a) => a.id === startPost)
+    const byPhoto = albums.findIndex((a) => a.photos.some((p) => p.seed === startPhoto))
     return Math.max(0, byPost >= 0 ? byPost : byPhoto)
   })
   const [photoOf, setPhotoOf] = useState({}) // album id → photo index, so each album remembers its place
@@ -73,7 +91,7 @@ export default function Gallery() {
     setExiting(direction)
     setTimeout(() => {
       // Opened from a shared link with no history: fall back to the profile.
-      if (location.key === 'default') navigate(`/u/${personId}`, { replace: true })
+      if (location.key === 'default') navigate(closeFallback, { replace: true })
       else navigate(-1)
     }, 220)
   }
@@ -365,9 +383,9 @@ export default function Gallery() {
                             } : undefined}
                           >
                             {a.type === 'beforeafter' ? (
-                              <div className="reel-ba"><BeforeAfter seed={p.seed} /></div>
+                              <div className="reel-ba"><BeforeAfter seed={p.seed} src={p.src} beforeSrc={p.beforeSrc} /></div>
                             ) : (
-                              <img src={img(p.seed, 1200, 1500)} alt="" draggable={false} />
+                              <img src={p.src || img(p.seed, 1200, 1500)} alt="" draggable={false} />
                             )}
                           </div>
                         )}
@@ -412,17 +430,25 @@ export default function Gallery() {
               </button>
             </div>
           </div>
-          <ProfileLink id={personId} className="reel-who">
-            <img className="avatar" src={person.avatar} alt="" />
-            <span>{person.name}</span>
-            {person.idVerified && <IdVerified />}
-            {person.pro && <ProBadge />}
-          </ProfileLink>
+          {(() => {
+            const who = (
+              <>
+                {owner.avatar ? <img className="avatar" src={owner.avatar} alt="" />
+                  : <span className="avatar avatar-initials small-initials">{(owner.name || '?').slice(0, 1).toUpperCase()}</span>}
+                <span>{owner.name}</span>
+                {owner.idVerified && <IdVerified />}
+                {owner.pro && <ProBadge />}
+              </>
+            )
+            return owner.profileId
+              ? <ProfileLink id={owner.profileId} className="reel-who">{who}</ProfileLink>
+              : <Link to={owner.profileTo || '/me'} className="reel-who profile-link">{who}</Link>
+          })()}
           <div className="reel-exif">{shortExif(photo.exif)}</div>
-          {isProvider && (
+          {book && (
             <div className="reel-book">
-              <span className="small">from {money(startingPrice(person))} · ★ {person.rating}</span>
-              <Link to={`/book/${personId}`} className="btn sm accent">Book {first}</Link>
+              <span className="small">{book.line}</span>
+              <Link to={book.to} className="btn sm accent">{book.label}</Link>
             </div>
           )}
         </div>
@@ -446,7 +472,7 @@ export default function Gallery() {
         <ExifPanel exif={photo.exif} />
         <h4 className="section-title">Tags</h4>
         <div className="chips">
-          <span className="chip solid">{album.genre}</span>
+          {album.genre && <span className="chip solid">{album.genre}</span>}
           {album.tags.map((t) => <span key={t} className="chip">#{t}</span>)}
           {album.autoTags.map((t) => (
             <span key={t} className="chip auto"><Sparkles size={11} /> {t}</span>
@@ -459,7 +485,7 @@ export default function Gallery() {
       </Sheet>
 
       <SaveSheet open={!!saveFor} onClose={() => setSaveFor(null)} postId={saveFor} />
-      <ModerationSheet open={reporting} onClose={() => setReporting(false)} what="album" username={person.username} />
+      <ModerationSheet open={reporting} onClose={() => setReporting(false)} what="album" username={owner.username} />
     </div>
   )
 }
