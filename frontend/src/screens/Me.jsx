@@ -1,24 +1,46 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Briefcase, Camera, Check, ChevronRight, CreditCard, Images, Info, Layers, MapPin, Package, Pencil, PlusSquare, Settings,
-  ShieldCheck, Star,
+  Bookmark, Briefcase, Camera, Check, ChevronRight, CreditCard, Heart, Images, Info, Layers, MapPin, Package, Pencil, PlusSquare,
+  Settings, ShieldCheck, Sparkles, Star,
 } from 'lucide-react'
 import Sheet from '../components/Sheet.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
 import { IdVerified } from '../components/Badges.jsx'
 import { StatusPill } from '../components/Booking.jsx'
-import Dashboard from './Dashboard.jsx'
+import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
+import Dashboard, { BOOKED } from './Dashboard.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import { supabase } from '../lib/supabase.js'
-import { collections, discoverCards, findPackage, getProvider, img, me, myCalendar, myPackages, myPosts } from '../data/mock.js'
+import useQuery from '../lib/useQuery.js'
+import { avatarUrl } from '../lib/format.js'
+import { fromKey, today, toKey } from '../lib/dates.js'
+import { getProvider, listProviders, withMatches } from '../api/catalog.js'
+import { listMyBookings, listProviderBookings } from '../api/bookings.js'
+import { listCollections } from '../api/social.js'
+import { getTasteProfile } from '../api/discover.js'
 
+// Bookings that still need something from someone.
 const ACTIVE = ['requested', 'countered', 'accepted', 'confirmed', 'in_progress', 'delivered', 'disputed']
 
+const rating = (n) => (n == null ? null : Number(n).toFixed(1))
+
 export default function Me() {
-  const { mode } = useStore()
+  const { mode, myProvider, refreshProvider } = useStore()
   const { user, loading } = useAuth()
+  const uid = user?.id ?? null
+  const providerId = myProvider?.id ?? null
+
+  // Someone may have just set up a listing on /upload: pick it up.
+  useEffect(() => {
+    if (uid) refreshProvider()
+  }, [uid, refreshProvider])
+
+  const myBookings = useQuery(uid ? listMyBookings : null, [uid])
+  const providerBookings = useQuery(uid && providerId ? () => listProviderBookings(providerId) : null, [uid, providerId])
+  const providerDetail = useQuery(providerId ? () => getProvider(providerId) : null, [providerId])
+
   return (
     <div className="me">
       <header className="home-header">
@@ -35,14 +57,18 @@ export default function Me() {
         )}
       </header>
       {loading ? (
-        <div className="center-col pad"><div className="spinner" /></div>
+        <Loading />
       ) : !user ? (
         <SignedOut />
       ) : (
         <>
-          <ProfileHero />
-          <RoleSwitch />
-          {mode === 'provider' ? <ProviderView /> : <ClientView />}
+          <ProfileHero provider={providerDetail.data} />
+          <RoleSwitch myBookings={myBookings.data} providerBookings={providerBookings.data} />
+          {mode === 'provider' ? (
+            <ProviderView detail={providerDetail} bookings={providerBookings} />
+          ) : (
+            <ClientView bookings={myBookings} />
+          )}
         </>
       )}
     </div>
@@ -50,12 +76,17 @@ export default function Me() {
 }
 
 function SignedOut() {
+  // A few real portfolio covers from different photographers.
+  const { data: providers } = useQuery(listProviders, [])
+  const art = (providers || []).map((p) => p.cover).filter(Boolean).slice(0, 3)
   return (
     <div className="pad">
       <div className="signed-out">
-        <div className="signed-out-art">
-          {['maya-2', 'p3-album-1-0', 'sofia-1'].map((s) => <img key={s} src={img(s, 200, 240)} alt="" />)}
-        </div>
+        {art.length === 3 && (
+          <div className="signed-out-art">
+            {art.map((src) => <img key={src} src={src} alt="" />)}
+          </div>
+        )}
         <h3>Your bookings, favorites and messages, in one place</h3>
         <p className="muted small">Sign in to request bookings, message photographers and keep your shortlist across devices.</p>
         <Link to="/sign-in?next=/me" className="btn accent block mt">Sign in or create an account</Link>
@@ -64,19 +95,8 @@ function SignedOut() {
   )
 }
 
-// Initials avatar until profile photos are uploaded to the avatars bucket.
-function Avatar({ profile, className }) {
-  if (profile?.avatar_path) {
-    const { data } = supabase.storage.from('avatars').getPublicUrl(profile.avatar_path)
-    return <img className={className} src={data.publicUrl} alt="" />
-  }
-  const name = profile?.display_name || profile?.username || '?'
-  const initials = name.split(/s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
-  return <div className={`${className} avatar-initials`}>{initials}</div>
-}
-
-function ProfileHero() {
-  const { mode, identityStatus, toast } = useStore()
+function ProfileHero({ provider }) {
+  const { mode, identityStatus, myProvider, toast } = useStore()
   const { user, profile, refreshProfile } = useAuth()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({ display_name: '', city: '', bio: '' })
@@ -105,14 +125,16 @@ function ProfileHero() {
   }
 
   if (!profile) return null
-  const clientRating = profile.client_rating_avg
+  const name = profile.display_name || profile.username
+  const clientRating = rating(profile.client_rating_avg)
+  const clientReviews = profile.client_rating_count ?? 0
 
   return (
     <section className="me-hero">
       <div className="row gap-xs top">
-        <Avatar profile={profile} className="avatar xl" />
+        <img className="avatar xl" src={avatarUrl(profile.avatar_path, name)} alt="" />
         <div className="grow">
-          <h2>{profile.display_name || profile.username}</h2>
+          <h2>{name}</h2>
           <div className="muted small inline-icon">
             @{profile.username}
             {profile.city && <> · <MapPin size={12} /> {profile.city}</>}
@@ -132,11 +154,20 @@ function ProfileHero() {
       <div className="rating-pair">
         <div className={`rating-cell ${!isProvider ? 'on' : ''}`}>
           <b><Star size={14} className="star-on" fill="currentColor" /> {clientRating ?? 'New'}</b>
-          <span>as a client · {profile.client_rating_count} reviews</span>
+          <span>as a client · {clientReviews} review{clientReviews === 1 ? '' : 's'}</span>
         </div>
         <div className={`rating-cell ${isProvider ? 'on' : ''}`}>
-          <b><Star size={14} className="star-on" fill="currentColor" /> {me.providerRating}</b>
-          <span>as a photographer · {me.providerReviews} reviews</span>
+          {myProvider ? (
+            <>
+              <b><Star size={14} className="star-on" fill="currentColor" /> {rating(provider?.rating) ?? 'New'}</b>
+              <span>as a photographer · {provider?.reviewCount ?? 0} review{provider?.reviewCount === 1 ? '' : 's'}</span>
+            </>
+          ) : (
+            <>
+              <b><Camera size={14} /> —</b>
+              <span>not taking bookings yet</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -151,10 +182,10 @@ function ProfileHero() {
 }
 
 // One switch for both sides of the account. Each side shows what's waiting for you there.
-function RoleSwitch() {
-  const { mode, setMode, bookings, requests } = useStore()
-  const activeBookings = bookings.filter((b) => ACTIVE.includes(b.status)).length
-  const pending = requests.filter((r) => r.status === 'requested').length
+function RoleSwitch({ myBookings, providerBookings }) {
+  const { mode, setMode, myProvider } = useStore()
+  const activeBookings = (myBookings || []).filter((b) => ACTIVE.includes(b.status)).length
+  const pending = (providerBookings || []).filter((r) => r.status === 'requested').length
   const isProvider = mode === 'provider'
 
   return (
@@ -165,14 +196,14 @@ function RoleSwitch() {
           <Briefcase size={18} />
           <div>
             <b>Hiring</b>
-            <small>{activeBookings} active booking{activeBookings === 1 ? '' : 's'}</small>
+            <small>{myBookings ? `${activeBookings} active booking${activeBookings === 1 ? '' : 's'}` : 'Your bookings'}</small>
           </div>
         </button>
         <button role="tab" aria-selected={isProvider} className={`role ${isProvider ? 'on' : ''}`} onClick={() => setMode('provider')}>
           <Camera size={18} />
           <div>
             <b>Photographer</b>
-            <small>{pending ? `${pending} new request${pending === 1 ? '' : 's'}` : 'Your business'}</small>
+            <small>{!myProvider ? 'Start taking bookings' : pending ? `${pending} new request${pending === 1 ? '' : 's'}` : 'Your business'}</small>
           </div>
           {pending > 0 && !isProvider && <span className="role-dot">{pending}</span>}
         </button>
@@ -189,27 +220,37 @@ function StatTile({ value, label, to, onClick, highlight }) {
     </>
   )
   const cls = `stat-tile ${highlight ? 'highlight' : ''}`
-  return to ? <Link to={to} className={cls}>{content}</Link> : <button className={cls} onClick={onClick}>{content}</button>
+  if (to) return <Link to={to} className={cls}>{content}</Link>
+  if (onClick) return <button className={cls} onClick={onClick}>{content}</button>
+  return <div className={cls}>{content}</div>
 }
 
-function ClientView() {
-  const { bookings, discoverHistory } = useStore()
-  const active = bookings.filter((b) => ACTIVE.includes(b.status))
-  const next = active.find((b) => b.status === 'confirmed') || active[0]
-  const shortlistIds = [...new Set(
-    discoverHistory
-      .filter((h) => h.action === 'like' || h.action === 'save')
-      .map((h) => discoverCards.find((c) => c.id === h.id).authorId),
-  )]
+function ClientView({ bookings }) {
+  const { shortlist, following } = useStore()
+  const { user } = useAuth()
+  const { data: providers } = useQuery(() => listProviders().then(withMatches), [user?.id])
+  const collections = useQuery(listCollections, [user?.id])
+  const taste = useQuery(getTasteProfile, [user?.id])
+
+  const all = bookings.data || []
+  const active = all.filter((b) => ACTIVE.includes(b.status))
+  // Soonest upcoming confirmed shoot, else the soonest active booking.
+  const upcoming = [...active].sort((a, b) => a.start - b.start)
+  const next = upcoming.find((b) => b.status === 'confirmed' && b.day >= today()) || upcoming.find((b) => b.day >= today()) || upcoming[0]
+
+  const byId = new Map((providers || []).map((p) => [p.id, p]))
+  const shortlisted = [...shortlist].map((id) => byId.get(id)).filter(Boolean)
+  const followed = [...following].map((id) => byId.get(id)).filter(Boolean)
 
   return (
     <div className="mode-body">
       <div className="stat-tiles">
-        <StatTile value={active.length} label="Active bookings" to="/bookings" />
-        <StatTile value={shortlistIds.length} label="Shortlisted" to="/discover" />
-        <StatTile value={collections.length} label="Collections" />
+        <StatTile value={bookings.loading ? '…' : active.length} label="Active bookings" to="/bookings" />
+        <StatTile value={shortlist.size} label="Shortlisted" to="/discover" />
+        <StatTile value={collections.data ? collections.data.length : '…'} label="Collections" />
       </div>
 
+      {bookings.error && <div className="pad-x"><ErrorState error={bookings.error} onRetry={bookings.reload} /></div>}
       {next && (
         <>
           <h4 className="section-title pad-x">Next up</h4>
@@ -220,25 +261,14 @@ function ClientView() {
       )}
 
       <h4 className="section-title pad-x">Shortlisted photographers</h4>
-      {shortlistIds.length ? (
-        <div className="h-scroll">
-          {shortlistIds.map((id) => {
-            const p = getProvider(id)
-            return (
-              <Link key={id} to={`/u/${id}`} className="shortlist-chip">
-                <img className="avatar" src={p.avatar} alt="" />
-                <span className="tiny">{p.name.split(' ')[0]}</span>
-                <span className="tiny muted">{p.tasteMatch}%</span>
-              </Link>
-            )
-          })}
-        </div>
+      {shortlisted.length ? (
+        <PeopleRow people={shortlisted} />
       ) : (
         <div className="pad-x">
           <Link to="/discover" className="empty-card">
             <Layers size={20} />
             <div className="grow">
-              <b className="small">No one shortlisted yet</b>
+              <b className="small">{providers || !shortlist.size ? 'No one shortlisted yet' : 'Loading…'}</b>
               <div className="muted tiny">Swipe right in Discover on work you love.</div>
             </div>
             <ChevronRight size={16} />
@@ -246,16 +276,51 @@ function ClientView() {
         </div>
       )}
 
-      <h4 className="section-title pad-x">Saved collections</h4>
-      <div className="grid2 pad-x-only">
-        {collections.map((c) => (
-          <div key={c.id} className="collection">
-            <img src={img(c.cover, 300, 300)} alt="" />
-            <b className="small">{c.name}</b>
-            <div className="muted tiny">{c.count} saved</div>
-          </div>
-        ))}
+      <h4 className="section-title pad-x">Following</h4>
+      {followed.length ? (
+        <PeopleRow people={followed} />
+      ) : (
+        <div className="pad-x">
+          <Link to="/search" className="empty-card">
+            <Heart size={20} />
+            <div className="grow">
+              <b className="small">{providers || !following.size ? 'Not following anyone yet' : 'Loading…'}</b>
+              <div className="muted tiny">Follow photographers to see their new work first.</div>
+            </div>
+            <ChevronRight size={16} />
+          </Link>
+        </div>
+      )}
+
+      <h4 className="section-title pad-x">Your taste</h4>
+      <div className="pad-x">
+        <TasteCard taste={taste} />
       </div>
+
+      <h4 className="section-title pad-x">Saved collections</h4>
+      {collections.loading ? (
+        <Loading inline />
+      ) : collections.error ? (
+        <div className="pad-x"><ErrorState error={collections.error} onRetry={collections.reload} /></div>
+      ) : collections.data?.length ? (
+        <div className="grid2 pad-x-only">
+          {collections.data.map((c) => (
+            <div key={c.id} className="collection">
+              {c.cover ? (
+                <img src={c.cover} alt="" loading="lazy" />
+              ) : (
+                <div className="collection-empty"><Bookmark size={20} /></div>
+              )}
+              <b className="small">{c.name}</b>
+              <div className="muted tiny">{c.count} saved</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="pad-x">
+          <EmptyState compact icon={Bookmark} title="No collections yet" text="Tap the bookmark on any photo to save it here." />
+        </div>
+      )}
 
       <div className="pad-x mt muted tiny inline-icon">
         <Info size={12} /> Photographers see your client rating when you send a request.
@@ -264,13 +329,59 @@ function ClientView() {
   )
 }
 
+function PeopleRow({ people }) {
+  return (
+    <div className="h-scroll">
+      {people.map((p) => (
+        <Link key={p.id} to={`/u/${p.id}`} className="shortlist-chip">
+          <img className="avatar" src={p.avatar} alt="" />
+          <span className="tiny">{p.name.split(' ')[0]}</span>
+          {p.tasteMatch != null && <span className="tiny muted">{p.tasteMatch}%</span>}
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function TasteCard({ taste }) {
+  if (taste.loading) return <Loading inline />
+  if (taste.error) return <ErrorState error={taste.error} onRetry={taste.reload} />
+  const t = taste.data
+  if (!t?.styles?.length) {
+    return (
+      <Link to="/discover" className="empty-card">
+        <Sparkles size={20} />
+        <div className="grow">
+          <b className="small">{t?.swipes ? 'Still learning your taste' : 'We don’t know your taste yet'}</b>
+          <div className="muted tiny">Like a few photos in Discover and we’ll match you with photographers.</div>
+        </div>
+        <ChevronRight size={16} />
+      </Link>
+    )
+  }
+  return (
+    <div className="info-card">
+      <div className="muted tiny">Learned from {t.swipes} swipe{t.swipes === 1 ? '' : 's'} ({t.likes} liked)</div>
+      <div className="mt-xs">
+        {t.styles.slice(0, 5).map((s) => (
+          <div key={s.tag} className="taste-row">
+            <span>{s.tag}</span>
+            <div className="taste-bar"><div style={{ width: `${s.weight * 100}%` }} /></div>
+          </div>
+        ))}
+      </div>
+      {t.corrections.length > 0 && <div className="muted tiny mt-xs">Hidden: {t.corrections.join(', ')}</div>}
+    </div>
+  )
+}
+
 function NextBooking({ b }) {
-  const { provider, pkg } = findPackage(b.packageId)
+  const provider = b.provider
   return (
     <Link to={`/bookings/${b.id}`} className="booking-card">
       <ProfileLink id={provider.id}><img className="avatar" src={provider.avatar} alt="" /></ProfileLink>
       <div className="grow">
-        <b className="small">{pkg.name}</b>
+        <b className="small">{b.packageName}</b>
         <div className="muted tiny"><ProfileLink id={provider.id}>{provider.name}</ProfileLink> · {b.date}</div>
         <div className="mt-xs"><StatusPill status={b.status} /></div>
       </div>
@@ -279,21 +390,40 @@ function NextBooking({ b }) {
   )
 }
 
-function ProviderView() {
-  const { requests, identityStatus, payoutsConnected, setPayoutsConnected, toast } = useStore()
+function ProviderView({ detail, bookings }) {
+  const { myProvider, identityStatus } = useStore()
   const [tab, setTab] = useState('requests')
   const tabsRef = useRef()
-  const pending = requests.filter((r) => r.status === 'requested').length
-  const bookedThisMonth = Object.values(myCalendar).filter((s) => s === 'booked').length
+
+  if (!myProvider) {
+    return (
+      <div className="mode-body pad-x">
+        <EmptyState
+          icon={Camera}
+          title="Take bookings as a photographer"
+          text="Set up your listing, post a few albums and clients can find and book you."
+          action={<Link to="/upload" className="btn accent">Become a photographer</Link>}
+        />
+      </div>
+    )
+  }
+
+  const list = bookings.data || []
+  const pending = list.filter((r) => r.status === 'requested').length
+  const now = today()
+  const monthKey = toKey(now).slice(0, 7)
+  const bookedThisMonth = new Set(list.filter((b) => BOOKED.includes(b.status) && b.dateKey.startsWith(monthKey)).map((b) => b.dateKey)).size
+  const monthName = fromKey(`${monthKey}-01`).toLocaleDateString('en-US', { month: 'short' })
+  const provider = detail.data
+  const packageCount = provider?.packages?.length ?? 0
+  const albumCount = provider?.albumCount ?? 0
 
   const steps = [
     { done: identityStatus === 'verified', label: 'Verify your identity', sub: 'Required to accept paid bookings', Icon: ShieldCheck, to: '/verify' },
-    {
-      done: payoutsConnected, label: 'Set up payouts', sub: 'Connect a bank account with Stripe', Icon: CreditCard,
-      onClick: () => { setPayoutsConnected(true); toast('Payout account connected') },
-    },
-    { done: myPackages.length > 0, label: 'Add a package', sub: `${myPackages.length} published`, Icon: Package, tab: 'packages' },
-    { done: myPosts.length > 0, label: 'Add portfolio work', sub: `${myPosts.length} photos`, Icon: Images, tab: 'portfolio' },
+    // Payouts (Stripe Connect) aren't built yet, so this can't be completed.
+    { done: false, label: 'Set up payouts', sub: 'Coming soon: bank payouts aren’t available yet', Icon: CreditCard, disabled: true },
+    { done: packageCount > 0, label: 'Add a package', sub: 'Clients book a package', Icon: Package, tab: 'packages' },
+    { done: albumCount > 0, label: 'Add portfolio work', sub: 'Post at least one album', Icon: Images, tab: 'portfolio' },
   ]
   const doneCount = steps.filter((s) => s.done).length
 
@@ -304,7 +434,7 @@ function ProviderView() {
 
   return (
     <div className="mode-body">
-      {doneCount < steps.length ? (
+      {detail.loading && !provider ? null : doneCount < steps.length ? (
         <div className="pad-x">
           <div className="checklist">
             <div className="row between">
@@ -312,7 +442,7 @@ function ProviderView() {
               <span className="small muted">{doneCount} of {steps.length}</span>
             </div>
             <div className="progress mt-sm"><div style={{ width: `${(doneCount / steps.length) * 100}%` }} /></div>
-            {steps.map(({ done, label, sub, Icon, to, onClick, tab: t }) => {
+            {steps.map(({ done, label, sub, Icon, to, disabled, tab: t }) => {
               const inner = (
                 <>
                   <span className={`check-circle ${done ? 'done' : ''}`}>{done ? <Check size={14} strokeWidth={3} /> : <Icon size={14} />}</span>
@@ -320,13 +450,13 @@ function ProviderView() {
                     <div className="small">{label}</div>
                     {!done && <div className="muted tiny">{sub}</div>}
                   </div>
-                  {!done && <ChevronRight size={16} className="muted" />}
+                  {!done && !disabled && <ChevronRight size={16} className="muted" />}
                 </>
               )
               const cls = `check-item ${done ? 'done' : ''}`
-              if (done) return <div key={label} className={cls}>{inner}</div>
+              if (done || disabled) return <div key={label} className={cls}>{inner}</div>
               if (to) return <Link key={label} to={to} className={cls}>{inner}</Link>
-              return <button key={label} className={cls} onClick={onClick || (() => openTab(t))}>{inner}</button>
+              return <button key={label} className={cls} onClick={() => openTab(t)}>{inner}</button>
             })}
           </div>
         </div>
@@ -340,13 +470,13 @@ function ProviderView() {
       )}
 
       <div className="stat-tiles">
-        <StatTile value={pending} label="New requests" onClick={() => openTab('requests')} highlight={pending > 0} />
-        <StatTile value={bookedThisMonth} label="Booked in Oct" onClick={() => openTab('calendar')} />
-        <StatTile value={me.providerRating} label="Your rating" />
+        <StatTile value={bookings.loading ? '…' : pending} label="New requests" onClick={() => openTab('requests')} highlight={pending > 0} />
+        <StatTile value={bookings.loading ? '…' : bookedThisMonth} label={`Booked in ${monthName}`} onClick={() => openTab('calendar')} />
+        <StatTile value={rating(provider?.rating) ?? 'New'} label="Your rating" />
       </div>
 
       <div ref={tabsRef} className="tabs-anchor" />
-      <Dashboard tab={tab} onTabChange={setTab} />
+      <Dashboard tab={tab} onTabChange={setTab} provider={provider} bookings={bookings} onProviderChanged={detail.reload} />
     </div>
   )
 }

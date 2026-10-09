@@ -1,33 +1,55 @@
-import { useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { CalendarCheck, CalendarX, Camera, CircleDot, Copy, MapPin, MessageCircle, MoreHorizontal, Send, Clock, Images, Sparkles } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import {
+  CalendarCheck, CalendarX, Camera, CircleDot, Copy, MapPin, MessageCircle, MoreHorizontal, Send, Clock, Images, Sparkles,
+  Heart, Plus, UserX, Package, Star,
+} from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Segmented from '../components/Segmented.jsx'
 import Stars from '../components/Stars.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { PolicyTable, priceLabel } from '../components/Booking.jsx'
 import { ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
+import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import { useStore } from '../store.jsx'
-import { galleryFor, getPerson, img, isAvailable } from '../data/mock.js'
-import { fmtChip, fromKey, parseDates } from '../data/dates.js'
+import { useAuth } from '../auth.jsx'
+import useQuery from '../lib/useQuery.js'
+import { addDays, fmtBooking, fmtChip, fmtMonth, fromKey, parseDates, toKey, today } from '../lib/dates.js'
+import { freeDays, getPerson, getProvider } from '../api/catalog.js'
+import { listAlbums, toViewerAlbum } from '../api/portfolio.js'
+import { startInquiry } from '../api/messages.js'
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
-export function AvailabilityStrip({ unavailable, selected, onSelect }) {
-  const today = new Date(2026, 9, 7)
+// The days the availability strip shows: the next two weeks, starting tomorrow.
+export const stripDates = (count = 14) => {
+  const start = today()
+  return Array.from({ length: count }, (_, i) => addDays(start, i + 1))
+}
+
+// Next two weeks as day buttons, with booked days struck through.
+//   free:        Set of 'YYYY-MM-DD' the photographer is free on (from freeDays), or
+//   providerId:  load that Set here (one freeDays call), or
+//   unavailable: legacy list of day indexes (0..13) that are busy.
+//   selected:    a label ("Oct 10, 2026") or 'YYYY-MM-DD' key, or an array of either.
+//   onSelect(label, key) makes days tappable. pending: dims the strip while `free` loads.
+export function AvailabilityStrip({ free, providerId, unavailable, selected, onSelect, pending = false }) {
+  const days = useMemo(() => stripDates(), [])
+  const { data: loaded } = useQuery(providerId && !free ? () => freeDays(providerId, days) : null, [providerId, !!free])
+  const freeSet = free || loaded
+  const picked = Array.isArray(selected) ? selected : selected ? [selected] : []
   return (
-    <div className="avail-strip">
-      {Array.from({ length: 14 }, (_, i) => {
-        const d = new Date(today)
-        d.setDate(today.getDate() + i + 1)
-        const busy = unavailable.includes(i)
-        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    <div className={`avail-strip ${pending || (providerId && !freeSet) ? 'pending' : ''}`}>
+      {days.map((d, i) => {
+        const key = toKey(d)
+        const label = fmtBooking(d)
+        const busy = freeSet ? !freeSet.has(key) : !providerId && !!unavailable?.includes(i)
         return (
           <button
-            key={i}
-            className={`avail-day ${busy ? 'busy' : ''} ${(Array.isArray(selected) ? selected.includes(label) : selected === label) ? 'on' : ''}`}
+            key={key}
+            className={`avail-day ${busy ? 'busy' : ''} ${picked.includes(label) || picked.includes(key) ? 'on' : ''}`}
             disabled={busy || !onSelect}
-            onClick={() => onSelect?.(label)}
+            onClick={() => onSelect?.(label, key)}
           >
             <span>{DAYS[d.getDay()]}</span>
             <b>{d.getDate()}</b>
@@ -38,88 +60,164 @@ export function AvailabilityStrip({ unavailable, selected, onSelect }) {
   )
 }
 
+// getPerson, but a username that belongs to a photographer opens their listing.
+async function loadPerson(id) {
+  const person = await getPerson(id)
+  if (person?.kind === 'person') return (await getProvider(person.id)) || person
+  return person
+}
+
 export default function Profile() {
   const { id } = useParams()
   const [params] = useSearchParams()
+  const { pathname, search } = useLocation()
   const navigate = useNavigate()
-  const { following, toggleFollow, startConversation } = useStore()
-  const person = getPerson(id)
-  const isProvider = !!person.packages
+  const { user } = useAuth()
+  const { following, toggleFollow, shortlist, toggleShortlist, toast } = useStore()
   const [tab, setTab] = useState('portfolio')
   const [share, setShare] = useState(false)
   const [menu, setMenu] = useState(false)
+  const [contacting, setContacting] = useState(false)
 
-  const portfolio = galleryFor(id)
+  const { data: person, loading, error, reload } = useQuery(() => loadPerson(id), [id])
+  const provider = person?.kind === 'provider' ? person : null
 
-  // Dates carried over from a date search: show which ones this provider is free on.
-  const dates = parseDates(params.get('dates'))
-  const freeDates = isProvider ? dates.filter((k) => isAvailable(person, fromKey(k))) : []
+  const { data: albums, loading: albumsLoading, error: albumsError, reload: reloadAlbums } = useQuery(
+    provider ? () => listAlbums(provider.id).then((rows) => rows.filter((a) => a.photos?.length).map(toViewerAlbum)) : null,
+    [provider?.id],
+  )
+
+  // Dates carried over from a date search, plus the strip's two weeks: one availability lookup.
+  const datesParam = params.get('dates') || ''
+  const dates = parseDates(datesParam)
+  const stripKeys = useMemo(() => stripDates().map(toKey), [])
+  const { data: free } = useQuery(
+    provider ? () => freeDays(provider.id, [...new Set([...stripKeys, ...dates])]) : null,
+    [provider?.id, datesParam],
+  )
+  const freeDates = free ? dates.filter((k) => free.has(k)) : []
   const datesQuery = freeDates.length ? `dates=${freeDates.join(',')}` : ''
 
-  const contact = () => navigate(`/inbox/${startConversation(id)}`)
+  if (loading) return (<div><TopBar title="" /><Loading /></div>)
+  if (error) return (<div><TopBar title="" /><ErrorState error={error} onRetry={reload} /></div>)
+  if (!person) {
+    return (
+      <div>
+        <TopBar title="" />
+        <EmptyState icon={UserX} title="Profile not found" text="This account doesn’t exist or is no longer available."
+          action={<Link to="/" className="btn sm">Go home</Link>} />
+      </div>
+    )
+  }
+
+  const isMine = !!user && person.profileId === user.id
+  const handle = person.username || provider?.slug
+  const link = `/u/${provider ? provider.slug : person.username || person.id}`
+  const firstName = (person.name || '').split(' ')[0]
+
+  const contact = async () => {
+    if (!user) return navigate(`/sign-in?next=${encodeURIComponent(pathname + search)}`)
+    if (contacting) return
+    setContacting(true)
+    try {
+      const conversationId = await startInquiry(provider.id)
+      navigate(`/inbox/${conversationId}`)
+    } catch (e) {
+      console.warn(e)
+      toast('Couldn’t start a conversation. Try again.')
+      setContacting(false)
+    }
+  }
 
   return (
     <div>
       <TopBar
-        title={`@${person.username}`}
+        title={handle ? `@${handle}` : person.name}
         right={
           <>
-            <button className="icon-btn" onClick={() => setShare(true)}><Send size={20} /></button>
-            <button className="icon-btn" onClick={() => setMenu(true)}><MoreHorizontal size={20} /></button>
+            {provider && !isMine && (
+              <button className="icon-btn" onClick={() => toggleShortlist(provider.id)} aria-label={shortlist.has(provider.id) ? 'Remove from shortlist' : 'Save to shortlist'}>
+                <Heart size={20} fill={shortlist.has(provider.id) ? 'currentColor' : 'none'} />
+              </button>
+            )}
+            <button className="icon-btn" onClick={() => setShare(true)} aria-label="Share"><Send size={20} /></button>
+            {!isMine && <button className="icon-btn" onClick={() => setMenu(true)} aria-label="More"><MoreHorizontal size={20} /></button>}
           </>
         }
       />
-      {person.cover && <img className="cover" src={person.cover} alt="" />}
-      <div className={`profile-head ${person.cover ? 'has-cover' : ''}`}>
+      {provider?.cover && <img className="cover" src={provider.cover} alt="" />}
+      <div className={`profile-head ${provider?.cover ? 'has-cover' : ''}`}>
         <img className="avatar xl" src={person.avatar} alt="" />
         <h2>
-          {person.name} {person.idVerified && <IdVerified label />} {person.pro && <ProBadge />}
+          {person.name} {provider?.idVerified && <IdVerified label />} {provider?.pro && <ProBadge />}
         </h2>
         {person.city && (
           <div className="muted small inline-icon">
             <MapPin size={13} /> {person.city}
           </div>
         )}
-        {isProvider && (
+        {provider && (
           <div className="row gap-xs small mt-xs">
-            <Stars value={person.rating} /> <b>{person.rating}</b>
-            <span className="muted">({person.reviewCount} reviews)</span>
-            <span className="muted">· {person.followers} followers</span>
+            {provider.rating != null ? (
+              <>
+                <Stars value={provider.rating} /> <b>{provider.rating.toFixed(1)}</b>
+                <span className="muted">({provider.reviewCount} review{provider.reviewCount === 1 ? '' : 's'})</span>
+              </>
+            ) : (
+              <span className="chip">New</span>
+            )}
+            <span className="muted">· {provider.followers} follower{provider.followers === 1 ? '' : 's'}</span>
           </div>
         )}
+        {!provider && person.clientRating != null && (
+          <div className="row gap-xs small mt-xs">
+            <Stars value={person.clientRating} /> <b>{person.clientRating.toFixed(1)}</b>
+            <span className="muted">as a client ({person.clientReviews} review{person.clientReviews === 1 ? '' : 's'})</span>
+          </div>
+        )}
+        {!provider && person.createdAt && <div className="muted tiny">Joined {fmtMonth(new Date(person.createdAt))}</div>}
         {person.bio && <p className="mt-sm">{person.bio}</p>}
-        {isProvider && (
+        {provider?.specialties?.length > 0 && (
           <div className="chips center">
-            {person.specialties.map((s) => (
+            {provider.specialties.map((s) => (
               <span key={s} className="chip">{s}</span>
             ))}
           </div>
         )}
-        <div className="row gap-xs mt full">
-          <button className={`btn grow ${following.has(id) ? 'ghost' : ''}`} onClick={() => toggleFollow(id)}>
-            {following.has(id) ? 'Following' : 'Follow'}
-          </button>
-          <button className="btn ghost grow" onClick={contact}>
-            <MessageCircle size={16} /> {isProvider ? 'Ask a question' : 'Message'}
-          </button>
-        </div>
-        {isProvider && (
-          <Link to={`/book/${id}${datesQuery && `?${datesQuery}`}`} className="btn accent block mt-sm">
-            Book {person.name.split(' ')[0]}
-          </Link>
+        {provider && !isMine && (
+          <>
+            <div className="row gap-xs mt full">
+              <button className={`btn grow ${following.has(provider.id) ? 'ghost' : ''}`} onClick={() => toggleFollow(provider.id)}>
+                {following.has(provider.id) ? 'Following' : 'Follow'}
+              </button>
+              <button className="btn ghost grow" onClick={contact} disabled={contacting}>
+                <MessageCircle size={16} /> {contacting ? 'Opening…' : 'Ask a question'}
+              </button>
+            </div>
+            <Link to={`/book/${provider.id}${datesQuery && `?${datesQuery}`}`} className="btn accent block mt-sm">
+              Book {firstName}
+            </Link>
+          </>
+        )}
+        {provider && isMine && (
+          <div className="row gap-xs mt full">
+            <Link to="/upload" className="btn grow"><Plus size={16} /> Post photos</Link>
+            <Link to="/my-work" className="btn ghost grow"><Images size={16} /> My work</Link>
+          </div>
         )}
       </div>
 
-      {isProvider && dates.length > 0 && (
+      {provider && dates.length > 0 && (
         <div className="pad-x">
           <div className="info-card your-dates">
             <div className="small"><b>Your dates</b></div>
             <div className="chips mt-sm">
               {dates.map((k) => {
-                const free = freeDates.includes(k)
+                const isFree = freeDates.includes(k)
                 return (
-                  <span key={k} className={`chip avail-chip ${free ? 'free' : 'busy'}`}>
-                    {free ? <CalendarCheck size={12} /> : <CalendarX size={12} />} {fmtChip(fromKey(k))} · {free ? 'Free' : 'Booked'}
+                  <span key={k} className={`chip avail-chip ${!free ? '' : isFree ? 'free' : 'busy'}`}>
+                    {isFree ? <CalendarCheck size={12} /> : <CalendarX size={12} />} {fmtChip(fromKey(k))}
+                    {free && ` · ${isFree ? 'Free' : 'Booked'}`}
                   </span>
                 )
               })}
@@ -128,19 +226,19 @@ export default function Profile() {
         </div>
       )}
 
-      {isProvider && (
+      {provider && (
         <div className="pad-x">
           <div className="info-card">
             <div className="row between">
               <div className="small"><b>Availability</b> · next 2 weeks</div>
-              <div className="muted tiny">{person.serviceArea}</div>
+              <div className="muted tiny">{provider.serviceArea}</div>
             </div>
-            <AvailabilityStrip unavailable={person.unavailable} />
+            <AvailabilityStrip free={free} pending={!free} />
           </div>
         </div>
       )}
 
-      {isProvider && (
+      {provider && (
         <div className="pad-x mt">
           <Segmented
             options={[
@@ -155,97 +253,153 @@ export default function Profile() {
         </div>
       )}
 
-      {tab === 'portfolio' && (
-        <div className="grid3 mt-sm">
-          {portfolio.map((a) => (
-            <Link key={a.id} to={`/gallery/${id}?post=${a.id}`} className="album-tile" title={a.title}>
-              <img src={img(a.photos[0].seed, 300, 300)} alt="" loading="lazy" />
-              {a.photos.length > 1 && (
-                <span className="album-count"><Copy size={12} /> {a.photos.length}</span>
-              )}
-            </Link>
-          ))}
-        </div>
+      {provider && tab === 'portfolio' && (
+        <>
+          {albumsLoading && <Loading inline />}
+          {albumsError && <ErrorState error={albumsError} onRetry={reloadAlbums} />}
+          {albums?.length === 0 && (
+            <div className="pad">
+              <EmptyState compact icon={Images} title="No albums yet"
+                text={isMine ? 'Post your first album and it will show up here.' : `${firstName} hasn’t posted any work yet.`}
+                action={isMine ? <Link to="/upload" className="btn sm">Post photos</Link> : null} />
+            </div>
+          )}
+          {albums?.length > 0 && (
+            <div className="grid3 mt-sm">
+              {albums.map((a) => (
+                <Link
+                  key={a.id}
+                  to={a.status === 'under_review' && isMine ? `/ai-review/${a.id}` : `/gallery/${provider.id}?post=${a.id}`}
+                  className="album-tile"
+                  title={a.title}
+                >
+                  <img src={a.cover} alt="" loading="lazy" />
+                  {a.photos.length > 1 && (
+                    <span className="album-count"><Copy size={12} /> {a.photos.length}</span>
+                  )}
+                  {a.status && a.status !== 'published' && <span className="album-status">{ALBUM_STATUS[a.status] || a.status}</span>}
+                </Link>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {tab === 'packages' && (
+      {provider && tab === 'packages' && (
         <div className="pad">
-          {person.packages.map((pkg) => (
+          {provider.packages.length === 0 && (
+            <EmptyState compact icon={Package} title="No packages listed yet" text={isMine ? null : 'Ask a question to get a quote.'} />
+          )}
+          {provider.packages.map((pkg) => (
             <div key={pkg.id} className="package-card">
               <div className="row between">
                 <h4>{pkg.name}</h4>
                 <b>{priceLabel(pkg)}</b>
               </div>
-              <div className="pkg-facts">
-                {pkg.hours && <span><Clock size={13} /> {pkg.hours}h</span>}
-                {pkg.editedPhotos && <span><Images size={13} /> {pkg.editedPhotos} edited</span>}
-                {pkg.turnaroundDays && <span><Sparkles size={13} /> {pkg.turnaroundDays}-day turnaround</span>}
-              </div>
+              {(pkg.hours || pkg.editedPhotos || pkg.turnaroundDays) && (
+                <div className="pkg-facts">
+                  {pkg.hours && <span><Clock size={13} /> {pkg.hours}h</span>}
+                  {pkg.editedPhotos && <span><Images size={13} /> {pkg.editedPhotos} edited</span>}
+                  {pkg.turnaroundDays && <span><Sparkles size={13} /> {pkg.turnaroundDays}-day turnaround</span>}
+                </div>
+              )}
+              {pkg.description && <div className="small">{pkg.description}</div>}
               {pkg.editingLevel && <div className="muted small">Editing: {pkg.editingLevel}</div>}
-              <div className="muted small">Includes: {pkg.deliverables.join(', ')}</div>
-              <div className="muted small">{pkg.depositPct}% deposit to confirm</div>
-              <Link to={`/book/${id}?pkg=${pkg.id}${datesQuery && `&${datesQuery}`}`} className="btn sm mt-sm">Select</Link>
+              {pkg.deliverables?.length > 0 && <div className="muted small">Includes: {pkg.deliverables.join(', ')}</div>}
+              {pkg.depositPct != null && <div className="muted small">{pkg.depositPct}% deposit to confirm</div>}
+              {!isMine && (
+                <Link to={`/book/${provider.id}?pkg=${pkg.id}${datesQuery && `&${datesQuery}`}`} className="btn sm mt-sm">Select</Link>
+              )}
             </div>
           ))}
-          {person.addons.length > 0 && (
+          {provider.addons?.length > 0 && (
             <>
               <h4 className="section-title">Add-ons</h4>
-              {person.addons.map((a) => (
+              {provider.addons.map((a) => (
                 <div key={a.id} className="row between small line">
                   <span>{a.name}</span>
-                  <span>+${a.price}</span>
+                  <span>{a.price == null ? 'Quote' : `+$${a.price.toLocaleString()}`}</span>
                 </div>
               ))}
             </>
           )}
           <h4 className="section-title">Service area</h4>
-          <div className="small">{person.serviceArea}</div>
-          <div className="muted small">Travel fee: {person.travelFee}</div>
+          <div className="small">{provider.serviceArea}</div>
+          <div className="muted small">Travel fee: {provider.travelFee}</div>
           <div className="mt">
-            <PolicyTable policy={person.cancellationPolicy} />
+            <PolicyTable policy={provider.cancellationPolicy} />
           </div>
         </div>
       )}
 
-      {tab === 'gear' && (
+      {provider && tab === 'gear' && (
         <div className="pad">
-          <h4 className="section-title">Bodies</h4>
-          {person.gear.bodies.map((g) => (
-            <div key={g} className="gear-row"><Camera size={16} /> {g}</div>
-          ))}
-          <h4 className="section-title">Lenses</h4>
-          {person.gear.lenses.map((g) => (
-            <div key={g} className="gear-row"><CircleDot size={16} /> {g}</div>
-          ))}
+          {!provider.gear.bodies.length && !provider.gear.lenses.length && (
+            <EmptyState compact icon={Camera} title="No gear listed yet" />
+          )}
+          {provider.gear.bodies.length > 0 && (
+            <>
+              <h4 className="section-title">Bodies</h4>
+              {provider.gear.bodies.map((g) => (
+                <div key={g} className="gear-row"><Camera size={16} /> {g}</div>
+              ))}
+            </>
+          )}
+          {provider.gear.lenses.length > 0 && (
+            <>
+              <h4 className="section-title">Lenses</h4>
+              {provider.gear.lenses.map((g) => (
+                <div key={g} className="gear-row"><CircleDot size={16} /> {g}</div>
+              ))}
+            </>
+          )}
         </div>
       )}
 
-      {tab === 'reviews' && (
+      {provider && tab === 'reviews' && (
         <div className="pad">
-          <div className="rating-summary">
-            <div className="big">{person.rating}</div>
-            <div>
-              <Stars value={person.rating} size={16} />
-              <div className="muted small">{person.reviewCount} reviews from completed bookings</div>
+          {provider.rating != null ? (
+            <div className="rating-summary">
+              <div className="big">{provider.rating.toFixed(1)}</div>
+              <div>
+                <Stars value={provider.rating} size={16} />
+                <div className="muted small">{provider.reviewCount} review{provider.reviewCount === 1 ? '' : 's'} from completed bookings</div>
+              </div>
             </div>
-          </div>
-          {person.reviews.length === 0 && <div className="muted small mt">No written reviews yet.</div>}
-          {person.reviews.map((r) => (
-            <div key={r.name} className="review">
+          ) : (
+            <EmptyState compact icon={Star} title="No reviews yet" text="Reviews appear here after completed bookings." />
+          )}
+          {provider.rating != null && provider.reviews.length === 0 && <div className="muted small mt">No written reviews yet.</div>}
+          {provider.reviews.map((r) => (
+            <div key={r.id} className="review">
               <div className="row gap-xs">
                 <img className="avatar sm" src={r.avatar} alt="" />
                 <b className="small">{r.name}</b>
                 <Stars value={r.rating} size={12} />
                 <span className="muted tiny grow right-text">{r.date}</span>
               </div>
-              <p className="small">{r.text}</p>
+              {r.text && <p className="small">{r.text}</p>}
             </div>
           ))}
         </div>
       )}
 
-      <ShareSheet open={share} onClose={() => setShare(false)} link={`/u/${person.username}`} payload={{ text: `Check out @${person.username}` }} />
-      <ModerationSheet open={menu} onClose={() => setMenu(false)} what="profile" username={person.username} />
+      <ShareSheet
+        open={share}
+        onClose={() => setShare(false)}
+        link={link}
+        payload={{ text: `Check out ${handle ? `@${handle}` : person.name}: ${window.location.origin}${link}` }}
+      />
+      <ModerationSheet
+        open={menu}
+        onClose={() => setMenu(false)}
+        what="profile"
+        username={person.username}
+        target={provider ? { type: 'provider', id: provider.id } : { type: 'profile', id: person.id }}
+        blockProfileId={person.profileId}
+      />
     </div>
   )
 }
+
+const ALBUM_STATUS = { processing: 'Processing', under_review: 'In review', hidden: 'Hidden' }

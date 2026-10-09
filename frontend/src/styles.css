@@ -777,3 +777,55 @@ input[type=date].filter { width: 130px; }
 .upload-remove { position: absolute; right: 6px; top: 6px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; display: grid; place-items: center; }
 .upload-add { aspect-ratio: 1; border-radius: 10px; border: 2px dashed #d6d6d6; display: grid; place-items: center; color: var(--muted); }
 .upload .input-prefix span { white-space: nowrap; }
+
+/* ---- Shared loading / empty / signed-out states (components/States.jsx) ---- */
+.state { padding: 48px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+.state.inline { padding: 16px; flex-direction: row; gap: 10px; }
+.state.inline .spinner { width: 18px; height: 18px; border-width: 2px; }
+.state.empty.compact { padding: 20px 16px; border: 1.5px dashed var(--line); border-radius: 16px; gap: 6px; }
+.state-icon { width: 52px; height: 52px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; color: var(--muted); }
+.state.compact .state-icon { width: 40px; height: 40px; }
+.state-title { font-weight: 600; color: var(--ink); }
+.state-text { max-width: 280px; line-height: 1.45; }
+.state .btn { margin-top: 6px; }
+
+/* ---- profile & gallery screens ---- */
+.avail-strip.pending { opacity: .45; }
+.album-status { position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; font-weight: 600; }
+.reel.reel-state { background: #080808; color: #fff; display: flex; flex-direction: column; justify-content: center; }
+.reel-state .state-title { color: #fff; }
+.reel-state .state-text, .reel-state .muted { color: rgba(255,255,255,.65); }
+.reel-state .state-icon { background: rgba(255,255,255,.1); color: rgba(255,255,255,.75); }
+.reel-state .spinner { border-color: rgba(255,255,255,.2); border-top-color: #fff; }
+.signin-tile { display: block; height: 150px; border-radius: 14px; background: var(--soft); }
+.reel-state .btn { background: #fff; color: #080808; }
+
+/* ---- booking screens ---- */
+.chip.busy { text-decoration: line-through; opacity: .55; }
+.bk-free-hint { text-align: center; margin-top: 6px; }
+.bk-note { color: var(--muted); line-height: 1.4; }
+.bk-error { color: var(--danger); font-size: 14px; }
+.review-reveal { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+/* ---- me & inbox screens ---- */
+.tab-icon { position: relative; display: inline-flex; }
+.tab-badge { position: absolute; top: -5px; right: -9px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.convo-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.unread-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.convo.unread .tiny { color: var(--ink); font-weight: 600; }
+.collection-empty { width: 100%; aspect-ratio: 1; border-radius: 12px; margin-bottom: 4px; background: var(--soft); color: var(--muted); display: grid; place-items: center; }
+.package-card.pkg-edit { width: 100%; text-align: left; background: #fff; }
+.package-card.inactive { opacity: .6; }
+.req-pkg { display: block; color: var(--ink); }
+.hours-row { align-items: flex-start; gap: 12px; }
+.cal-day.past { color: #bbb; }
+.cal-day.busy { opacity: .5; }
+.soon-tag { padding: 3px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 11px; font-weight: 600; }
+.verify-status { width: 100%; display: flex; justify-content: space-between; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+
+/* ---- discovery screens ---- */
+.img-ph { background: var(--soft); width: 100%; height: 100%; min-height: 0; }
+.match-tile-img .img-ph { height: 140px; }
+.new-tag { font-size: 10.5px; font-weight: 700; letter-spacing: .02em; padding: 1px 6px; border-radius: 999px; background: var(--soft); color: var(--ink); }
+.discover-empty-actions { justify-content: center; }
+.info-card .inline-icon { display: flex; }

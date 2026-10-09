@@ -11,9 +11,9 @@ Where the project stands, what was decided, and what's next. Update this file at
 | Area | State |
 |---|---|
 | Product plan | `docs/PLAN.md` (features) and `architecture.md` (Tim's service design). They still disagree on a few points, listed in the README. |
-| Frontend | Clickable **React web prototype** in `frontend/`. **Sign-in and posting photos work against Supabase** (branch `posting`); everything else still runs on mock data. |
+| Frontend | React web prototype in `frontend/`. **Every screen now reads from Supabase**; the mock data file is gone. Data layer guide: `docs/FRONTEND_DATA.md`. |
 | Database + auth | **Supabase project "Event Organizer" is set up and tested** (phases 0–2). Design and status: `docs/DATABASE.md`. |
-| Discover ML (SigLIP) | Photo embeddings, auto-tags and the `discover_feed()` ranking are built and tested (branch `siglip`). The Discover screen isn't connected to them yet. |
+| Discover ML (SigLIP) | All 70 test photos analysed. Discover uses `discover_feed()`; "% match" uses `provider_matches()`. |
 | Payments (Stripe) | Not started |
 | Mobile app (Expo / React Native) | Not started. The web prototype is the reference design. |
 
@@ -112,7 +112,28 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
   - On 11 sample photos the tags and "most similar" results were sensible, and the text search "moody black and white city" found the right photo.
   - The API endpoints work.
   - The worker hasn't yet run against the real database; it needs the service role key in `services/ml/.env`.
-- **Next:** connect the Discover screen (log swipes to `swipes`, get cards from `discover_feed`), and add a "% match" for photographers based on the same taste vector.
+- **Done since:** the worker has analysed all 70 test photos; Discover and "% match" are connected (see below).
+
+### Frontend connected to the database (2026-10-08, on `main`)
+- **Data layer** in `frontend/src/api/`: catalog, portfolio, discover, bookings, messages, social and provider. Shared helpers are in `lib/format.js`, `lib/dates.js` and `lib/useQuery.js`; loading, empty and sign-in states are in `components/States.jsx`. Guide: `docs/FRONTEND_DATA.md`.
+- **Screens:**
+  - Home, Search and Discover read real photographers, categories, availability and the SigLIP feed. Swipes are logged and can be undone; "Not into this" and the taste profile are saved.
+  - Profiles and the album viewer show real albums, packages, reviews, follows, the shortlist, likes, collections and reports/blocks.
+  - Bookings call the real booking functions for requesting, accepting, countering, cancelling, delivering and reviewing.
+  - Me, Inbox and Chat read real conversations, with live updates over Realtime.
+- **Removed because nothing backs them yet:** distance and the map view, fake payments and disputes, fake delivery photos, the fake AI-review score, and the fake ID-verification flow.
+- **Database:**
+  - `provider_matches()` gives a "% match" per photographer from your swipes (`supabase/tests/matches_test.sql` passes 5/5).
+  - Users can now delete (undo) their own swipes.
+- **Demo data:** `supabase/demo/demo_data.sql` adds packages, add-ons, gear, working hours, 22 bookings, reviews, chats, follows and a shortlist for Brian. Undo with `supabase/demo/remove_demo_data.sql`.
+- **Tested:** in headless Chrome while signed out, and the build passes. The signed-in flows were checked against injected sample data, not by actually signing in. **Brian should sign in and click through Bookings, Inbox and Me.**
+- **Still needs backend work:**
+  - Stripe (deposits and payouts)
+  - delivery gallery uploads
+  - disputes
+  - the AI-review pipeline
+  - locations and distance
+  - travel fees.
 
 ---
 
@@ -143,8 +164,6 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
 
 - **Not merged yet:** the database work is on branch `database-setup`. Open a PR to merge it into `main`.
 - **Optional, not applied:** `supabase/pending/split_owner_policies.sql`, a performance tidy-up flagged by Supabase. It was declined when proposed; apply it later as a new migration if wanted.
-- **The frontend isn't wired to the database.** Screens still read `mock.js`.
-- **No demo data in the database.** Photographers, packages and albums need real accounts; create them by signing up test users once sign-in exists.
 - **Tim** still needs to be invited to the Supabase organization.
 - **CLI link:** each machine needs `npx supabase login` and `npx supabase link --project-ref ktjvbajrfrbwpndforcy` before `db push`.
 - **Local `main` on Brian's machine** has a stale, unpushed "read me" commit that accidentally includes `frontend/node_modules`. Reset it with `git checkout main && git reset --hard origin/main`. Nothing on GitHub is affected.

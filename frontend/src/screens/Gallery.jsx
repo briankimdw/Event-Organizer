@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Bookmark, Flag, Info, MapPin, Camera, Sparkles, X } from 'lucide-react'
+import { Bookmark, Flag, Heart, ImageOff, Info, MapPin, Camera, Send, Sparkles, X } from 'lucide-react'
 import Sheet from '../components/Sheet.jsx'
 import ExifPanel from '../components/Exif.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
 import { BeforeAfter } from '../components/Media.jsx'
-import { SaveSheet, ModerationSheet } from '../components/PostSheets.jsx'
+import { SaveSheet, ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
 import { money, startingPrice } from '../components/Booking.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
+import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import { useStore } from '../store.jsx'
-import { galleryFor, getPerson, img, posts } from '../data/mock.js'
+import { useAuth } from '../auth.jsx'
+import useQuery from '../lib/useQuery.js'
+import { getProvider } from '../api/catalog.js'
+import { getAlbum, listAlbums, toViewerAlbum } from '../api/portfolio.js'
 
-const shortExif = (e = {}) => [e.focal, e.aperture, e.shutter, e.iso && `ISO ${e.iso}`].filter(Boolean).join('  ·  ')
+const shortExif = (e) => [e?.focal, e?.aperture, e?.shutter, e?.iso && `ISO ${e.iso}`].filter(Boolean).join('  ·  ')
+const EXIF_FIELDS = ['body', 'lens', 'focal', 'aperture', 'shutter', 'iso', 'flash', 'date']
+const hasExif = (e) => !!e && EXIF_FIELDS.some((k) => e[k])
+const photoKey = (p) => p.id ?? p.seed
 const PAGE = 70 // px of drag needed to change album (vertical) or photo (horizontal)
 const EXIT = 90 // px of drag needed to close
 const HOLD_MS = 220 // press this long to hide the overlays
@@ -21,46 +28,93 @@ const NO_ZOOM = { s: 1, x: 0, y: 0 }
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
 
+// A photographer and their albums (with photos), shaped for the viewer.
+async function loadGallery(personId) {
+  const provider = await getProvider(personId)
+  if (!provider) return null
+  const rows = await listAlbums(provider.id)
+  return { provider, albums: rows.filter((a) => a.photos?.length).map(toViewerAlbum) }
+}
+
 // Full-screen viewer for a photographer's portfolio, one album (shoot) at a time.
 // Swipe left/right through an album's photos, up/down between albums. To close: the ✕,
 // swipe right on an album's first photo, or pull down on the first album.
 // Pinch / double-tap / ctrl+wheel to zoom; press and hold to see just the photo.
-// Route for a (mock) photographer's portfolio: /gallery/:personId?post=<album id>
+// Route: /gallery/:personId?post=<album id>&photo=<photo id>. personId: provider id, owner's profile id or slug.
 export default function Gallery() {
   const { personId } = useParams()
   const [params] = useSearchParams()
-  const person = getPerson(personId)
+  const { user } = useAuth()
+  const { data, loading, error, reload } = useQuery(() => loadGallery(personId), [personId])
+
+  if (loading) return <div className="reel reel-state"><Loading /></div>
+  if (error) return <div className="reel reel-state"><GalleryClose /><ErrorState error={error} onRetry={reload} /></div>
+  if (!data || !data.albums.length) {
+    return (
+      <div className="reel reel-state">
+        <GalleryClose to={data ? `/u/${data.provider.id}` : '/'} />
+        <EmptyState
+          icon={ImageOff}
+          title={data ? 'No albums yet' : 'Portfolio not found'}
+          text={data ? `${data.provider.name} hasn’t posted any work yet.` : 'This photographer doesn’t exist or is no longer listed.'}
+          action={<Link to={data ? `/u/${data.provider.id}` : '/'} className="btn sm">{data ? 'View profile' : 'Go home'}</Link>}
+        />
+      </div>
+    )
+  }
+
+  const { provider: p, albums } = data
+  const isMine = !!user && p.profileId === user.id
+  const from = startingPrice(p)
   return (
     <AlbumViewer
-      albums={galleryFor(personId)}
-      owner={{ name: person.name, avatar: person.avatar, idVerified: person.idVerified, pro: person.pro, username: person.username, profileId: personId }}
-      book={person.packages ? {
-        to: `/book/${personId}`,
-        label: `Book ${person.name.split(' ')[0]}`,
-        line: `from ${money(startingPrice(person))} · ★ ${person.rating}`,
-      } : null}
+      albums={albums}
+      owner={{ name: p.name, avatar: p.avatar, idVerified: p.idVerified, pro: p.pro, username: p.username, profileId: p.id, providerId: p.id, blockProfileId: p.profileId }}
+      book={isMine ? null : {
+        to: `/book/${p.id}`,
+        label: `Book ${p.name.split(' ')[0]}`,
+        line: `${from != null ? `from ${money(from)}` : 'Custom quote'} · ${p.rating != null ? `★ ${p.rating.toFixed(1)}` : 'New'}`,
+      }}
       startPost={params.get('post')}
       startPhoto={params.get('photo')}
-      closeFallback={`/u/${personId}`}
+      closeFallback={`/u/${p.id}`}
     />
   )
 }
 
-// The full-screen viewer. albums: [{ id, title, location, date, type, caption, genre, tags, autoTags,
-// realPhoto, photos: [{ seed, src?, exif }] }]. Photos with a src (real uploads) use it directly.
-// owner: { name, avatar?, username, idVerified?, pro?, profileId? | profileTo? }. book: { to, label, line } or null.
+function GalleryClose({ to = '/' }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  return (
+    <header className="reel-top">
+      <button className="icon-btn" onClick={() => (location.key === 'default' ? navigate(to, { replace: true }) : navigate(-1))} aria-label="Close"><X size={24} /></button>
+    </header>
+  )
+}
+
+// The full-screen viewer. albums: from toViewerAlbum: [{ id, providerId, title, location, date, type, caption, genre,
+// tags?, autoTags, realPhoto?, photos: [{ id, src, beforeSrc?, exif, autoTags }] }].
+// owner: { name, avatar?, username, idVerified?, pro?, profileId? | profileTo?, providerId?, blockProfileId? }.
+// book: { to, label, line } or null.
 export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeFallback }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { saved } = useStore()
+  const { saved, liked, toggleLike } = useStore()
 
   // Open at a given album (or photo, for older links).
   const [index, setIndex] = useState(() => {
     const byPost = albums.findIndex((a) => a.id === startPost)
-    const byPhoto = albums.findIndex((a) => a.photos.some((p) => p.seed === startPhoto))
+    const byPhoto = albums.findIndex((a) => a.photos.some((p) => photoKey(p) === startPhoto))
     return Math.max(0, byPost >= 0 ? byPost : byPhoto)
   })
-  const [photoOf, setPhotoOf] = useState({}) // album id → photo index, so each album remembers its place
+  const [photoOf, setPhotoOf] = useState(() => {
+    // album id → photo index, so each album remembers its place (and ?photo= opens at that photo)
+    for (const a of albums) {
+      const j = a.photos.findIndex((p) => photoKey(p) === startPhoto)
+      if (j > 0) return { [a.id]: j }
+    }
+    return {}
+  })
   const [drag, setDrag] = useState({ x: 0, y: 0, exit: 0 })
   const [dragging, setDragging] = useState(false)
   const [zoom, setZoom] = useState(NO_ZOOM)
@@ -70,6 +124,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
   const [info, setInfo] = useState(false)
   const [saveFor, setSaveFor] = useState(null)
   const [reporting, setReporting] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const [hintSeen, setHintSeen] = useState(false)
 
   const viewerRef = useRef()
@@ -151,7 +206,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
   // ---- keyboard and wheel ----
   useEffect(() => {
     const onKey = (e) => {
-      if (info || saveFor || reporting) return
+      if (info || saveFor || reporting || sharing) return
       if (!zoomed) {
         if (e.key === 'ArrowDown') goAlbum(index + 1)
         if (e.key === 'ArrowUp') goAlbum(index - 1)
@@ -373,7 +428,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
                     }}
                   >
                     {a.photos.map((p, j) => (
-                      <div key={p.seed} className="reel-photo">
+                      <div key={photoKey(p)} className="reel-photo">
                         {Math.abs(j - at) <= 1 && (
                           <div
                             className={`reel-zoom ${current && j === at ? 'current' : ''}`}
@@ -383,9 +438,9 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
                             } : undefined}
                           >
                             {a.type === 'beforeafter' ? (
-                              <div className="reel-ba"><BeforeAfter seed={p.seed} src={p.src} beforeSrc={p.beforeSrc} /></div>
+                              <div className="reel-ba"><BeforeAfter src={p.src} beforeSrc={p.beforeSrc} /></div>
                             ) : (
-                              <img src={p.src || img(p.seed, 1200, 1500)} alt="" draggable={false} />
+                              <img src={p.src} alt="" draggable={false} />
                             )}
                           </div>
                         )}
@@ -411,19 +466,29 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
         <div className="reel-bottom reel-ui reel-hide-zoomed" ref={panelRef}>
           {album.photos.length > 1 && (
             <div className="reel-dots">
-              {album.photos.map((p, j) => <span key={p.seed} className={j === photoIndex ? 'on' : ''} />)}
+              {album.photos.map((p, j) => <span key={photoKey(p)} className={j === photoIndex ? 'on' : ''} />)}
             </div>
           )}
           <div className="reel-title-row">
             <div className="grow">
               <div className="reel-title">{album.title}</div>
               <div className="reel-meta">
-                Album {index + 1} of {albums.length}{album.location && ` · ${album.location}`} · {album.date}
+                Album {index + 1} of {albums.length}{album.location && ` · ${album.location}`}{album.date && ` · ${album.date}`}
               </div>
             </div>
             <div className="reel-icons">
-              <button className="icon-btn" onClick={() => setSaveFor(photo.seed)} aria-label="Save">
-                <Bookmark size={22} fill={saved.has(photo.seed) ? 'currentColor' : 'none'} />
+              <button
+                className="icon-btn"
+                onClick={() => toggleLike({ id: photoKey(photo), albumId: album.id, providerId: album.providerId ?? owner.providerId })}
+                aria-label={liked.has(photoKey(photo)) ? 'Unlike' : 'Like'}
+              >
+                <Heart size={22} fill={liked.has(photoKey(photo)) ? 'currentColor' : 'none'} />
+              </button>
+              <button className="icon-btn" onClick={() => setSaveFor(photoKey(photo))} aria-label="Save">
+                <Bookmark size={22} fill={saved.has(photoKey(photo)) ? 'currentColor' : 'none'} />
+              </button>
+              <button className="icon-btn" onClick={() => setSharing(true)} aria-label="Share">
+                <Send size={21} />
               </button>
               <button className="icon-btn" onClick={() => setInfo(true)} aria-label="Album details">
                 <Info size={22} />
@@ -444,7 +509,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
               ? <ProfileLink id={owner.profileId} className="reel-who">{who}</ProfileLink>
               : <Link to={owner.profileTo || '/me'} className="reel-who profile-link">{who}</Link>
           })()}
-          <div className="reel-exif">{shortExif(photo.exif)}</div>
+          {shortExif(photo.exif) && <div className="reel-exif">{shortExif(photo.exif)}</div>}
           {book && (
             <div className="reel-book">
               <span className="small">{book.line}</span>
@@ -465,35 +530,66 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
       <Sheet open={info} onClose={() => setInfo(false)} title={album.title}>
         {album.caption && <p className="small">{album.caption}</p>}
         <div className="gallery-meta">
-          {album.location && <span><MapPin size={13} /> {album.location} · {album.date}</span>}
+          {(album.location || album.date) && <span><MapPin size={13} /> {[album.location, album.date].filter(Boolean).join(' · ')}</span>}
           {album.realPhoto && <span className="ok"><Camera size={13} /> Real Photo · verified with the RAW file</span>}
         </div>
-        <h4 className="section-title">Gear & settings{album.photos.length > 1 ? ` · photo ${photoIndex + 1}` : ''}</h4>
-        <ExifPanel exif={photo.exif} />
-        <h4 className="section-title">Tags</h4>
-        <div className="chips">
-          {album.genre && <span className="chip solid">{album.genre}</span>}
-          {album.tags.map((t) => <span key={t} className="chip">#{t}</span>)}
-          {album.autoTags.map((t) => (
-            <span key={t} className="chip auto"><Sparkles size={11} /> {t}</span>
-          ))}
-        </div>
+        {hasExif(photo.exif) && (
+          <>
+            <h4 className="section-title">Gear & settings{album.photos.length > 1 ? ` · photo ${photoIndex + 1}` : ''}</h4>
+            <ExifPanel exif={photo.exif} />
+          </>
+        )}
+        {(album.genre || album.tags?.length > 0 || album.autoTags?.length > 0) && (
+          <>
+            <h4 className="section-title">Tags</h4>
+            <div className="chips">
+              {album.genre && <span className="chip solid">{album.genre}</span>}
+              {(album.tags || []).map((t) => <span key={t} className="chip">#{t}</span>)}
+              {(album.autoTags || []).map((t) => (
+                <span key={t} className="chip auto" title="Suggested automatically from the photos"><Sparkles size={11} /> {t}</span>
+              ))}
+            </div>
+          </>
+        )}
         <button className="list-row danger mt" onClick={() => { setInfo(false); setReporting(true) }}>
           <span className="round-icon"><Flag size={16} /></span>
           <div className="grow small">Report this album</div>
         </button>
       </Sheet>
 
-      <SaveSheet open={!!saveFor} onClose={() => setSaveFor(null)} postId={saveFor} />
-      <ModerationSheet open={reporting} onClose={() => setReporting(false)} what="album" username={owner.username} />
+      <SaveSheet open={!!saveFor} onClose={() => setSaveFor(null)} photoId={saveFor} />
+      <ShareSheet
+        open={sharing}
+        onClose={() => setSharing(false)}
+        link={`/gallery/${album.providerId ?? owner.providerId}?post=${album.id}`}
+        payload={{ sharedAlbumId: album.id }}
+      />
+      <ModerationSheet
+        open={reporting}
+        onClose={() => setReporting(false)}
+        what="album"
+        username={owner.blockProfileId ? owner.username : undefined}
+        target={{ type: 'album', id: album.id }}
+        blockProfileId={owner.blockProfileId}
+      />
     </div>
   )
 }
 
-// Old /post/:id links (e.g. posts shared in chat) open the viewer at that album.
+// /post/:id links (e.g. posts shared in chat): id is an album id. Opens the viewer at that album.
 export function PostRedirect() {
   const { id } = useParams()
-  const post = posts.find((p) => p.id === id)
-  if (!post) return <Navigate to="/" replace />
-  return <Navigate to={`/gallery/${post.authorId}?post=${post.id}`} replace />
+  const { data: album, loading, error, reload } = useQuery(() => getAlbum(id).catch((e) => (e?.code === '22P02' ? null : Promise.reject(e))), [id])
+  if (loading) return <div className="reel reel-state"><Loading /></div>
+  if (error) return <div className="reel reel-state"><GalleryClose /><ErrorState error={error} onRetry={reload} /></div>
+  if (!album) {
+    return (
+      <div className="reel reel-state">
+        <GalleryClose />
+        <EmptyState icon={ImageOff} title="Post not found" text="It may have been removed by the photographer."
+          action={<Link to="/" className="btn sm">Go home</Link>} />
+      </div>
+    )
+  }
+  return <Navigate to={`/gallery/${album.provider_id}?post=${album.id}`} replace />
 }

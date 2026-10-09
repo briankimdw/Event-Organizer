@@ -1,0 +1,99 @@
+// Shared formatting + small lookups used across screens (no data fetching here).
+import { supabase } from './supabase.js'
+
+// ---- money ------------------------------------------------------------------
+export const dollars = (cents) => (cents == null ? null : cents / 100)
+// "$1,200", or "$112.50" when there are cents.
+export const money = (n) => {
+  if (n == null) return 'Quote'
+  const cents = Math.round(Number(n) * 100) % 100 !== 0
+  return `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: 2 })}`
+}
+export const priceLabel = (pkg) =>
+  pkg.priceType === 'quote' ? 'Custom quote' : pkg.priceType === 'hourly' ? `${money(pkg.price)}/hr` : money(pkg.price)
+export const startingPrice = (provider) => {
+  const priced = (provider.packages || []).filter((x) => x.price != null)
+  return priced.length ? Math.min(...priced.map((x) => x.price)) : provider.startingPrice ?? null
+}
+
+// ---- images -----------------------------------------------------------------
+export const publicUrl = (bucket, path) => supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
+export const photoUrl = (path) => (!path ? null : /^https?:/.test(path) ? path : publicUrl('portfolio', path))
+
+// Avatar for a profile: an uploaded file, an external URL, or a generated initials badge.
+export const avatarUrl = (path, name = '') => {
+  if (path) return /^https?:/.test(path) ? path : publicUrl('avatars', path)
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
+  let h = 0
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="hsl(${h},35%,42%)"/><text x="50%" y="50%" dy=".35em" text-anchor="middle" font-family="system-ui,sans-serif" font-size="38" fill="#fff">${initials}</text></svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
+// ---- bookings ---------------------------------------------------------------
+export const bookingSteps = ['requested', 'confirmed', 'in_progress', 'delivered', 'completed']
+
+export const statusLabels = {
+  requested: 'Requested',
+  countered: 'Counter offer',
+  accepted: 'Accepted · pay deposit',
+  confirmed: 'Confirmed',
+  in_progress: 'In progress',
+  delivered: 'Delivered',
+  completed: 'Completed',
+  declined: 'Declined',
+  expired: 'Expired',
+  cancelled_by_client: 'Cancelled by client',
+  cancelled_by_provider: 'Cancelled by provider',
+  disputed: 'Disputed',
+  refunded: 'Refunded',
+}
+
+// Statuses that hold the photographer's time (and can still change).
+export const ACTIVE_STATUSES = ['requested', 'countered', 'accepted', 'confirmed', 'in_progress']
+// Statuses where the deposit has been paid.
+export const PAID_STATUSES = ['confirmed', 'in_progress', 'delivered', 'completed', 'disputed']
+
+// Cancellation policy rules ([{ min_days_before, refund_pct }], any order) as a
+// display table: { label, tiers: [{ when, refund }], rules }.
+const POLICY_NAMES = { 7: 'Flexible', 30: 'Moderate', 90: 'Strict' }
+export function policyFromRules(rules, name) {
+  const sorted = [...(rules || [])].sort((a, b) => b.min_days_before - a.min_days_before)
+  const tiers = sorted.map((r, i) => {
+    const prev = sorted[i - 1]?.min_days_before
+    const when =
+      r.min_days_before === 0
+        ? prev != null ? `Under ${prev} days` : 'Any time'
+        : prev != null ? `${r.min_days_before}–${prev} days before` : `${r.min_days_before}+ days before`
+    return { when, refund: r.refund_pct }
+  })
+  return { label: name || POLICY_NAMES[sorted[0]?.min_days_before] || 'Custom', tiers, rules: sorted }
+}
+
+// ---- packages ---------------------------------------------------------------
+// A packages row (or a booking's package_snapshot) in the shape screens use.
+export function toPackage(p) {
+  if (!p) return null
+  const a = p.attributes || {}
+  return {
+    id: p.id,
+    providerId: p.provider_id,
+    categoryId: p.category_id,
+    category: p.category?.name ?? null,
+    name: p.name,
+    description: p.description ?? null,
+    priceType: p.price_type,
+    price: dollars(p.price_cents),
+    hours: p.duration_minutes ? p.duration_minutes / 60 : null,
+    editedPhotos: a.edited_photos ?? null,
+    editingLevel: a.editing_level ?? null,
+    turnaroundDays: a.turnaround_days ?? null,
+    deliverables: a.deliverables || [],
+    secondShooter: !!a.second_shooter_included,
+    depositPct: p.deposit_pct,
+    isActive: p.is_active !== false,
+  }
+}
+
+// Camera settings as one line: "Sony A7 IV · 85mm · f/1.8 · 1/500s · ISO 100"
+export const exifLine = (e = {}) => [e.body, e.focal, e.aperture, e.shutter, e.iso && `ISO ${e.iso}`].filter(Boolean).join(' · ')

@@ -1,15 +1,18 @@
 import { useState } from 'react'
-import { img } from '../data/mock.js'
 import { RealPhoto } from './Badges.jsx'
 
-export function Carousel({ seeds, aspect = '4 / 5' }) {
+const srcOf = (p) => (typeof p === 'string' ? p : p?.src)
+
+// photos: image URLs (or { src } objects).
+export function Carousel({ photos = [], aspect = '4 / 5' }) {
+  const seeds = photos.map(srcOf).filter(Boolean)
   const [index, setIndex] = useState(0)
   const onScroll = (e) => setIndex(Math.round(e.target.scrollLeft / e.target.clientWidth))
   return (
     <div className="carousel" style={{ aspectRatio: aspect }}>
       <div className="carousel-track" onScroll={onScroll}>
         {seeds.map((s) => (
-          <img key={s} src={img(s)} alt="" loading="lazy" draggable={false} />
+          <img key={s} src={s} alt="" loading="lazy" draggable={false} />
         ))}
       </div>
       {seeds.length > 1 && (
@@ -28,15 +31,15 @@ export function Carousel({ seeds, aspect = '4 / 5' }) {
   )
 }
 
-// Paired before/after viewer. The "before" is the same frame with an unedited look.
-// Real uploads pass src (after) + beforeSrc; mock photos fake the "before" with a filter.
-export function BeforeAfter({ seed, src, beforeSrc, aspect = '4 / 5' }) {
+// Paired before/after viewer: src is the edited photo, beforeSrc the original.
+// Without a beforeSrc the "before" side fakes an unedited look with a CSS filter.
+export function BeforeAfter({ src, beforeSrc, aspect = '4 / 5' }) {
   const [pos, setPos] = useState(50)
   return (
     <div className="before-after" style={{ aspectRatio: aspect }}>
-      <img src={src || img(seed)} alt="After" draggable={false} />
+      <img src={src} alt="After" draggable={false} />
       <div className={`ba-before ${beforeSrc ? 'real' : ''}`} style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
-        <img src={beforeSrc || img(seed)} alt="Before" draggable={false} />
+        <img src={beforeSrc || src} alt="Before" draggable={false} />
       </div>
       <div className="ba-divider" style={{ left: `${pos}%` }}>
         <span className="ba-knob">⇆</span>
@@ -56,10 +59,11 @@ export function BeforeAfter({ seed, src, beforeSrc, aspect = '4 / 5' }) {
   )
 }
 
+// An album (from toViewerAlbum) as a carousel or before/after slider.
 export function PostMedia({ post }) {
   return (
     <div className="post-media">
-      {post.type === 'beforeafter' ? <BeforeAfter seed={post.photos[0]} /> : <Carousel seeds={post.photos} />}
+      {post.type === 'beforeafter' ? <BeforeAfter src={post.photos[0]?.src} beforeSrc={post.photos[0]?.beforeSrc} /> : <Carousel photos={post.photos} />}
       {post.realPhoto && <RealPhoto overlay />}
     </div>
   )

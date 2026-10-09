@@ -1,19 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Clock, Copy, Images, Plus, Star } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, Copy, EyeOff, Images, Inbox, Package, Plus, Star } from 'lucide-react'
 import Segmented from '../components/Segmented.jsx'
 import Sheet from '../components/Sheet.jsx'
+import ProfileLink from '../components/ProfileLink.jsx'
 import { VerifiedClient } from '../components/Badges.jsx'
 import { money, priceLabel } from '../components/Booking.jsx'
+import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import { useStore } from '../store.jsx'
-import { useAuth } from '../auth.jsx'
-import { getMyProvider, listMyAlbums, publicUrl } from '../api/portfolio.js'
-import { myCalendar, myPackages } from '../data/mock.js'
+import useQuery from '../lib/useQuery.js'
+import { fmtBooking, today, toKey } from '../lib/dates.js'
+import { listMyAlbums, publicUrl } from '../api/portfolio.js'
+import { bookingError, respondToBooking } from '../api/bookings.js'
+import { getCategories } from '../api/catalog.js'
+import {
+  addBlackout, createPackage, listBlackouts, listMyPackages, listWorkingHours, removeBlackoutDay, setPackageActive, updatePackage,
+} from '../api/provider.js'
+
+// Booking statuses that fill a day on the calendar, and ones that hold it while pending.
+export const BOOKED = ['confirmed', 'in_progress', 'delivered', 'completed']
+const HELD = ['requested', 'countered', 'accepted']
 
 // Provider work tabs, shown inside the profile page in Photographer mode.
-export default function Dashboard({ tab, onTabChange }) {
-  const { requests } = useStore()
-  const pending = requests.filter((r) => r.status === 'requested').length
+// provider: getProvider() result (may still be loading); bookings: useQuery result of listProviderBookings.
+export default function Dashboard({ tab, onTabChange, provider, bookings, onProviderChanged }) {
+  const pending = (bookings?.data || []).filter((r) => r.status === 'requested').length
 
   return (
     <div className="pad-x">
@@ -27,44 +38,72 @@ export default function Dashboard({ tab, onTabChange }) {
         value={tab}
         onChange={onTabChange}
       />
-      {tab === 'requests' && <Requests />}
-      {tab === 'calendar' && <ProviderCalendar />}
-      {tab === 'packages' && <Packages />}
+      {tab === 'requests' && <Requests bookings={bookings} />}
+      {tab === 'calendar' && <ProviderCalendar bookings={bookings} provider={provider} />}
+      {tab === 'packages' && <Packages provider={provider} onChanged={onProviderChanged} />}
       {tab === 'portfolio' && <Portfolio />}
     </div>
   )
 }
 
-function Requests() {
-  const { requests, updateRequest, identityStatus, toast } = useStore()
+function Requests({ bookings }) {
+  const { toast } = useStore()
   const [counterFor, setCounterFor] = useState(null)
   const [counterPrice, setCounterPrice] = useState('')
   const [counterNote, setCounterNote] = useState('')
+  const [busy, setBusy] = useState(null)
 
-  const accept = (r) => {
-    if (identityStatus !== 'verified') return toast('Verify your identity first to accept paid bookings')
-    updateRequest(r.id, { status: 'accepted' })
-    toast(`Accepted. ${r.client.name.split(' ')[0]} will be asked to pay the deposit.`)
+  if (bookings.loading && !bookings.data) return <Loading inline />
+  if (bookings.error) return <ErrorState error={bookings.error} onRetry={bookings.reload} />
+
+  // New requests first, then ones waiting on the client.
+  const order = { requested: 0, countered: 1, accepted: 2 }
+  const list = (bookings.data || [])
+    .filter((r) => r.status in order)
+    .sort((a, b) => order[a.status] - order[b.status] || a.start - b.start)
+
+  const respond = async (r, action, extra) => {
+    setBusy(r.id)
+    try {
+      await respondToBooking(r.id, action, extra)
+      const first = r.client.name?.split(' ')[0] || 'The client'
+      toast(
+        action === 'accept' ? `Accepted. ${first} will be asked to pay the deposit.` : action === 'counter' ? 'Counter offer sent' : 'Request declined',
+      )
+      bookings.reload()
+      return true
+    } catch (e) {
+      toast(bookingError(e))
+      return false
+    } finally {
+      setBusy(null)
+    }
   }
 
-  const sendCounter = () => {
-    updateRequest(counterFor.id, { status: 'countered', counterTotal: Number(counterPrice) })
-    toast('Counter offer sent')
-    setCounterFor(null)
+  const sendCounter = async () => {
+    if (await respond(counterFor, 'counter', { total: Number(counterPrice), message: counterNote.trim() || null })) setCounterFor(null)
+  }
+
+  if (!list.length) {
+    return (
+      <div className="mt-sm">
+        <EmptyState compact icon={Inbox} title="No requests right now" text="New booking requests from clients show up here." />
+      </div>
+    )
   }
 
   return (
     <div className="mt-sm">
-      {requests.map((r) => (
+      {list.map((r) => (
         <div key={r.id} className="request-card">
           <div className="row gap-xs">
-            <img className="avatar" src={r.client.avatar} alt="" />
+            <ProfileLink id={r.client.id}><img className="avatar" src={r.client.avatar} alt="" /></ProfileLink>
             <div className="grow">
-              <b>{r.client.name}</b>
+              <ProfileLink id={r.client.id}><b>{r.client.name}</b></ProfileLink>
               <div className="row gap-xs tiny">
                 {r.client.rating ? (
                   <>
-                    <Star size={11} className="star-on" fill="currentColor" /> {r.client.rating} as a client ({r.client.reviews})
+                    <Star size={11} className="star-on" fill="currentColor" /> {r.client.rating.toFixed(1)} as a client ({r.client.reviews})
                   </>
                 ) : (
                   <span className="muted">New client, no ratings yet</span>
@@ -74,26 +113,31 @@ function Requests() {
             </div>
             <b>{money(r.total)}</b>
           </div>
-          <div className="small mt-sm">
+          <Link to={`/bookings/${r.id}`} className="small mt-sm req-pkg">
             <b>{r.packageName}</b> · {r.date} · {r.time}
-          </div>
-          <div className="muted small">{r.location}</div>
+          </Link>
+          {r.location && <div className="muted small">{r.location}</div>}
           {r.note && <div className="quote small">“{r.note}”</div>}
 
           {r.status === 'requested' ? (
             <>
-              <div className="tiny warn inline-icon"><Clock size={12} /> Expires in {r.expiresIn}</div>
+              {r.expiresIn && <div className="tiny warn inline-icon"><Clock size={12} /> Expires in {r.expiresIn}</div>}
               <div className="row gap-xs mt-sm">
-                <button className="btn sm grow" onClick={() => accept(r)}>Accept</button>
-                <button className="btn ghost sm grow" onClick={() => { setCounterFor(r); setCounterPrice(String(r.total)); setCounterNote('') }}>Counter</button>
-                <button className="btn ghost sm grow danger" onClick={() => updateRequest(r.id, { status: 'declined' })}>Decline</button>
+                <button className="btn sm grow" disabled={busy === r.id} onClick={() => respond(r, 'accept')}>Accept</button>
+                <button
+                  className="btn ghost sm grow"
+                  disabled={busy === r.id}
+                  onClick={() => { setCounterFor(r); setCounterPrice(r.total == null ? '' : String(r.total)); setCounterNote('') }}
+                >
+                  Counter
+                </button>
+                <button className="btn ghost sm grow danger" disabled={busy === r.id} onClick={() => respond(r, 'decline')}>Decline</button>
               </div>
             </>
           ) : (
             <div className="small mt-sm">
               {r.status === 'accepted' && '✓ Accepted · waiting for deposit'}
-              {r.status === 'countered' && `Counter sent: ${money(r.counterTotal)}`}
-              {r.status === 'declined' && 'Declined'}
+              {r.status === 'countered' && `Counter sent: ${money(r.counterTotal)} · waiting for ${r.client.name?.split(' ')[0] || 'the client'}`}
             </div>
           )}
         </div>
@@ -106,14 +150,16 @@ function Requests() {
             <label className="field mt">
               <span>Your price</span>
               <div className="money-input">
-                $<input type="number" value={counterPrice} onChange={(e) => setCounterPrice(e.target.value)} />
+                $<input type="number" min="0" value={counterPrice} onChange={(e) => setCounterPrice(e.target.value)} />
               </div>
             </label>
             <label className="field mt-sm">
               <span>Message</span>
               <textarea className="input" rows={3} placeholder="Explain the change" value={counterNote} onChange={(e) => setCounterNote(e.target.value)} />
             </label>
-            <button className="btn block mt" disabled={!counterPrice} onClick={sendCounter}>Send counter</button>
+            <button className="btn block mt" disabled={!counterPrice || Number(counterPrice) < 0 || busy === counterFor.id} onClick={sendCounter}>
+              {busy === counterFor.id ? 'Sending…' : 'Send counter'}
+            </button>
           </>
         )}
       </Sheet>
@@ -127,37 +173,117 @@ const LEGEND = [
   ['blackout', 'Blocked off'],
 ]
 
-function ProviderCalendar() {
-  const [days, setDays] = useState(myCalendar)
-  const firstWeekday = new Date(2026, 9, 1).getDay()
-  const cells = [...Array(firstWeekday).fill(null), ...Array.from({ length: 31 }, (_, i) => i + 1)]
-
-  const toggleBlackout = (d) => {
-    if (days[d] === 'booked' || days[d] === 'held') return
-    const next = { ...days }
-    next[d] === 'blackout' ? delete next[d] : (next[d] = 'blackout')
-    setDays(next)
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] // Monday first
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const fmtHour = (hhmm) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 || 12
+  return m ? `${h12}:${String(m).padStart(2, '0')} ${suffix}` : `${h12} ${suffix}`
+}
+// [{weekday, start, end}] -> "Tue–Sun, 8 AM – 8 PM" (one line per distinct set of hours).
+function hoursSummary(rules) {
+  const groups = new Map()
+  for (const r of rules) {
+    const k = `${r.start}-${r.end}`
+    if (!groups.has(k)) groups.set(k, { start: r.start, end: r.end, days: new Set() })
+    groups.get(k).days.add(r.weekday)
   }
+  return [...groups.values()].map((g) => {
+    const idx = WEEK_ORDER.map((d) => g.days.has(d))
+    const runs = []
+    for (let i = 0; i < 7; i++) {
+      if (!idx[i]) continue
+      let j = i
+      while (j + 1 < 7 && idx[j + 1]) j++
+      runs.push(j - i >= 2 ? `${DAY_NAMES[WEEK_ORDER[i]]}–${DAY_NAMES[WEEK_ORDER[j]]}` : WEEK_ORDER.slice(i, j + 1).map((d) => DAY_NAMES[d]).join(', '))
+      i = j
+    }
+    return `${runs.join(', ')}, ${fmtHour(g.start)} – ${fmtHour(g.end)}`
+  })
+}
+
+function ProviderCalendar({ bookings, provider }) {
+  const { myProvider, toast } = useStore()
+  const providerId = myProvider?.id
+  const tz = myProvider?.timezone || provider?.timezone || 'America/Los_Angeles'
+  const [month, setMonth] = useState(() => {
+    const t = today()
+    return new Date(t.getFullYear(), t.getMonth(), 1)
+  })
+  const [busyDay, setBusyDay] = useState(null)
+  const blackouts = useQuery(providerId ? () => listBlackouts(providerId, tz) : null, [providerId, tz])
+  const hours = useQuery(providerId ? () => listWorkingHours(providerId) : null, [providerId])
+
+  // 'YYYY-MM-DD' -> 'booked' | 'held' | 'blackout'
+  const state = {}
+  const blackoutByDay = {}
+  for (const b of blackouts.data || []) for (const d of b.days) (state[d] = 'blackout'), (blackoutByDay[d] = b)
+  for (const b of bookings?.data || []) {
+    if (BOOKED.includes(b.status)) state[b.dateKey] = 'booked'
+    else if (HELD.includes(b.status) && state[b.dateKey] !== 'booked') state[b.dateKey] = 'held'
+  }
+
+  const year = month.getFullYear()
+  const m = month.getMonth()
+  const daysInMonth = new Date(year, m + 1, 0).getDate()
+  const cells = [...Array(month.getDay()).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => new Date(year, m, i + 1))]
+  const todayKey = toKey(today())
+
+  const toggleBlackout = async (day) => {
+    const key = toKey(day)
+    if (!providerId || busyDay || key < todayKey) return
+    if (state[key] === 'booked' || state[key] === 'held') return toast('That day has a booking. Manage it from the request.')
+    setBusyDay(key)
+    try {
+      if (state[key] === 'blackout') {
+        await removeBlackoutDay(providerId, blackoutByDay[key], key, tz)
+        toast(`${fmtBooking(day)} is open again`)
+      } else {
+        await addBlackout(providerId, key, tz)
+        toast(`Blocked off ${fmtBooking(day)}`)
+      }
+      blackouts.reload()
+    } catch (e) {
+      console.warn(e)
+      toast('Couldn’t update your calendar: ' + (e.message || 'try again'))
+    } finally {
+      setBusyDay(null)
+    }
+  }
+
+  const shift = (n) => setMonth(new Date(year, m + n, 1))
+  const hourLines = hoursSummary(hours.data || [])
+  const buffer = myProvider?.buffer_minutes
 
   return (
     <div className="mt-sm">
       <div className="row between">
-        <b>October 2026</b>
+        <div className="row gap-xs">
+          <button className="icon-btn" aria-label="Previous month" onClick={() => shift(-1)}><ChevronLeft size={18} /></button>
+          <b>{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</b>
+          <button className="icon-btn" aria-label="Next month" onClick={() => shift(1)}><ChevronRight size={18} /></button>
+        </div>
         <span className="muted tiny">Tap a free day to block it off</span>
       </div>
+      {blackouts.error && <div className="form-error mt-sm">Couldn’t load blocked-off days: {blackouts.error.message}</div>}
       <div className="cal">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
           <div key={i} className="cal-head">{d}</div>
         ))}
-        {cells.map((d, i) =>
-          d ? (
-            <button key={i} className={`cal-day ${days[d] || ''} ${d === 7 ? 'today' : ''}`} onClick={() => toggleBlackout(d)}>
-              {d}
+        {cells.map((d, i) => {
+          if (!d) return <div key={i} />
+          const key = toKey(d)
+          return (
+            <button
+              key={i}
+              className={`cal-day ${state[key] || ''} ${key === todayKey ? 'today' : ''} ${key < todayKey ? 'past' : ''} ${busyDay === key ? 'busy' : ''}`}
+              onClick={() => toggleBlackout(d)}
+            >
+              {d.getDate()}
             </button>
-          ) : (
-            <div key={i} />
-          ),
-        )}
+          )
+        })}
       </div>
       <div className="legend">
         {LEGEND.map(([k, label]) => (
@@ -165,74 +291,169 @@ function ProviderCalendar() {
         ))}
       </div>
       <div className="info-card mt">
-        <div className="row between small"><span>Working hours</span><b>Tue–Sun, 8 AM – 8 PM</b></div>
-        <div className="row between small mt-xs"><span>Buffer between bookings</span><b>1 hour</b></div>
-        <div className="row between small mt-xs"><span>Service area</span><b>LA + 40 km</b></div>
+        <div className="row between small hours-row">
+          <span>Working hours</span>
+          <b className="right-text">
+            {hours.loading ? '…' : hourLines.length ? hourLines.map((l) => <div key={l}>{l}</div>) : 'Any day (not set)'}
+          </b>
+        </div>
+        {buffer != null && <div className="row between small mt-xs"><span>Buffer between bookings</span><b>{buffer ? `${buffer} min` : 'None'}</b></div>}
+        {provider?.serviceArea && <div className="row between small mt-xs"><span>Service area</span><b>{provider.serviceArea}</b></div>}
       </div>
     </div>
   )
 }
 
-function Packages() {
-  const { toast } = useStore()
-  const [list, setList] = useState(myPackages)
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', priceType: 'fixed', price: '', hours: '', editedPhotos: '', editingLevel: 'Natural', turnaroundDays: '', depositPct: 50 })
+const EMPTY_FORM = {
+  id: null, name: '', categoryId: '', priceType: 'fixed', price: '', hours: '', editedPhotos: '', editingLevel: '', turnaroundDays: '',
+  depositPct: 30, attributes: {}, isActive: true,
+}
+const EDITING_LEVELS = ['Natural color grade', 'Film-style grade', 'Full retouch']
+
+function Packages({ provider, onChanged }) {
+  const { myProvider, toast } = useStore()
+  const providerId = myProvider?.id
+  const packages = useQuery(providerId ? () => listMyPackages(providerId) : null, [providerId])
+  const { data: allCategories } = useQuery(getCategories, [])
+  const [form, setForm] = useState(null)
+  const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
-  const save = () => {
-    setList([...list, { ...form, id: `mp${Date.now()}`, price: form.priceType === 'quote' ? null : Number(form.price) }])
-    setOpen(false)
-    toast('Package published')
+  // Categories this photographer offers (fallback: all photography services).
+  const offered = (allCategories || []).filter((c) => provider?.categorySlugs?.includes(c.slug))
+  const categories = offered.length ? offered : allCategories || []
+
+  const openNew = () => setForm({ ...EMPTY_FORM, categoryId: categories[0]?.id || '' })
+  const openEdit = (p) =>
+    setForm({
+      id: p.id,
+      name: p.name,
+      categoryId: p.categoryId,
+      priceType: p.priceType,
+      price: p.price ?? '',
+      hours: p.hours ?? '',
+      editedPhotos: p.editedPhotos ?? '',
+      editingLevel: p.editingLevel ?? '',
+      turnaroundDays: p.turnaroundDays ?? '',
+      depositPct: p.depositPct ?? 30,
+      attributes: p.deliverables?.length ? { deliverables: p.deliverables } : {},
+      secondShooter: p.secondShooter || undefined,
+      isActive: p.isActive,
+    })
+
+  const done = (msg) => {
+    packages.reload()
+    onChanged?.()
+    setForm(null)
+    toast(msg)
   }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      if (form.id) {
+        await updatePackage(form.id, form)
+        done('Package updated')
+      } else {
+        await createPackage(providerId, { ...form, sortOrder: (packages.data?.length || 0) + 1 })
+        done('Package published')
+      }
+    } catch (e) {
+      console.warn(e)
+      toast('Couldn’t save: ' + (e.message || 'try again'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggleActive = async () => {
+    setSaving(true)
+    try {
+      await setPackageActive(form.id, !form.isActive)
+      done(form.isActive ? 'Package hidden from your profile' : 'Package is visible again')
+    } catch (e) {
+      console.warn(e)
+      toast('Couldn’t update: ' + (e.message || 'try again'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const priceOk = form && (form.priceType === 'quote' || (form.price !== '' && Number(form.price) >= 0))
+  const levels = form?.editingLevel && !EDITING_LEVELS.includes(form.editingLevel) ? [form.editingLevel, ...EDITING_LEVELS] : EDITING_LEVELS
 
   return (
     <div className="mt-sm">
-      {list.map((p) => (
-        <div key={p.id} className="package-card">
+      {packages.loading && !packages.data && <Loading inline />}
+      {packages.error && <ErrorState error={packages.error} onRetry={packages.reload} />}
+      {packages.data?.length === 0 && (
+        <EmptyState compact icon={Package} title="No packages yet" text="Add what you offer, with a price, so clients can request a booking." />
+      )}
+      {packages.data?.map((p) => (
+        <button key={p.id} className={`package-card pkg-edit ${p.isActive ? '' : 'inactive'}`} onClick={() => openEdit(p)}>
           <div className="row between">
             <h4>{p.name}</h4>
             <b>{priceLabel(p)}</b>
           </div>
           <div className="pkg-facts">
+            {p.category && <span>{p.category}</span>}
             {p.hours && <span><Clock size={13} /> {p.hours}h</span>}
-            {p.editedPhotos && <span><Images size={13} /> {p.editedPhotos} edited</span>}
+            {p.editedPhotos != null && <span><Images size={13} /> {p.editedPhotos} edited</span>}
+            {p.turnaroundDays != null && <span><CalendarDays size={13} /> {p.turnaroundDays} days</span>}
             <span>{p.depositPct}% deposit</span>
+            {!p.isActive && <span><EyeOff size={13} /> Hidden</span>}
           </div>
-        </div>
+        </button>
       ))}
-      <button className="btn ghost block" onClick={() => setOpen(true)}><Plus size={16} /> New package</button>
+      {providerId && <button className="btn ghost block mt-sm" onClick={openNew}><Plus size={16} /> New package</button>}
 
-      <Sheet open={open} onClose={() => setOpen(false)} title="New package">
-        <label className="field"><span>Name</span><input className="input" value={form.name} onChange={set('name')} placeholder="e.g. Engagement Session" /></label>
-        <label className="field mt-sm">
-          <span>Pricing</span>
-          <select className="input" value={form.priceType} onChange={set('priceType')}>
-            <option value="fixed">Fixed price</option>
-            <option value="hourly">Hourly</option>
-            <option value="quote">Quote-based</option>
-          </select>
-        </label>
-        {form.priceType !== 'quote' && (
-          <label className="field mt-sm"><span>Price {form.priceType === 'hourly' && '(per hour)'}</span><input className="input" type="number" value={form.price} onChange={set('price')} /></label>
+      <Sheet open={!!form} onClose={() => setForm(null)} title={form?.id ? 'Edit package' : 'New package'}>
+        {form && (
+          <>
+            <label className="field"><span>Name</span><input className="input" maxLength={80} value={form.name} onChange={set('name')} placeholder="e.g. Engagement Session" /></label>
+            <label className="field mt-sm">
+              <span>Service</span>
+              <select className="input" value={form.categoryId} onChange={set('categoryId')}>
+                {!form.categoryId && <option value="">Choose…</option>}
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label className="field mt-sm">
+              <span>Pricing</span>
+              <select className="input" value={form.priceType} onChange={set('priceType')}>
+                <option value="fixed">Fixed price</option>
+                <option value="hourly">Hourly</option>
+                <option value="quote">Quote-based</option>
+              </select>
+            </label>
+            {form.priceType !== 'quote' && (
+              <label className="field mt-sm"><span>Price {form.priceType === 'hourly' && '(per hour)'}</span><input className="input" type="number" min="0" value={form.price} onChange={set('price')} /></label>
+            )}
+            <div className="row gap-xs mt-sm">
+              <label className="field grow"><span>Hours included</span><input className="input" type="number" min="0" step="0.5" value={form.hours} onChange={set('hours')} /></label>
+              <label className="field grow"><span>Edited photos</span><input className="input" type="number" min="0" value={form.editedPhotos} onChange={set('editedPhotos')} /></label>
+            </div>
+            <div className="row gap-xs mt-sm">
+              <label className="field grow">
+                <span>Editing level</span>
+                <select className="input" value={form.editingLevel} onChange={set('editingLevel')}>
+                  <option value="">Not specified</option>
+                  {levels.map((l) => <option key={l}>{l}</option>)}
+                </select>
+              </label>
+              <label className="field grow"><span>Turnaround (days)</span><input className="input" type="number" min="0" value={form.turnaroundDays} onChange={set('turnaroundDays')} /></label>
+            </div>
+            <label className="field mt-sm"><span>Deposit: {form.depositPct}%</span><input type="range" min="0" max="100" step="5" value={form.depositPct} onChange={set('depositPct')} /></label>
+            <button className="btn block mt" disabled={saving || !form.name.trim() || !form.categoryId || !priceOk} onClick={save}>
+              {saving ? 'Saving…' : form.id ? 'Save changes' : 'Publish package'}
+            </button>
+            {form.id && (
+              <button className="btn ghost block mt-sm" disabled={saving} onClick={toggleActive}>
+                {form.isActive ? 'Hide from my profile' : 'Show on my profile'}
+              </button>
+            )}
+          </>
         )}
-        <div className="row gap-xs mt-sm">
-          <label className="field grow"><span>Hours included</span><input className="input" type="number" value={form.hours} onChange={set('hours')} /></label>
-          <label className="field grow"><span>Edited photos</span><input className="input" type="number" value={form.editedPhotos} onChange={set('editedPhotos')} /></label>
-        </div>
-        <div className="row gap-xs mt-sm">
-          <label className="field grow">
-            <span>Editing level</span>
-            <select className="input" value={form.editingLevel} onChange={set('editingLevel')}>
-              <option>Natural</option>
-              <option>Film-style</option>
-              <option>Full retouch</option>
-            </select>
-          </label>
-          <label className="field grow"><span>Turnaround (days)</span><input className="input" type="number" value={form.turnaroundDays} onChange={set('turnaroundDays')} /></label>
-        </div>
-        <label className="field mt-sm"><span>Deposit: {form.depositPct}%</span><input type="range" min="0" max="100" step="5" value={form.depositPct} onChange={set('depositPct')} /></label>
-        <button className="btn block mt" disabled={!form.name} onClick={save}>Publish package</button>
       </Sheet>
     </div>
   )
@@ -240,17 +461,9 @@ function Packages() {
 
 // Your real albums from Supabase. Tap one to open it in the viewer.
 function Portfolio() {
-  const { user } = useAuth()
-  const [albums, setAlbums] = useState(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!user) return
-    getMyProvider(user.id)
-      .then((p) => (p ? listMyAlbums(p.id) : []))
-      .then(setAlbums)
-      .catch((e) => setError(e.message))
-  }, [user])
+  const { myProvider } = useStore()
+  const providerId = myProvider?.id
+  const { data: albums, loading, error, reload } = useQuery(providerId ? () => listMyAlbums(providerId) : null, [providerId])
 
   const cover = (a) => {
     const photos = [...(a.photos || [])].sort((x, y) => x.position - y.position)
@@ -261,13 +474,13 @@ function Portfolio() {
   return (
     <div className="mt-sm">
       <div className="muted small">This is what clients see on your profile.</div>
-      {error && <div className="form-error mt-sm">{error}</div>}
+      {error && <ErrorState error={error} onRetry={reload} />}
       <div className="grid3 mt-sm rounded-grid">
         <Link to="/upload" className="add-tile">
           <Plus size={22} />
           <span className="tiny">Post photos</span>
         </Link>
-        {albums === null && !error && <div className="add-tile muted"><div className="spinner" /></div>}
+        {loading && <div className="add-tile muted"><div className="spinner" /></div>}
         {albums?.filter((a) => a.photos?.length).map((a) => (
           <Link key={a.id} to={`/my-work?post=${a.id}`} className="album-tile" title={a.title}>
             <img src={cover(a)} alt="" loading="lazy" />

@@ -4,7 +4,8 @@ import { ArrowLeft, Eye, EyeOff, Mail, X } from 'lucide-react'
 import { supabase } from '../lib/supabase.js'
 import { safeNext, useAuth } from '../auth.jsx'
 import Segmented from '../components/Segmented.jsx'
-import { img } from '../data/mock.js'
+import useQuery from '../lib/useQuery.js'
+import { listProviders } from '../api/catalog.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MIN_PASSWORD = 8
@@ -36,6 +37,9 @@ export default function SignIn() {
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
   const { user, profile, needsWelcome } = useAuth()
+  // Decorative collage: recent album covers from photographers on the app.
+  const { data: providers } = useQuery(() => listProviders(), [])
+  const collage = coverMix(providers)
 
   const [mode, setMode] = useState(params.get('mode') === 'signup' ? 'signup' : 'login')
   // form | code (email link/code sent) | confirm (new account must confirm) | forgot | forgot-sent
@@ -210,9 +214,9 @@ export default function SignIn() {
     <div className="signin">
       <div className="signin-hero">
         <div className="signin-collage">
-          {['maya-2', 'jonah-1', 'p1-album-1-0', 'sofia-1', 'p3-album-1-0', 'leo-1'].map((s, i) => (
-            <img key={s} src={img(s, 300, 380)} alt="" className={`c${i}`} />
-          ))}
+          {Array.from({ length: 6 }, (_, i) =>
+            collage[i] ? <img key={i} src={collage[i]} alt="" className={`c${i}`} /> : <span key={i} className={`signin-tile c${i}`} />,
+          )}
         </div>
         <button className="icon-btn signin-close" onClick={() => (location.key === 'default' ? navigate('/') : navigate(-1))} aria-label="Close">
           <X size={22} />
@@ -345,6 +349,16 @@ export default function SignIn() {
       </div>
     </div>
   )
+}
+
+// Round-robin over photographers so the collage isn't all one person's work: up to 6 cover URLs.
+function coverMix(providers = []) {
+  const out = []
+  const lists = providers.map((p) => p.covers || [])
+  for (let round = 0; out.length < 6 && lists.some((l) => l.length > round); round++) {
+    for (const l of lists) if (l[round] && out.length < 6) out.push(l[round])
+  }
+  return out
 }
 
 function GoogleLogo() {

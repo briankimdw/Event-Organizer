@@ -1,164 +1,140 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Calendar, CreditCard, Lock, MapPin, MessageCircle, ShieldCheck, Upload as UploadIcon } from 'lucide-react'
+import { Calendar, CalendarX, Clock, CreditCard, Lock, MapPin, MessageCircle, ShieldAlert } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import PersonRow from '../components/PersonRow.jsx'
 import Sheet from '../components/Sheet.jsx'
 import { PolicyTable, StatusPill, StatusTimeline, money } from '../components/Booking.jsx'
+import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useStore } from '../store.jsx'
-import { findPackage } from '../data/mock.js'
+import { useAuth } from '../auth.jsx'
+import {
+  acceptDelivery,
+  bookingError,
+  cancelBooking,
+  getBooking,
+  markDelivered,
+  respondToBooking,
+  respondToOffer,
+} from '../api/bookings.js'
+import useQuery from '../lib/useQuery.js'
+import { today } from '../lib/dates.js'
 
-const TODAY = new Date(2026, 9, 7)
-const REFUND_RULES = {
-  flexible: [[7, 100], [2, 50], [0, 0]],
-  moderate: [[30, 100], [14, 50], [0, 0]],
-  strict: [[90, 50], [0, 0]],
-}
-const refundPct = (policy, dateStr) => {
-  const days = Math.max(0, Math.round((new Date(dateStr) - TODAY) / 86400000))
-  return REFUND_RULES[policy].find(([min]) => days >= min)[1]
+const CANCELLABLE = ['requested', 'countered', 'accepted', 'confirmed']
+
+// Refund % the client would get by cancelling now (mirrors cancel_booking in the database).
+const refundPct = (b) => {
+  if (b.status !== 'confirmed') return null // nothing paid before confirmation
+  if (b.role === 'provider') return 100
+  const days = Math.floor((b.start - Date.now()) / 86400000)
+  const rule = (b.policy?.rules || []).find((r) => days >= r.min_days_before)
+  return rule?.refund_pct ?? 0
 }
 
 export default function BookingDetail() {
   const { id } = useParams()
+  const { user, loading: authLoading } = useAuth()
+  const { data: b, loading, error, reload } = useQuery(user ? () => getBooking(id) : null, [id, user?.id])
+
+  if (authLoading) return <><TopBar title="Booking" /><Loading /></>
+  if (!user) return <><TopBar title="Booking" /><SignInPrompt title="Sign in to see this booking" /></>
+  if (loading && !b) return <><TopBar title="Booking" /><Loading /></>
+  if (error) return <><TopBar title="Booking" /><ErrorState error={error} onRetry={reload} /></>
+  if (!b) return <><TopBar title="Booking" /><EmptyState icon={CalendarX} title="Booking not found" text="It may have been removed, or it belongs to another account." action={<Link to="/bookings" className="btn sm">Your bookings</Link>} /></>
+  return <Detail b={b} reload={reload} />
+}
+
+function Detail({ b, reload }) {
   const navigate = useNavigate()
-  const { bookings, updateBooking, startConversation, toast } = useStore()
-  const b = bookings.find((x) => x.id === id)
-  const { provider: p, pkg } = findPackage(b.packageId)
-  const first = p.name.split(' ')[0]
-  const [sheet, setSheet] = useState(null) // pay | cancel | dispute
-  const [disputeText, setDisputeText] = useState('')
+  const { toast, myProvider } = useStore()
+  const isClient = b.role === 'client'
+  const other = isClient ? b.provider : { ...b.client, idVerified: false, pro: false }
+  const first = (other.name || (isClient ? 'The photographer' : 'The client')).split(' ')[0]
+  const [sheet, setSheet] = useState(null) // cancel | counter
+  const [busy, setBusy] = useState(false)
+  const [counterTotal, setCounterTotal] = useState('')
+  const [counterMsg, setCounterMsg] = useState('')
 
-  const total = b.counterTotal ?? b.total
-  const deposit = total != null ? Math.round((total * pkg.depositPct) / 100) : null
-  const paid = b.depositPaid ? deposit : 0
-  const refund = Math.round((paid * refundPct(b.policy, b.date)) / 100)
-  const addons = p.addons.filter((a) => b.addonIds.includes(a.id))
+  // Run a booking action, then reload the booking and report the result.
+  const act = async (fn, success) => {
+    setBusy(true)
+    try {
+      const result = await fn()
+      setSheet(null)
+      toast(typeof success === 'function' ? success(result) : success)
+      reload()
+    } catch (err) {
+      toast(bookingError(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
-  const message = () => navigate(`/inbox/${b.conversationId || startConversation(p.id)}`)
+  const refund = refundPct(b)
+  const cancel = () =>
+    act(
+      () => cancelBooking(b.id),
+      (r) => (b.status === 'confirmed' ? `Booking cancelled. Refund under the policy: ${r?.refund_pct ?? 0}% of the deposit.` : b.status === 'requested' ? 'Request cancelled.' : 'Booking cancelled.'),
+    )
+  const sendCounter = () => {
+    const total = Number(counterTotal)
+    if (!(total > 0)) return toast('Enter a price for the offer')
+    act(() => respondToBooking(b.id, 'counter', { total, message: counterMsg.trim() || null }), `Offer of ${money(total)} sent to ${first}.`)
+  }
 
-  const pay = () => {
-    updateBooking(b.id, { status: 'confirmed', depositPaid: true })
-    setSheet(null)
-    toast('Deposit paid. Your date is locked in.')
-  }
-  const cancel = () => {
-    updateBooking(b.id, { status: 'cancelled_by_client' })
-    setSheet(null)
-    toast(paid ? `Cancelled. ${money(refund)} will be refunded.` : 'Request cancelled.')
-  }
-  const dispute = () => {
-    updateBooking(b.id, { status: 'disputed' })
-    setSheet(null)
-    toast('Dispute opened. The payout is frozen while we review.')
-  }
+  const shootDayReached = b.day <= today()
+  const items = [b.subtotal, b.addonsTotal ?? 0, b.travelFee ?? 0]
+  const itemsSum = b.subtotal == null ? null : items.reduce((s, x) => s + (x || 0), 0)
+  const adjustment = b.total != null && itemsSum != null ? Math.round((b.total - itemsSum) * 100) / 100 : 0
 
   return (
     <div>
-      <TopBar title="Booking" subtitle={`#${b.id.toUpperCase().slice(0, 8)}`} />
-      <PersonRow person={p} sub={pkg.name} right={<StatusPill status={b.status} />} />
+      <TopBar title="Booking" subtitle={`#${b.id.slice(0, 8).toUpperCase()}`} />
+      <PersonRow person={other} sub={isClient ? b.packageName : `Client · ${b.packageName}`} right={<StatusPill status={b.status} />} />
 
       <div className="pad">
         <div className="info-card">
-          <div className="inline-icon"><Calendar size={15} /> {b.date || 'Date TBD'} · {b.time}</div>
-          <div className="inline-icon mt-xs"><MapPin size={15} /> {b.location}</div>
+          <div className="inline-icon"><Calendar size={15} /> {b.date} · {b.time}{b.hours ? ` · ${b.hours}h` : ''}</div>
+          <div className="inline-icon mt-xs"><MapPin size={15} /> {b.location || 'Location to be confirmed'}</div>
+          {b.note && <div className="small mt-xs bk-note">“{b.note}”</div>}
         </div>
 
         {/* Status-specific call to action */}
-        {b.status === 'requested' && (
-          <div className="callout">
-            <b>Waiting for {first} to respond</b>
-            <div className="muted small">The request expires in {b.expiresIn || '48h'}. Your date is held tentatively until then.</div>
-          </div>
-        )}
-        {b.status === 'countered' && (
-          <div className="callout">
-            <b>{first} sent a counter offer: {money(b.counterTotal)}</b>
-            {b.counterNote && <div className="small">“{b.counterNote}”</div>}
-            <div className="row gap-xs mt-sm">
-              <button className="btn sm" onClick={() => updateBooking(b.id, { status: 'accepted' })}>Accept offer</button>
-              <button className="btn ghost sm" onClick={() => updateBooking(b.id, { status: 'declined' })}>Decline</button>
-            </div>
-          </div>
-        )}
-        {b.status === 'accepted' && (
-          <div className="callout accent">
-            <b>{first} accepted! Pay the deposit to confirm.</b>
-            <button className="btn accent block mt-sm" onClick={() => setSheet('pay')}>
-              <CreditCard size={16} /> Pay {money(deposit)} deposit
-            </button>
-          </div>
-        )}
-        {b.status === 'confirmed' && (
-          <div className="callout">
-            <b><Lock size={14} /> You're booked</b>
-            <div className="muted small">{first}'s calendar is locked for this date.</div>
-          </div>
-        )}
-        {b.status === 'in_progress' && (
-          <div className="callout"><b>Shoot day!</b><div className="muted small">{first} will upload your photos when they're ready.</div></div>
-        )}
-        {b.status === 'delivered' && (
-          <div className="callout accent">
-            <b>Your photos are ready</b>
-            <div className="muted small">Accept the delivery to release payment. It's accepted automatically after 7 days.</div>
-            <Link to={`/bookings/${b.id}/delivery`} className="btn accent block mt-sm">View gallery</Link>
-            <div className="row gap-xs mt-sm">
-              <button className="btn ghost sm grow" onClick={() => { updateBooking(b.id, { status: 'completed' }); toast(`Payment released to ${first}. You can leave a review now.`) }}>
-                Accept delivery
-              </button>
-              <button className="btn ghost sm grow danger" onClick={() => setSheet('dispute')}>Report a problem</button>
-            </div>
-          </div>
-        )}
-        {b.status === 'completed' && (
-          <div className="callout">
-            <b>Completed</b>
-            <div className="muted small">Payment released to {first}.</div>
-            {b.myReview ? (
-              <div className="small mt-sm">
-                {b.theirReviewSubmitted ? 'Both reviews are now visible.' : `Your review is hidden until ${first} reviews you or 14 days pass.`}
-              </div>
-            ) : (
-              <Link to={`/bookings/${b.id}/review`} className="btn block mt-sm">Review {first}</Link>
-            )}
-            {b.deliveryExpiresDays && <Link to={`/bookings/${b.id}/delivery`} className="btn ghost block mt-sm">View gallery</Link>}
-          </div>
-        )}
-        {b.status === 'disputed' && (
-          <div className="callout danger">
-            <b>Dispute open</b>
-            <div className="muted small">The payout to {first} is frozen. Both sides can add evidence, then our team decides on a release or refund.</div>
-          </div>
-        )}
-        {(b.status === 'cancelled_by_client' || b.status === 'declined') && (
-          <div className="callout">
-            <b>{b.status === 'declined' ? 'This request was declined' : 'Booking cancelled'}</b>
-            {paid > 0 && <div className="muted small">{money(refund)} refunded to your card.</div>}
-          </div>
+        {isClient ? (
+          <ClientCallout b={b} first={first} busy={busy} act={act} />
+        ) : (
+          <ProviderCallout b={b} first={first} busy={busy} act={act} verified={!!myProvider?.identity_verified} shootDayReached={shootDayReached} openCounter={() => setSheet('counter')} />
         )}
 
         <h4 className="section-title">Status</h4>
         <StatusTimeline booking={b} />
 
-        <h4 className="section-title">Payment</h4>
+        <h4 className="section-title">Price</h4>
         <div className="summary">
-          {total == null ? (
-            <div className="muted small">Waiting for a custom quote.</div>
+          {b.total == null && b.subtotal == null ? (
+            <div className="muted small">{b.offer ? `Offer on the table: ${money(b.offer.total)}` : 'Waiting for a custom quote.'}</div>
           ) : (
             <>
-              <div className="row between"><span>{pkg.name}</span><span>{money(total - b.travelFee - addons.reduce((s, a) => s + a.price, 0))}</span></div>
-              {addons.map((a) => (
-                <div key={a.id} className="row between"><span>{a.name}</span><span>{money(a.price)}</span></div>
+              {b.subtotal != null && (
+                <div className="row between"><span>{b.packageName}{b.pkg?.priceType === 'hourly' ? ` (${b.hours}h)` : ''}</span><span>{money(b.subtotal)}</span></div>
+              )}
+              {b.addons.map((a) => (
+                <div key={a.name} className="row between"><span>{a.name}</span><span>{money(a.price)}</span></div>
               ))}
               {b.travelFee > 0 && <div className="row between"><span>Travel fee</span><span>{money(b.travelFee)}</span></div>}
-              <div className="row between total"><span>Total</span><span>{money(total)}</span></div>
-              <div className="row between small">
-                <span>Deposit ({pkg.depositPct}%)</span>
-                <span>{b.depositPaid ? `${money(deposit)} paid` : money(deposit)}</span>
-              </div>
-              {b.depositPaid && !['completed', 'cancelled_by_client'].includes(b.status) && (
-                <div className="note mt-sm"><ShieldCheck size={16} /> Held securely. {first} is paid after you accept the delivery.</div>
+              {adjustment !== 0 && (
+                <div className="row between"><span>Agreed price change</span><span>{adjustment > 0 ? '+' : '−'}{money(Math.abs(adjustment))}</span></div>
+              )}
+              <div className="row between total"><span>Total</span><span>{money(b.total)}</span></div>
+              {b.offer && <div className="row between small"><span>Counter offer</span><span>{money(b.offer.total)}</span></div>}
+              {b.deposit != null && (
+                <div className="row between small">
+                  <span>Deposit{b.pkg?.depositPct != null ? ` (${b.pkg.depositPct}%)` : ''}</span>
+                  <span>{b.depositPaid ? `${money(b.deposit)} · paid` : money(b.deposit)}</span>
+                </div>
+              )}
+              {!b.depositPaid && b.isActive && (
+                <div className="muted tiny mt-xs">In-app payments are coming soon. Nothing has been charged.</div>
               )}
             </>
           )}
@@ -169,72 +145,229 @@ export default function BookingDetail() {
         </div>
 
         <div className="row gap-xs mt">
-          <button className="btn ghost grow" onClick={message}><MessageCircle size={16} /> Message {first}</button>
-          {['requested', 'countered', 'accepted', 'confirmed'].includes(b.status) && (
-            <button className="btn ghost grow danger" onClick={() => setSheet('cancel')}>Cancel</button>
+          {b.conversationId && (
+            <button className="btn ghost grow" onClick={() => navigate(`/inbox/${b.conversationId}`)}><MessageCircle size={16} /> Message {first}</button>
+          )}
+          {CANCELLABLE.includes(b.status) && (
+            <button className="btn ghost grow danger" onClick={() => setSheet('cancel')}>{b.status === 'requested' && isClient ? 'Cancel request' : 'Cancel'}</button>
           )}
         </div>
-
-        {/* Lets you walk through the provider's side of the flow in this prototype. */}
-        <DemoControls b={b} updateBooking={updateBooking} />
       </div>
 
-      <Sheet open={sheet === 'pay'} onClose={() => setSheet(null)} title="Pay deposit">
-        <div className="summary">
-          <div className="row between"><span>Deposit ({pkg.depositPct}%)</span><b>{money(deposit)}</b></div>
-          <div className="row between muted small"><span>Balance, charged 14 days before</span><span>{money(total - deposit)}</span></div>
-        </div>
-        <div className="card-input mt">
-          <CreditCard size={18} />
-          <span className="grow">Visa •••• 4242</span>
-          <span className="muted small">12/29</span>
-        </div>
-        <div className="note mt"><ShieldCheck size={16} /> Your money is held until your photos are delivered and you accept them.</div>
-        <div className="mt"><PolicyTable policy={b.policy} /></div>
-        <button className="btn accent block mt" onClick={pay}>Pay {money(deposit)}</button>
-      </Sheet>
-
-      <Sheet open={sheet === 'cancel'} onClose={() => setSheet(null)} title="Cancel booking?">
+      <Sheet open={sheet === 'cancel'} onClose={() => setSheet(null)} title={b.status === 'requested' && isClient ? 'Cancel request?' : 'Cancel booking?'}>
         <PolicyTable policy={b.policy} />
         <div className="summary mt">
-          <div className="row between"><span>Paid so far</span><span>{money(paid)}</span></div>
-          <div className="row between total"><span>You'd get back</span><span>{money(refund)}</span></div>
+          {refund == null ? (
+            <div className="small">Nothing has been paid yet, so there's nothing to refund.</div>
+          ) : isClient ? (
+            <div className="row between total"><span>Refund under the policy</span><span>{refund}%</span></div>
+          ) : (
+            <div className="small">If you cancel, {first} gets a full refund. Frequent cancellations hurt your ranking.</div>
+          )}
         </div>
-        <button className="btn danger-solid block mt" onClick={cancel}>Cancel booking</button>
+        <button className="btn danger-solid block mt" disabled={busy} onClick={cancel}>{busy ? 'Cancelling…' : 'Cancel booking'}</button>
         <button className="btn ghost block mt-sm" onClick={() => setSheet(null)}>Keep booking</button>
       </Sheet>
 
-      <Sheet open={sheet === 'dispute'} onClose={() => setSheet(null)} title="Report a problem">
-        <p className="muted small">Opening a dispute freezes the payout to {first}. You'll both be able to share evidence before our team decides.</p>
-        <textarea className="input mt" rows={4} placeholder="What went wrong?" value={disputeText} onChange={(e) => setDisputeText(e.target.value)} />
-        <button className="btn ghost block mt-sm" onClick={() => toast('Evidence attached')}>
-          <UploadIcon size={16} /> Add photos or files
+      <Sheet open={sheet === 'counter'} onClose={() => setSheet(null)} title="Offer a different price">
+        <p className="muted small">{first} has 48 hours to accept or decline. {b.total != null ? `They asked for ${money(b.total)}.` : 'This is a quote request.'}</p>
+        <div className="money-input mt">
+          <span>$</span>
+          <input type="number" inputMode="decimal" min="1" placeholder="Total price" value={counterTotal} onChange={(e) => setCounterTotal(e.target.value)} />
+        </div>
+        <textarea className="input mt-sm" rows={3} placeholder="Explain the price (optional)" value={counterMsg} onChange={(e) => setCounterMsg(e.target.value)} />
+        <button className="btn accent block mt" disabled={busy || !(Number(counterTotal) > 0)} onClick={sendCounter}>
+          {busy ? 'Sending…' : counterTotal ? `Send offer · ${money(Number(counterTotal))}` : 'Send offer'}
         </button>
-        <button className="btn danger-solid block mt" disabled={!disputeText.trim()} onClick={dispute}>Open dispute</button>
       </Sheet>
     </div>
   )
 }
 
-function DemoControls({ b, updateBooking }) {
-  const actions = {
-    requested: [
-      ['Provider accepts', { status: 'accepted' }],
-      ['Provider counters', { status: 'countered', counterTotal: Math.round((b.total ?? 500) * 1.15), counterNote: 'Adding a bit for the travel day.' }],
-      ['Provider declines', { status: 'declined' }],
-    ],
-    confirmed: [['Event day starts', { status: 'in_progress' }]],
-    in_progress: [['Provider uploads photos', { status: 'delivered', deliveryExpiresDays: 30 }]],
-  }[b.status]
-  if (!actions) return null
+function ClientCallout({ b, first, busy, act }) {
+  switch (b.status) {
+    case 'requested':
+      return (
+        <div className="callout">
+          <b>Waiting for {first} to respond</b>
+          <div className="muted small">{b.expiresIn ? `The request expires in ${b.expiresIn}.` : 'The request expires 48 hours after it was sent.'} Your date is held until then.</div>
+        </div>
+      )
+    case 'countered':
+      return (
+        <div className="callout">
+          <b>{first} offered a different price: {money(b.offer?.total ?? b.counterTotal)}</b>
+          {b.offer?.message && <div className="small">“{b.offer.message}”</div>}
+          {b.expiresIn && <div className="muted small">The offer expires in {b.expiresIn}.</div>}
+          {b.offer ? (
+            <div className="row gap-xs mt-sm">
+              <button className="btn sm" disabled={busy} onClick={() => act(() => respondToOffer(b.offer.id, true), `Offer accepted. ${first} is holding your date.`)}>Accept offer</button>
+              <button className="btn ghost sm" disabled={busy} onClick={() => act(() => respondToOffer(b.offer.id, false), 'Offer declined.')}>Decline</button>
+            </div>
+          ) : (
+            <div className="muted small">This offer is no longer open.</div>
+          )}
+        </div>
+      )
+    case 'accepted':
+      return (
+        <div className="callout accent">
+          <b>{first} accepted!</b>
+          <div className="muted small">
+            A {money(b.deposit)} deposit confirms the booking. In-app payments are coming soon; nothing has been charged. Message {first} to sort out the details.
+          </div>
+          <button className="btn accent block mt-sm" disabled>
+            <CreditCard size={16} /> Pay deposit · coming soon
+          </button>
+        </div>
+      )
+    case 'confirmed':
+      return (
+        <div className="callout">
+          <b className="inline-icon"><Lock size={14} /> You're booked</b>
+          <div className="muted small">{first}'s calendar is locked for this date.</div>
+        </div>
+      )
+    case 'in_progress':
+      return <div className="callout"><b>Shoot day!</b><div className="muted small">{first} will mark the booking delivered once your photos are ready.</div></div>
+    case 'delivered':
+      return (
+        <div className="callout accent">
+          <b>Your photos are ready</b>
+          <div className="muted small">
+            Accept the delivery once you have your photos.
+            {b.deliveryExpiresDays != null && ` It's accepted automatically in ${b.deliveryExpiresDays} day${b.deliveryExpiresDays === 1 ? '' : 's'}.`}
+          </div>
+          <Link to={`/bookings/${b.id}/delivery`} className="btn accent block mt-sm">View delivery</Link>
+          <div className="row gap-xs mt-sm">
+            <button className="btn ghost sm grow" disabled={busy} onClick={() => act(() => acceptDelivery(b.id), 'Delivery accepted. You can leave a review now.')}>
+              Accept delivery
+            </button>
+            <button className="btn ghost sm grow danger" disabled title="Disputes aren't available yet">
+              <ShieldAlert size={14} /> Report a problem · soon
+            </button>
+          </div>
+        </div>
+      )
+    case 'completed':
+      return <CompletedCallout b={b} first={first} />
+    case 'disputed':
+      return (
+        <div className="callout danger">
+          <b>Dispute open</b>
+          <div className="muted small">Our team is reviewing this booking.</div>
+        </div>
+      )
+    case 'declined':
+      return <div className="callout"><b>This request was declined</b><div className="muted small">Try another date or photographer.</div></div>
+    case 'expired':
+      return <div className="callout"><b>This request expired</b><div className="muted small">{first} didn't respond in time.</div></div>
+    case 'cancelled_by_client':
+      return <div className="callout"><b>You cancelled this booking</b></div>
+    case 'cancelled_by_provider':
+      return <div className="callout"><b>{first} cancelled this booking</b><div className="muted small">Any deposit paid is refunded in full.</div></div>
+    case 'refunded':
+      return <div className="callout"><b>Refunded</b></div>
+    default:
+      return null
+  }
+}
+
+function ProviderCallout({ b, first, busy, act, verified, shootDayReached, openCounter }) {
+  switch (b.status) {
+    case 'requested':
+      return (
+        <div className="callout accent">
+          <b>New request from {first}</b>
+          <div className="muted small">
+            {b.total == null ? 'This is a quote request: send a price.' : `They asked for ${money(b.total)}.`}
+            {b.expiresIn && ` Respond within ${b.expiresIn}.`}
+          </div>
+          {!verified && b.total != null && <div className="muted small">You need a verified ID to accept paid bookings.</div>}
+          <div className="row gap-xs mt-sm wrap">
+            {b.total != null && (
+              <button className="btn sm" disabled={busy} onClick={() => act(() => respondToBooking(b.id, 'accept'), `Accepted. ${first} will be asked to pay the deposit.`)}>
+                Accept
+              </button>
+            )}
+            <button className="btn ghost sm" disabled={busy} onClick={openCounter}>{b.total == null ? 'Send a price' : 'Offer another price'}</button>
+            <button className="btn ghost sm danger" disabled={busy} onClick={() => act(() => respondToBooking(b.id, 'decline'), 'Request declined.')}>Decline</button>
+          </div>
+        </div>
+      )
+    case 'countered':
+      return (
+        <div className="callout">
+          <b>You offered {money(b.offer?.total ?? b.counterTotal)}</b>
+          {b.offer?.message && <div className="small">“{b.offer.message}”</div>}
+          <div className="muted small">Waiting for {first} to accept or decline{b.expiresIn ? ` (expires in ${b.expiresIn})` : ''}.</div>
+        </div>
+      )
+    case 'accepted':
+      return (
+        <div className="callout">
+          <b>Waiting for {first}'s deposit</b>
+          <div className="muted small">In-app payments are coming soon, so deposits can't be paid here yet. Nothing has been charged.</div>
+        </div>
+      )
+    case 'confirmed':
+    case 'in_progress':
+      return (
+        <div className="callout">
+          <b className="inline-icon">{b.status === 'confirmed' ? <><Lock size={14} /> Booked</> : <><Clock size={14} /> Shoot in progress</>}</b>
+          <div className="muted small">
+            {shootDayReached || b.status === 'in_progress'
+              ? `Share the gallery with ${first} in chat, then mark the booking delivered.`
+              : `Your calendar is locked for this date.`}
+          </div>
+          {(shootDayReached || b.status === 'in_progress') && (
+            <button className="btn accent block mt-sm" disabled={busy} onClick={() => act(() => markDelivered(b.id), `Marked delivered. ${first} has 7 days to accept.`)}>
+              Mark as delivered
+            </button>
+          )}
+        </div>
+      )
+    case 'delivered':
+      return (
+        <div className="callout">
+          <b>Delivered</b>
+          <div className="muted small">
+            Waiting for {first} to accept.
+            {b.deliveryExpiresDays != null && ` It's accepted automatically in ${b.deliveryExpiresDays} day${b.deliveryExpiresDays === 1 ? '' : 's'}.`}
+          </div>
+        </div>
+      )
+    case 'completed':
+      return <CompletedCallout b={b} first={first} />
+    case 'disputed':
+      return <div className="callout danger"><b>Dispute open</b><div className="muted small">Our team is reviewing this booking.</div></div>
+    case 'declined':
+      return <div className="callout"><b>Declined</b></div>
+    case 'expired':
+      return <div className="callout"><b>This request expired</b><div className="muted small">It wasn't answered within 48 hours.</div></div>
+    case 'cancelled_by_client':
+      return <div className="callout"><b>{first} cancelled this booking</b></div>
+    case 'cancelled_by_provider':
+      return <div className="callout"><b>You cancelled this booking</b></div>
+    default:
+      return null
+  }
+}
+
+function CompletedCallout({ b, first }) {
   return (
-    <div className="demo-box">
-      <div className="tiny muted">PROTOTYPE · simulate the other side</div>
-      <div className="row gap-xs wrap mt-xs">
-        {actions.map(([label, patch]) => (
-          <button key={label} className="btn ghost sm" onClick={() => updateBooking(b.id, patch)}>{label}</button>
-        ))}
-      </div>
+    <div className="callout">
+      <b>Completed</b>
+      {b.myReview ? (
+        <div className="small mt-xs">
+          {b.theirReview ? 'Both reviews are now visible.' : `Your review stays hidden until ${first} reviews you or 14 days pass.`}{' '}
+          <Link to={`/bookings/${b.id}/review`} className="link-btn small">See reviews</Link>
+        </div>
+      ) : b.reviewWindowOpen ? (
+        <Link to={`/bookings/${b.id}/review`} className="btn block mt-sm">Review {first}</Link>
+      ) : (
+        <div className="muted small">The review window has closed.</div>
+      )}
     </div>
   )
 }

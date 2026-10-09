@@ -49,8 +49,8 @@ export const slugify = (text) =>
 // ---------------------------------------------------------------------------
 
 const ALBUM_COLUMNS =
-  'id, title, caption, location_text, shot_on, kind, status, created_at, category:service_categories(name), ' +
-  'photos(id, position, display_path, width, height, pair_role, exif)'
+  'id, provider_id, title, caption, location_text, shot_on, kind, status, created_at, category:service_categories(name, slug), ' +
+  'photos!photos_album_id_fkey(id, position, display_path, width, height, pair_role, exif, auto_tags)'
 
 export async function listMyAlbums(providerId) {
   return must(
@@ -63,26 +63,39 @@ export async function listMyAlbums(providerId) {
   )
 }
 
+// A photographer's albums, newest first (everyone sees published ones; owners see all of theirs).
+export async function listAlbums(providerId) {
+  return listMyAlbums(providerId)
+}
+
+export async function getAlbum(albumId) {
+  return must(await supabase.from('albums').select(ALBUM_COLUMNS).eq('id', albumId).order('position', { referencedTable: 'photos' }).maybeSingle())
+}
+
 const prettyDate = (iso) =>
   iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''
 
 // Shape a database album for the full-screen AlbumViewer.
 export function toViewerAlbum(a) {
   const photos = [...(a.photos || [])].sort((x, y) => x.position - y.position)
+  // SigLIP tags shared by the album's photos, most common first.
+  const tagCounts = new Map()
+  for (const p of photos) for (const t of p.auto_tags || []) tagCounts.set(t, (tagCounts.get(t) || 0) + 1)
   const shared = {
-    id: a.id, title: a.title, caption: a.caption, location: a.location_text,
-    date: prettyDate(a.shot_on || a.created_at), genre: a.category?.name,
-    tags: [], autoTags: [], realPhoto: false,
+    id: a.id, providerId: a.provider_id, title: a.title, caption: a.caption, location: a.location_text,
+    date: prettyDate(a.shot_on || a.created_at), genre: a.category?.name, status: a.status,
+    tags: [], autoTags: [...tagCounts.entries()].sort((x, y) => y[1] - x[1]).map(([t]) => t).slice(0, 6), realPhoto: false,
+    cover: photos[0] ? publicUrl('portfolio', (photos.find((p) => p.pair_role === 'after') || photos[0]).display_path) : null,
   }
   if (a.kind === 'before_after' && photos.length >= 2) {
     const before = photos.find((p) => p.pair_role === 'before') || photos[0]
     const after = photos.find((p) => p.pair_role === 'after') || photos[1]
     return {
       ...shared, type: 'beforeafter',
-      photos: [{ seed: after.id, src: publicUrl('portfolio', after.display_path), beforeSrc: publicUrl('portfolio', before.display_path), exif: after.exif }],
+      photos: [{ id: after.id, seed: after.id, src: publicUrl('portfolio', after.display_path), beforeSrc: publicUrl('portfolio', before.display_path), exif: after.exif, autoTags: after.auto_tags || [] }],
     }
   }
-  return { ...shared, type: 'photo', photos: photos.map((p) => ({ seed: p.id, src: publicUrl('portfolio', p.display_path), exif: p.exif })) }
+  return { ...shared, type: 'photo', photos: photos.map((p) => ({ id: p.id, seed: p.id, src: publicUrl('portfolio', p.display_path), exif: p.exif, autoTags: p.auto_tags || [] })) }
 }
 
 // Post an album: create the row, then for each photo upload a public copy

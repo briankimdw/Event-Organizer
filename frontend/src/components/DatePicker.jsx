@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { TODAY, toKey } from '../data/dates.js'
+import { TODAY, toKey } from '../lib/dates.js'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const monthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1)

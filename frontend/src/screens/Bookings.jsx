@@ -1,25 +1,31 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CalendarX, ChevronDown, ChevronRight, Clock, MapPin, Search, Star, X } from 'lucide-react'
+import { CalendarX, ChevronDown, ChevronRight, Clock, History, MapPin, Search, Star, X } from 'lucide-react'
 import DatePicker from '../components/DatePicker.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
 import SearchLauncher from '../components/SearchLauncher.jsx'
 import { StatusPill, money } from '../components/Booking.jsx'
-import { useStore } from '../store.jsx'
-import { findPackage } from '../data/mock.js'
-import { TODAY, fmtChip, fromKey, isPast, toKey } from '../data/dates.js'
+import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
+import { useAuth } from '../auth.jsx'
+import { listMyBookings } from '../api/bookings.js'
+import { availabilityByDay } from '../api/catalog.js'
+import useQuery from '../lib/useQuery.js'
+import { fmtChip, fromKey, isPast, toKey, today } from '../lib/dates.js'
 
-const PAST = ['completed', 'declined', 'cancelled_by_client', 'cancelled_by_provider', 'refunded']
-const NEEDS_ACTION = {
-  accepted: { title: 'Pay deposit to confirm', cta: 'Pay deposit' },
-  countered: { title: 'New price offered', cta: 'Review offer' },
-  delivered: { title: 'Your photos are ready', cta: 'View gallery' },
+// What the client has to do next, per booking. Payments aren't live yet, so an
+// accepted booking can't be paid in the app: say so instead of faking it.
+const attentionFor = (b) => {
+  if (b.status === 'countered') return { title: `New price offered: ${money(b.offer?.total ?? b.counterTotal)}`, cta: 'Review offer' }
+  if (b.status === 'accepted') return { title: 'Accepted · deposit due', cta: 'Payments soon' }
+  if (b.status === 'delivered') return { title: 'Your photos are ready', cta: 'Review delivery', to: `/bookings/${b.id}/delivery` }
+  if (b.status === 'completed' && b.reviewWindowOpen && !b.myReview) return { title: 'How did it go?', cta: 'Leave a review', to: `/bookings/${b.id}/review` }
+  return null
 }
 
 const monthLabel = (d) => d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
 const countdown = (date) => {
-  const days = Math.round((date - TODAY) / 86400000)
+  const days = Math.round((date - today()) / 86400000)
   if (days < 0) return null
   if (days === 0) return 'Today'
   if (days === 1) return 'Tomorrow'
@@ -27,31 +33,35 @@ const countdown = (date) => {
   return `In ${Math.round(days / 30)} months`
 }
 
+const firstName = (name = '') => name.split(' ')[0]
+
 export default function Bookings() {
   const navigate = useNavigate()
-  const { bookings } = useStore()
-  const [month, setMonth] = useState(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1))
+  const { user, loading: authLoading } = useAuth()
+  const [month, setMonth] = useState(() => new Date(today().getFullYear(), today().getMonth(), 1))
   const [selected, setSelected] = useState([]) // date keys
   const [showPast, setShowPast] = useState(false)
 
-  const withDates = bookings.map((b) => ({ ...b, when: new Date(b.date) }))
-  const byDay = withDates.reduce((acc, b) => {
-    ;(acc[toKey(b.when)] ??= []).push(b)
+  const { data, loading, error, reload } = useQuery(user ? () => listMyBookings() : null, [user?.id])
+  const bookings = data || []
+
+  const byDay = bookings.reduce((acc, b) => {
+    ;(acc[b.dateKey] ??= []).push(b)
     return acc
   }, {})
   const dots = Object.fromEntries(Object.entries(byDay).map(([k, list]) => [k, list.map((b) => b.status)]))
 
-  const attention = withDates.filter((b) => NEEDS_ACTION[b.status])
-  const upcoming = withDates
-    .filter((b) => !PAST.includes(b.status) && !NEEDS_ACTION[b.status])
-    .sort((a, b) => a.when - b.when)
-  const past = withDates.filter((b) => PAST.includes(b.status)).sort((a, b) => b.when - a.when)
+  const attention = bookings.filter(attentionFor).sort((a, b) => a.day - b.day)
+  const needs = new Set(attention.map((b) => b.id))
+  const isUpcoming = (b) => b.isActive || b.status === 'disputed'
+  const upcoming = bookings.filter((b) => !needs.has(b.id) && isUpcoming(b)).sort((a, b) => a.start - b.start)
+  const past = bookings.filter((b) => !needs.has(b.id) && !isUpcoming(b)).sort((a, b) => b.start - a.start)
 
   // When the visible month has nothing active, offer a jump to the next booking.
-  const inMonth = (b) => b.when.getFullYear() === month.getFullYear() && b.when.getMonth() === month.getMonth()
+  const inMonth = (b) => b.day.getFullYear() === month.getFullYear() && b.day.getMonth() === month.getMonth()
   const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1)
   const activeThisMonth = [...attention, ...upcoming].some(inMonth)
-  const nextBooked = upcoming.find((b) => b.when >= monthEnd)
+  const nextBooked = upcoming.find((b) => b.day >= monthEnd)
 
   const toggle = (key) => setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key].sort()))
   // Past days can only be opened to look at what was booked on them.
@@ -59,13 +69,18 @@ export default function Bookings() {
   const futureSelected = selected.filter((k) => !isPast(fromKey(k)))
   const selectedBookings = selected.flatMap((k) => byDay[k] || [])
 
+  // How many photographers are free on at least one of the picked dates (search is public).
+  const freeKey = futureSelected.join(',')
+  const { data: freeMap } = useQuery(freeKey ? () => availabilityByDay(futureSelected) : null, [freeKey])
+  const freeCount = freeMap ? new Set([...freeMap.values()].flatMap((s) => [...s])).size : null
+
   const findPhotographers = () => navigate(`/search?dates=${futureSelected.join(',')}`)
 
   return (
     <div className="bookings">
       <header className="home-header">
         <div className="title-lg">Bookings</div>
-        <span className="muted small">{upcoming.length + attention.length} active</span>
+        {user && data && <span className="muted small">{bookings.filter((b) => b.isActive || b.status === 'delivered').length} active</span>}
       </header>
 
       <div className="pad-x mb-sm">
@@ -90,20 +105,24 @@ export default function Bookings() {
               </div>
               {selectedBookings.map((b) => <MiniBooking key={b.id} b={b} />)}
               {futureSelected.length > 0 && (
-                <button className="btn accent block" onClick={findPhotographers}>
-                  <Search size={16} /> Find photographers for {futureSelected.length === 1 ? fmtChip(fromKey(futureSelected[0])) : `${futureSelected.length} dates`}
-                </button>
+                <>
+                  <button className="btn accent block" onClick={findPhotographers}>
+                    <Search size={16} /> Find photographers for {futureSelected.length === 1 ? fmtChip(fromKey(futureSelected[0])) : `${futureSelected.length} dates`}
+                  </button>
+                  {freeCount != null && (
+                    <div className="muted tiny bk-free-hint">
+                      {freeCount === 0 ? 'Nobody is free then yet. Try other dates.' : `${freeCount} photographer${freeCount === 1 ? '' : 's'} free`}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ) : (
             <div className="bk-cal-hint">
               <span className="muted tiny">Tap the dates you need a photographer for</span>
               {!activeThisMonth && nextBooked && (
-                <button
-                  className="link-btn tiny"
-                  onClick={() => setMonth(new Date(nextBooked.when.getFullYear(), nextBooked.when.getMonth(), 1))}
-                >
-                  Next booking: {nextBooked.when.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} <ChevronRight size={12} />
+                <button className="link-btn tiny" onClick={() => setMonth(new Date(nextBooked.day.getFullYear(), nextBooked.day.getMonth(), 1))}>
+                  Next booking: {nextBooked.day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} <ChevronRight size={12} />
                 </button>
               )}
             </div>
@@ -111,89 +130,110 @@ export default function Bookings() {
         </div>
       </div>
 
-      {attention.length > 0 && (
-        <section className="pad-x">
-          <h4 className="section-title">Needs your attention</h4>
-          {attention.map((b) => {
-            const { provider, pkg } = findPackage(b.packageId)
-            const a = NEEDS_ACTION[b.status]
-            return (
-              <Link key={b.id} to={b.status === 'delivered' ? `/bookings/${b.id}/delivery` : `/bookings/${b.id}`} className="attention-card">
-                <ProfileLink id={provider.id}><img className="attention-img" src={provider.avatar} alt="" /></ProfileLink>
-                <div className="grow">
-                  <b className="small">{a.title}</b>
-                  <div className="muted tiny">{pkg.name} with <ProfileLink id={provider.id}>{provider.name.split(' ')[0]}</ProfileLink> · {b.date}</div>
+      {authLoading ? (
+        <Loading />
+      ) : !user ? (
+        <SignInPrompt title="Sign in to see your bookings" text="Your requests, upcoming shoots and past bookings show up here." />
+      ) : loading && !data ? (
+        <Loading />
+      ) : error ? (
+        <ErrorState error={error} onRetry={reload} />
+      ) : (
+        <>
+          {attention.length > 0 && (
+            <section className="pad-x">
+              <h4 className="section-title">Needs your attention</h4>
+              {attention.map((b) => {
+                const a = attentionFor(b)
+                return (
+                  <Link key={b.id} to={a.to || `/bookings/${b.id}`} className="attention-card">
+                    <ProfileLink id={b.provider.id}><img className="attention-img" src={b.provider.avatar} alt="" /></ProfileLink>
+                    <div className="grow">
+                      <b className="small">{a.title}</b>
+                      <div className="muted tiny">
+                        {b.packageName} with <ProfileLink id={b.provider.id}>{firstName(b.provider.name)}</ProfileLink> · {b.date}
+                      </div>
+                    </div>
+                    <span className="att-cta">{a.cta}</span>
+                  </Link>
+                )
+              })}
+            </section>
+          )}
+
+          <section className="pad-x">
+            <h4 className="section-title">Upcoming</h4>
+            {upcoming.length === 0 && (
+              <EmptyState
+                compact
+                icon={CalendarX}
+                title="Nothing coming up"
+                text={bookings.length ? 'Requests and confirmed shoots will show here.' : 'Book a photographer and your shoots will show here.'}
+                action={<Link to="/" className="btn sm">Find a photographer</Link>}
+              />
+            )}
+            {upcoming.map((b, i) => {
+              const showMonth = i === 0 || monthLabel(b.day) !== monthLabel(upcoming[i - 1].day)
+              return (
+                <div key={b.id}>
+                  {showMonth && <div className="month-label">{monthLabel(b.day)}</div>}
+                  <TimelineItem b={b} />
                 </div>
-                <span className="att-cta">{a.cta}</span>
-              </Link>
-            )
-          })}
-        </section>
-      )}
+              )
+            })}
+          </section>
 
-      <section className="pad-x">
-        <h4 className="section-title">Upcoming</h4>
-        {upcoming.length === 0 && (
-          <div className="empty compact">
-            <CalendarX size={32} />
-            <div className="small">Nothing coming up.</div>
-            <Link to="/" className="btn sm">Find a photographer</Link>
-          </div>
-        )}
-        {upcoming.map((b, i) => {
-          const showMonth = i === 0 || monthLabel(b.when) !== monthLabel(upcoming[i - 1].when)
-          return (
-            <div key={b.id}>
-              {showMonth && <div className="month-label">{monthLabel(b.when)}</div>}
-              <TimelineItem b={b} />
-            </div>
-          )
-        })}
-      </section>
-
-      {past.length > 0 && (
-        <section className="pad-x">
-          <button className="past-toggle" onClick={() => setShowPast(!showPast)}>
-            <span>Past bookings · {past.length}</span>
-            <ChevronDown size={18} style={{ transform: showPast ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
-          </button>
-          {showPast && past.map((b) => <TimelineItem key={b.id} b={b} past />)}
-        </section>
+          <section className="pad-x">
+            {past.length > 0 ? (
+              <>
+                <button className="past-toggle" onClick={() => setShowPast(!showPast)}>
+                  <span>Past bookings · {past.length}</span>
+                  <ChevronDown size={18} style={{ transform: showPast ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+                </button>
+                {showPast && past.map((b) => <TimelineItem key={b.id} b={b} past />)}
+              </>
+            ) : (
+              <>
+                <h4 className="section-title">Past</h4>
+                <EmptyState compact icon={History} text="Finished, declined and cancelled bookings will show here." />
+              </>
+            )}
+          </section>
+        </>
       )}
     </div>
   )
 }
 
 function TimelineItem({ b, past }) {
-  const { provider, pkg } = findPackage(b.packageId)
-  const soon = countdown(b.when)
-  const needsReview = b.status === 'completed' && !b.myReview
+  const soon = countdown(b.day)
+  const needsReview = b.status === 'completed' && b.reviewWindowOpen && !b.myReview
   return (
     <Link to={`/bookings/${b.id}`} className={`bk-item ${past ? 'past' : ''}`}>
       <div className="date-block">
-        <span>{b.when.toLocaleDateString('en-US', { month: 'short' })}</span>
-        <b>{b.when.getDate()}</b>
-        <span>{b.when.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+        <span>{b.day.toLocaleDateString('en-US', { month: 'short' })}</span>
+        <b>{b.day.getDate()}</b>
+        <span>{b.day.toLocaleDateString('en-US', { weekday: 'short' })}</span>
       </div>
       <div className="bk-body">
         <div className="row between">
-          <b className="small">{pkg.name}</b>
+          <b className="small">{b.packageName}</b>
           <StatusPill status={b.status} />
         </div>
-        <ProfileLink id={provider.id} className="row gap-xs mt-xs">
-          <img className="avatar sm" src={provider.avatar} alt="" />
-          <span className="small">{provider.name}</span>
+        <ProfileLink id={b.provider.id} className="row gap-xs mt-xs">
+          <img className="avatar sm" src={b.provider.avatar} alt="" />
+          <span className="small">{b.provider.name}</span>
         </ProfileLink>
         <div className="bk-meta">
           <span><Clock size={12} /> {b.time}</span>
-          <span><MapPin size={12} /> {b.location}</span>
+          {b.location && <span><MapPin size={12} /> {b.location}</span>}
         </div>
         <div className="row between mt-xs">
           {!past && soon ? <span className="countdown">{soon}</span> : <span />}
           {needsReview ? (
             <span className="review-nudge"><Star size={12} /> Leave a review</span>
           ) : (
-            <span className="muted tiny">{money(b.counterTotal ?? b.total)}</span>
+            <span className="muted tiny">{money(b.offer?.total ?? b.total)}</span>
           )}
         </div>
       </div>
@@ -202,13 +242,12 @@ function TimelineItem({ b, past }) {
 }
 
 function MiniBooking({ b }) {
-  const { provider, pkg } = findPackage(b.packageId)
   return (
     <Link to={`/bookings/${b.id}`} className="mini-booking">
-      <ProfileLink id={provider.id}><img className="avatar sm" src={provider.avatar} alt="" /></ProfileLink>
+      <ProfileLink id={b.provider.id}><img className="avatar sm" src={b.provider.avatar} alt="" /></ProfileLink>
       <div className="grow">
-        <b className="small">{pkg.name}</b>
-        <div className="muted tiny">{fmtChip(b.when)} · {b.time} · <ProfileLink id={provider.id}>{provider.name}</ProfileLink></div>
+        <b className="small">{b.packageName}</b>
+        <div className="muted tiny">{fmtChip(b.day)} · {b.time} · <ProfileLink id={b.provider.id}>{b.provider.name}</ProfileLink></div>
       </div>
       <StatusPill status={b.status} />
     </Link>
