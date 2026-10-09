@@ -2,7 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { Home, Layers, CalendarCheck, MessageCircle, User } from 'lucide-react'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
-import { unreadCount } from '../api/messages.js'
+import { useEffect } from 'react'
+import { subscribeToInbox, unreadCount } from '../api/messages.js'
 
 const tabs = [
   { to: '/', label: 'Home', Icon: Home },
@@ -16,7 +17,9 @@ export default function TabBar() {
   const { user } = useAuth()
   const { pathname } = useLocation()
   // Re-checked when the tab bar mounts (e.g. back from a chat) and on tab switches.
-  const { data: unread } = useQuery(user ? unreadCount : null, [user?.id, pathname])
+  const { data: unread, reload } = useQuery(user ? unreadCount : null, [user?.id, pathname])
+  // ...and live, when a message arrives anywhere.
+  useEffect(() => (user ? subscribeToInbox(reload) : undefined), [user?.id, reload])
 
   return (
     <nav className="tabbar">

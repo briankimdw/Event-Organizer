@@ -1,18 +1,21 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, Copy, EyeOff, Images, Inbox, Package, Plus, Star } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, Copy, EyeOff, Images, Inbox, MapPin, Package, Plus, Star } from 'lucide-react'
 import Segmented from '../components/Segmented.jsx'
 import Sheet from '../components/Sheet.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
 import { VerifiedClient } from '../components/Badges.jsx'
 import { money, priceLabel } from '../components/Booking.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
+import { MapPreview, ServiceAreaEditor } from '../components/map/LazyMap.jsx'
 import { useStore } from '../store.jsx'
 import useQuery from '../lib/useQuery.js'
 import { fmtBooking, today, toKey } from '../lib/dates.js'
 import { listMyAlbums, publicUrl } from '../api/portfolio.js'
 import { bookingError, respondToBooking } from '../api/bookings.js'
 import { getCategories } from '../api/catalog.js'
+import { parsePoint, updateServiceArea } from '../api/locations.js'
+import { avatarUrl } from '../lib/format.js'
 import {
   addBlackout, createPackage, listBlackouts, listMyPackages, listWorkingHours, removeBlackoutDay, setPackageActive, updatePackage,
 } from '../api/provider.js'
@@ -39,7 +42,7 @@ export default function Dashboard({ tab, onTabChange, provider, bookings, onProv
         onChange={onTabChange}
       />
       {tab === 'requests' && <Requests bookings={bookings} />}
-      {tab === 'calendar' && <ProviderCalendar bookings={bookings} provider={provider} />}
+      {tab === 'calendar' && <ProviderCalendar bookings={bookings} provider={provider} onProviderChanged={onProviderChanged} />}
       {tab === 'packages' && <Packages provider={provider} onChanged={onProviderChanged} />}
       {tab === 'portfolio' && <Portfolio />}
     </div>
@@ -203,7 +206,7 @@ function hoursSummary(rules) {
   })
 }
 
-function ProviderCalendar({ bookings, provider }) {
+function ProviderCalendar({ bookings, provider, onProviderChanged }) {
   const { myProvider, toast } = useStore()
   const providerId = myProvider?.id
   const tz = myProvider?.timezone || provider?.timezone || 'America/Los_Angeles'
@@ -298,8 +301,63 @@ function ProviderCalendar({ bookings, provider }) {
           </b>
         </div>
         {buffer != null && <div className="row between small mt-xs"><span>Buffer between bookings</span><b>{buffer ? `${buffer} min` : 'None'}</b></div>}
-        {provider?.serviceArea && <div className="row between small mt-xs"><span>Service area</span><b>{provider.serviceArea}</b></div>}
       </div>
+      <ServiceArea provider={provider} onChanged={onProviderChanged} />
+    </div>
+  )
+}
+
+// Where the photographer is based and how far they travel (shown on the map and their profile).
+function ServiceArea({ provider, onChanged }) {
+  const { myProvider, refreshProvider, toast } = useStore()
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  if (!myProvider) return null
+
+  const location = parsePoint(myProvider.base_location)
+  const radiusKm = myProvider.service_radius_km
+  const city = myProvider.city || ''
+  const avatar = provider?.avatar || avatarUrl(null, myProvider.display_name)
+
+  const save = async (area) => {
+    setSaving(true)
+    try {
+      await updateServiceArea(myProvider.id, area)
+      await refreshProvider()
+      onChanged?.()
+      setOpen(false)
+      toast('Service area saved')
+    } catch (e) {
+      console.warn(e)
+      toast('Couldn’t save: ' + (e.message || 'try again'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="info-card sa-card">
+      <div className="row between gap-xs">
+        <MapPin size={18} className="muted" />
+        <div className="grow">
+          <div className="small"><b>Service area</b></div>
+          <div className="muted tiny">
+            {location ? `${city.split(',')[0] || 'Your base'} · you travel up to ${radiusKm} km` : 'Not set yet, so clients can’t find you on the map.'}
+          </div>
+        </div>
+        <button className={`btn sm ${location ? 'ghost' : ''}`} onClick={() => setOpen(true)}>{location ? 'Edit' : 'Set up'}</button>
+      </div>
+      {location && (
+        <button className="area-preview" onClick={() => setOpen(true)} aria-label="Edit your service area">
+          <MapPreview location={location} radiusKm={radiusKm} avatar={avatar} height={130} />
+        </button>
+      )}
+      <Sheet open={open} onClose={() => !saving && setOpen(false)} title="Service area">
+        <p className="muted small">Where you’re based and how far you’ll travel. Clients see this on the map and on your profile.</p>
+        <div className="mt-sm">
+          <ServiceAreaEditor initial={{ location, radiusKm, city }} avatar={avatar} onSave={save} saving={saving} />
+        </div>
+      </Sheet>
     </div>
   )
 }

@@ -6,6 +6,7 @@
 import { supabase } from '../lib/supabase.js'
 import { avatarUrl, dollars, photoUrl, policyFromRules, toPackage } from '../lib/format.js'
 import { toKey } from '../lib/dates.js'
+import { parsePoint } from './locations.js'
 
 const must = ({ data, error }) => {
   if (error) throw error
@@ -46,7 +47,7 @@ export const getCategories = () =>
 // ---------------------------------------------------------------------------
 
 const LIST_COLUMNS = `
-  id, profile_id, slug, display_name, bio, city, service_radius_km, travel_fee_per_km_cents, timezone,
+  id, profile_id, slug, display_name, bio, city, base_location, service_radius_km, travel_fee_per_km_cents, timezone,
   attributes, status, identity_verified, is_pro, rating_avg, rating_count, created_at,
   profile:profiles!providers_profile_id_fkey(id, username, display_name, avatar_path),
   policy:cancellation_policies!providers_cancellation_policy_id_fkey(name, rules),
@@ -96,6 +97,8 @@ export function toProvider(row) {
     status: row.status,
     tasteMatch: null, // filled in by withMatches()
     distanceKm: null, // needs locations; not collected yet
+    location: parsePoint(row.base_location), // { lat, lng } | null
+    radiusKm: row.service_radius_km ?? null,
     followers: row.follows?.[0]?.count ?? 0,
     cancellationPolicy: policyFromRules(row.policy?.rules, row.policy?.name),
     gear: { bodies: attrs.gear?.bodies || [], lenses: attrs.gear?.lenses || [] },

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  ArrowUpDown, CalendarCheck, CalendarDays, Check, Plus, Search as SearchIcon, SearchX, SlidersHorizontal, Star, X,
+  ArrowUpDown, CalendarCheck, CalendarDays, Check, List, LocateFixed, Map as MapIcon, MapPinOff, Plus, Search as SearchIcon, SearchX,
+  SlidersHorizontal, Star, X,
 } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Sheet from '../components/Sheet.jsx'
@@ -10,9 +11,12 @@ import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { money, startingPrice } from '../components/Booking.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import { useAuth } from '../auth.jsx'
+import { useStore } from '../store.jsx'
+import { ProviderMap } from '../components/map/LazyMap.jsx'
 import useQuery from '../lib/useQuery.js'
 import { fmtChip, fromKey, isPast, parseDates } from '../lib/dates.js'
 import { getCategories, listProviders, searchProviders, withMatches } from '../api/catalog.js'
+import { distanceKm, fmtKm, getMyLocation, lastKnownLocation, parsePoint } from '../api/locations.js'
 
 const PRICE_OPTIONS = [
   { value: null, label: 'Any' },
@@ -25,16 +29,27 @@ const RATING_OPTIONS = [
   { value: 4.5, label: '4.5+' },
   { value: 4.8, label: '4.8+' },
 ]
+// Distance filter (needs the user's location): 'travels' = they travel to you.
+const DISTANCE_OPTIONS = [
+  { value: null, label: 'Any' },
+  { value: 'travels', label: 'Travels to you' },
+  { value: 10, label: 'Within 10 km' },
+  { value: 25, label: 'Within 25 km' },
+  { value: 50, label: 'Within 50 km' },
+]
 const byRating = (a, b) => (b.rating ?? -1) - (a.rating ?? -1) || b.reviewCount - a.reviewCount
 const SORTS = {
   match: { label: 'Best match', fn: (a, b) => (b.tasteMatch ?? -1) - (a.tasteMatch ?? -1) || byRating(a, b) },
   rating: { label: 'Top rated', fn: byRating },
   price: { label: 'Lowest price', fn: (a, b) => (startingPrice(a) ?? Infinity) - (startingPrice(b) ?? Infinity) },
+  distance: { label: 'Nearest', fn: (a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity) || byRating(a, b) },
 }
-const NO_FILTERS = { maxPrice: null, minRating: null, proOnly: false, idOnly: false }
+const NO_FILTERS = { maxPrice: null, minRating: null, proOnly: false, idOnly: false, distance: null }
+const withinDistance = (p, d) => (d === 'travels' ? p.distanceKm <= (p.radiusKm ?? 0) : p.distanceKm <= d)
 
 export default function Search() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const { toast } = useStore()
   const [params, setParams] = useSearchParams()
   const [query, setQuery] = useState('')
   const [catParam, setCatParam] = useState(params.get('cat')) // a service slug (or a category name from older links)
@@ -43,6 +58,37 @@ export default function Search() {
   const [sheet, setSheet] = useState(null) // dates | filters | sort
 
   const setFilter = (key, value) => setFilters((f) => ({ ...f, [key]: value }))
+
+  // List or map (in the URL so Back returns to the same view). focus: a provider to open on the map.
+  const view = params.get('view') === 'map' ? 'map' : 'list'
+  const focusId = params.get('focus')
+  const setView = (next) => {
+    const p = new URLSearchParams(params)
+    next === 'map' ? p.set('view', 'map') : p.delete('view')
+    p.delete('focus')
+    setParams(p, { replace: true })
+    document.querySelector('.viewport')?.scrollTo({ top: 0 })
+  }
+  const setFocus = (id) =>
+    setParams((prev) => {
+      const p = new URLSearchParams(prev)
+      id ? p.set('focus', id) : p.delete('focus')
+      return p
+    }, { replace: true })
+
+  // The user's location (optional): asked for on demand, remembered on this device.
+  const [myLoc, setMyLoc] = useState(lastKnownLocation)
+  const userLocation = myLoc || parsePoint(profile?.location)
+  const locate = async () => {
+    try {
+      const point = await getMyLocation()
+      setMyLoc(point)
+      return point
+    } catch (e) {
+      toast(e.message)
+      return null
+    }
+  }
 
   const cats = useQuery(() => getCategories(), [])
   const categories = cats.data || []
@@ -69,7 +115,8 @@ export default function Search() {
 
   const matchOf = new Map((all.data || []).map((p) => [p.id, p.tasteMatch]))
   const hasMatches = [...matchOf.values()].some((m) => m != null)
-  const sortKey = sort === 'match' && !hasMatches ? 'rating' : sort
+  const sortKey = (sort === 'match' && !hasMatches) || (sort === 'distance' && !userLocation) ? (hasMatches ? 'match' : 'rating') : sort
+  const distanceFilter = userLocation ? filters.distance : null
   const freeOn = (p) => (dates.length ? (p.freeDates || []).filter((k) => dates.includes(k)) : [])
 
   const source = needsServer ? searched : all
@@ -78,11 +125,13 @@ export default function Search() {
   const error = all.error || source.error || (catParam && cats.error)
   const q = query.trim().toLowerCase()
   const results = (source.data || [])
-    .map((p) => ({ ...p, tasteMatch: matchOf.get(p.id) ?? null }))
+    .map((p) => ({ ...p, tasteMatch: matchOf.get(p.id) ?? null, distanceKm: distanceKm(userLocation, p.location) }))
+    .filter((p) => distanceFilter == null || (p.distanceKm != null && withinDistance(p, distanceFilter)))
     .filter((p) => !q || [p.name, p.username, p.city, ...p.specialties, ...p.categories].join(' ').toLowerCase().includes(q))
     .filter((p) => !filters.idOnly || p.idVerified)
     .sort((a, b) => freeOn(b).length - freeOn(a).length || SORTS[sortKey].fn(a, b))
   const fullyFree = results.filter((p) => freeOn(p).length === dates.length).length
+  const onMap = results.filter((p) => p.location)
 
   // Removable chips for whatever is currently filtering the list.
   const activeChips = [
@@ -90,6 +139,11 @@ export default function Search() {
     filters.minRating != null && { key: 'minRating', label: `${filters.minRating}+ stars`, clear: () => setFilter('minRating', null) },
     filters.proOnly && { key: 'pro', label: 'Verified Pro', clear: () => setFilter('proOnly', false) },
     filters.idOnly && { key: 'id', label: 'ID verified', clear: () => setFilter('idOnly', false) },
+    distanceFilter != null && {
+      key: 'distance',
+      label: DISTANCE_OPTIONS.find((o) => o.value === distanceFilter)?.label,
+      clear: () => setFilter('distance', null),
+    },
   ].filter(Boolean)
 
   const reload = () => {
@@ -105,7 +159,7 @@ export default function Search() {
       <div className="pad-x mt-sm">
         <div className="search">
           <SearchIcon size={16} />
-          <input autoFocus={!catParam && !dates.length} placeholder="Search photographers, styles, cities" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input autoFocus={!catParam && !dates.length && view === 'list'} placeholder="Search photographers, styles, cities" value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && <button className="icon-btn" onClick={() => setQuery('')} aria-label="Clear"><X size={14} /></button>}
         </div>
       </div>
@@ -161,14 +215,46 @@ export default function Search() {
         <Loading label="Finding photographers…" />
       ) : (
         <>
-          <div className="pad-x result-summary">
-            {dates.length
-              ? `${fullyFree} free on ${dates.length === 1 ? 'your date' : `all ${dates.length} dates`}${results.length > fullyFree ? ` · ${results.length - fullyFree} partly free` : ''}`
-              : `${results.length} photographer${results.length === 1 ? '' : 's'}`}
+          <div className="pad-x result-bar">
+            <div className="result-summary grow ellipsis">
+              {dates.length
+                ? `${fullyFree} free on ${dates.length === 1 ? 'your date' : `all ${dates.length} dates`}${results.length > fullyFree ? ` · ${results.length - fullyFree} partly free` : ''}`
+                : `${results.length} photographer${results.length === 1 ? '' : 's'}`}
+              {view === 'map' && results.length > onMap.length && onMap.length > 0 && ` · ${results.length - onMap.length} not on map`}
+            </div>
+            <div className="view-toggle" role="tablist" aria-label="View">
+              <button role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
+                <List size={14} /> List
+              </button>
+              <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'active' : ''} onClick={() => setView('map')}>
+                <MapIcon size={14} /> Map
+              </button>
+            </div>
           </div>
 
+          {view === 'map' && results.length > 0 && (
+            onMap.length ? (
+              <ProviderMap
+                providers={onMap}
+                userLocation={userLocation}
+                onLocate={locate}
+                focusId={focusId}
+                linkQuery={datesQuery}
+                fitUser={distanceFilter != null}
+                onSelect={setFocus}
+              />
+            ) : (
+              <EmptyState
+                icon={MapPinOff}
+                title="Not on the map yet"
+                text={`${results.length === 1 ? 'This photographer hasn’t' : 'These photographers haven’t'} set where they’re based yet.`}
+                action={<button className="btn ghost sm" onClick={() => setView('list')}>Show the list</button>}
+              />
+            )
+          )}
+
           <div className="pad-x">
-            {results.map((p) => {
+            {view === 'list' && results.map((p) => {
               const free = freeOn(p)
               const thumbs = p.covers.slice(0, 3)
               return (
@@ -205,6 +291,7 @@ export default function Search() {
                               {p.city && <span className="muted">· {p.city}</span>}
                             </>
                           )}
+                          {p.distanceKm != null && <span className="muted result-distance">· {fmtKm(p.distanceKm)}</span>}
                         </div>
                       </div>
                     </div>
@@ -257,6 +344,17 @@ export default function Search() {
       <Sheet open={sheet === 'filters'} onClose={() => setSheet(null)} title="Filters">
         <FilterGroup label="Starting price" options={PRICE_OPTIONS} value={filters.maxPrice} onChange={(v) => setFilter('maxPrice', v)} />
         <FilterGroup label="Rating" options={RATING_OPTIONS} value={filters.minRating} onChange={(v) => setFilter('minRating', v)} />
+        {userLocation ? (
+          <FilterGroup label="Distance" options={DISTANCE_OPTIONS} value={filters.distance} onChange={(v) => setFilter('distance', v)} />
+        ) : (
+          <div className="filter-group">
+            <div className="filter-label">Distance</div>
+            <div className="row gap-xs">
+              <div className="muted small grow">Share your location to find photographers who travel to you.</div>
+              <button className="btn ghost sm" onClick={locate}><LocateFixed size={14} /> Use my location</button>
+            </div>
+          </div>
+        )}
         <div className="filter-group">
           <div className="filter-label">Trust</div>
           <label className="toggle-row">
@@ -284,7 +382,7 @@ export default function Search() {
 
       <Sheet open={sheet === 'sort'} onClose={() => setSheet(null)} title="Sort by">
         {Object.entries(SORTS)
-          .filter(([key]) => key !== 'match' || hasMatches)
+          .filter(([key]) => (key !== 'match' || hasMatches) && (key !== 'distance' || userLocation))
           .map(([key, s]) => (
             <button key={key} className="list-row" onClick={() => { setSort(key); setSheet(null) }}>
               <div className="grow">{s.label}</div>
@@ -292,6 +390,11 @@ export default function Search() {
             </button>
           ))}
         {!hasMatches && <div className="muted tiny mt-sm">Swipe in Discover to sort by how well photographers match your taste.</div>}
+        {!userLocation && (
+          <button className="link-btn small mt-sm" onClick={async () => { if (await locate()) { setSort('distance'); setSheet(null) } }}>
+            <LocateFixed size={14} /> Use my location to sort by distance
+          </button>
+        )}
       </Sheet>
     </div>
   )

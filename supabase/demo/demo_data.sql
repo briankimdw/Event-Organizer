@@ -186,6 +186,13 @@ from (values
 ) as v (slug, attrs, radius, fee, policy, verified, pro)
 where p.slug::text = v.slug and p.attributes = '{}'::jsonb;
 
+-- Where each photographer is based (the map draws service_radius_km around it).
+update public.providers p set base_location = extensions.st_setsrid(extensions.st_makepoint(v.lng, v.lat), 4326)::extensions.geography
+from (values ('maya-chen-photo', 34.0869, -118.2702), ('jonah-reyes', 34.0403, -118.2353), ('priya-frames', 34.1478, -118.1445),
+             ('leo-spaces', 34.0195, -118.4912), ('sofia-wild', 34.0259, -118.7798), ('diego-alvarez', 33.7701, -118.1937),
+             ('hana-kim-studio', 34.0618, -118.3004)) as v (slug, lat, lng)
+where p.slug::text = v.slug and p.base_location is null;
+
 -- Sofia also offers coaching and meetups.
 insert into public.provider_services (provider_id, category_id)
 select pg_temp.pid(s.slug), pg_temp.cat(s.cat)

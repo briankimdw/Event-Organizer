@@ -135,6 +135,32 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
   - locations and distance
   - travel fees.
 
+### Messaging, map, posting (2026-10-09)
+- **Messaging:**
+  - Message anyone: a "Message" button on client profiles, plus a New message screen (`/inbox/new`) with people search.
+  - Group chats: create, rename, add people, leave.
+  - Live inbox and tab badge. Messages appear instantly, and a failed send can be retried.
+  - "Seen" receipts, a typing indicator, and day separators.
+  - Blocks are enforced in the database.
+  - Migration `20261009120000_direct_and_group_messages.sql`, with test `supabase/tests/messaging_test.sql`.
+- **Map** (Leaflet + OpenStreetMap):
+  - Search has a List/Map toggle. Each pin is the photographer's avatar; tapping it draws their service radius and opens a card.
+  - "Near me" shows distances, adds a "travels to you" filter and a Nearest sort.
+  - Profiles show a mini map. Photographers set their base and radius in Me → Calendar → Service area (it's also on the setup checklist).
+  - The test photographers now have locations around LA.
+  - **Before launch:** move to a keyed tile provider. The OSM tile server and Nominatim are fair-use only.
+- **Posting:** a 2-step flow.
+  1. Photos: drag & drop; reorder, cover and remove; clear errors for HEIC, RAW and too-large files; a preview of what clients will see; before/after slots.
+  2. Details: title and category required; the rest is optional.
+
+  Uploads show real progress and can be retried. My Work is a grid where you can reorder, edit and delete posts. The first-time setup is now one screen.
+- **Migrations waiting to be applied** (the Supabase connection was down):
+  - `20261009120000_direct_and_group_messages.sql`
+  - `20261009120100_portfolio_owner_select.sql`: without it, deleting a post leaves its public photo copies in storage.
+
+  Until they're applied, the app shows "database update pending" when you try to start a new chat.
+- **Needs a signed-in check:** a real post, editing and deleting a post, the service-area save, direct and group messages between two accounts.
+
 ---
 
 ## Decisions made (defaults; revisit with Tim)

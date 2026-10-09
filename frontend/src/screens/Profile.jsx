@@ -11,13 +11,14 @@ import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { PolicyTable, priceLabel } from '../components/Booking.jsx'
 import { ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
+import { MapPreview } from '../components/map/LazyMap.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
 import { addDays, fmtBooking, fmtChip, fmtMonth, fromKey, parseDates, toKey, today } from '../lib/dates.js'
 import { freeDays, getPerson, getProvider } from '../api/catalog.js'
 import { listAlbums, toViewerAlbum } from '../api/portfolio.js'
-import { startInquiry } from '../api/messages.js'
+import { messageError, startDirectMessage, startInquiry } from '../api/messages.js'
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
@@ -120,11 +121,12 @@ export default function Profile() {
     if (contacting) return
     setContacting(true)
     try {
-      const conversationId = await startInquiry(provider.id)
+      // Photographers get an inquiry thread (tied to their listing); anyone else a direct message.
+      const conversationId = provider ? await startInquiry(provider.id) : await startDirectMessage(person.profileId)
       navigate(`/inbox/${conversationId}`)
     } catch (e) {
       console.warn(e)
-      toast('Couldn’t start a conversation. Try again.')
+      toast(messageError(e))
       setContacting(false)
     }
   }
@@ -198,6 +200,11 @@ export default function Profile() {
               Book {firstName}
             </Link>
           </>
+        )}
+        {!provider && !isMine && (
+          <button className="btn block mt" onClick={contact} disabled={contacting}>
+            <MessageCircle size={16} /> {contacting ? 'Opening…' : `Message ${firstName}`}
+          </button>
         )}
         {provider && isMine && (
           <div className="row gap-xs mt full">
@@ -326,6 +333,12 @@ export default function Profile() {
           <h4 className="section-title">Service area</h4>
           <div className="small">{provider.serviceArea}</div>
           <div className="muted small">Travel fee: {provider.travelFee}</div>
+          {provider.location && (
+            <Link to={`/search?view=map&focus=${provider.id}`} className="area-preview" aria-label={`See where ${firstName} travels on the map`}>
+              <MapPreview location={provider.location} radiusKm={provider.radiusKm} avatar={provider.avatar} />
+              <span className="area-preview-open"><MapPin size={13} /> Open map</span>
+            </Link>
+          )}
           <div className="mt">
             <PolicyTable policy={provider.cancellationPolicy} />
           </div>

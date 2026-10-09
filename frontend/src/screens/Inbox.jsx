@@ -1,23 +1,28 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Briefcase, MessageCircle, Search, Users } from 'lucide-react'
+import { Briefcase, MessageCircle, PenSquare, Search, Users } from 'lucide-react'
 import ProfileLink from '../components/ProfileLink.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
 import { ago } from '../lib/dates.js'
-import { listConversations } from '../api/messages.js'
+import { listConversations, subscribeToInbox } from '../api/messages.js'
 
 const preview = (c) => {
   const last = c.lastMessage
-  if (!last) return 'Say hi 👋'
-  return (last.fromMe ? 'You: ' : '') + (last.text || 'Shared a post')
+  if (!last) return c.isGroup ? 'New group · say hi 👋' : 'Say hi 👋'
+  const sender = c.members.find((m) => m.profileId === last.senderId)
+  const who = last.fromMe ? 'You: ' : c.isGroup ? `${sender?.name.split(' ')[0] ?? 'Someone'}: ` : ''
+  return who + (last.text || 'Shared a post')
 }
 
 export default function Inbox() {
   const { user, loading: authLoading } = useAuth()
   const { data, loading, error, reload } = useQuery(user ? listConversations : null, [user?.id])
   const [q, setQ] = useState('')
+
+  // Live: refresh when a message arrives in any of my conversations.
+  useEffect(() => (user ? subscribeToInbox(reload) : undefined), [user?.id, reload])
 
   const query = q.trim().toLowerCase()
   const list = (data || []).filter(
@@ -28,6 +33,11 @@ export default function Inbox() {
     <div>
       <header className="home-header">
         <div className="title-lg">Messages</div>
+        {user && (
+          <Link to="/inbox/new" className="inbox-compose" aria-label="New message">
+            <PenSquare size={18} />
+          </Link>
+        )}
       </header>
       {authLoading ? (
         <Loading />
@@ -49,20 +59,20 @@ export default function Inbox() {
             <EmptyState
               icon={MessageCircle}
               title="No messages yet"
-              text="Ask a photographer a question from their profile, or request a booking to start a thread."
-              action={<Link className="btn sm ghost" to="/search">Find photographers</Link>}
+              text="Message anyone on photomatch, ask a photographer a question, or request a booking to start a thread."
+              action={<Link className="btn sm" to="/inbox/new">New message</Link>}
             />
           ) : !list.length ? (
             <EmptyState compact icon={Search} title="No matches" text={`Nothing matches “${q.trim()}”.`} />
           ) : (
             <div className="mt-sm">
               {list.map((c) => {
-                const [first, second] = c.members
+                const [first] = c.members
                 return (
                   <Link key={c.id} to={`/inbox/${c.id}`} className={`convo ${c.unread ? 'unread' : ''}`}>
                     <div className="convo-avatar">
                       {first && <ProfileLink id={first.id}><img className="avatar" src={first.avatar} alt="" /></ProfileLink>}
-                      {c.kind === 'group' && second && <img className="avatar stacked" src={second.avatar} alt="" />}
+                      {c.isGroup && c.members.length > 1 && <span className="group-count">+{c.members.length}</span>}
                     </div>
                     <div className="grow ellipsis">
                       <div className="row gap-xs">
@@ -71,7 +81,7 @@ export default function Inbox() {
                         {c.kind === 'inquiry' && <span className="tag">Inquiry</span>}
                         {c.kind === 'group' && <span className="tag"><Users size={10} /> Group</span>}
                       </div>
-                      <div className={`small ellipsis ${c.unread ? '' : 'muted'}`}>{preview(c)}</div>
+                      <div className={`small ellipsis convo-preview ${c.unread ? 'unread' : 'muted'}`}>{preview(c)}</div>
                     </div>
                     <div className="convo-meta">
                       <div className="muted tiny">{ago(c.lastMessage?.at || c.lastMessageAt)}</div>

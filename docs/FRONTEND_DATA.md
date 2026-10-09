@@ -35,7 +35,25 @@ All data shown in the app comes from Supabase. Screens never build queries thems
 
 **Discover card** (`getFeed({ limit, category })`): `{ id/photoId, albumId, authorId, provider, title, category, photos [{id, src, exif}], tags[], reason, exploration, exif }`
 
-**Conversation** (`listConversations()`): `{ id, kind, title, bookingId, booking, members [{id, profileId, name, avatar}], lastMessage {text, fromMe, at}, lastMessageAt, unread }`. **Message**: `{ id, from, mine, text, sharedAlbum {id, title, cover, providerId}|null, at, time }`.
+**Conversation** (`listConversations()`, `getConversation(id)`):
+`{ id, kind 'direct'|'group'|'booking'|'inquiry', isGroup, title, bookingId, booking, members [{id, profileId, name, avatar, username, isPhotographer, lastReadAt}], lastMessage {text, fromMe, at, senderId}, lastMessageAt, unread }`. `members` excludes me.
+
+**Message** (`listMessages(id)`, `sendMessage(id, {text, sharedAlbumId})`): `{ id, from, mine, text, sharedAlbum {id, title, cover, providerId}|null, at, time }`.
+
+**Starting conversations:**
+- `startDirectMessage(profileId)` opens a one-to-one thread with anyone.
+- `startInquiry(providerId)` asks a photographer a question.
+- `createGroup(title, profileIds)` needs at least 2 other people.
+- `addGroupMembers`, `renameGroup` and `leaveGroup` manage a group.
+- `searchPeople(q)` finds people to message; with an empty query it returns people you've talked to.
+
+All of these run as database functions, which enforce blocks: a blocked person can't message you in one-to-one threads.
+
+**Live:**
+- `openChat(id, { onMessage, onRead, onTyping })` returns `{ typing(), close() }`.
+- `subscribeToInbox(onChange)` updates the inbox list and tab badge.
+
+Errors for display come from `messageError(err)`.
 
 ## IDs and links
 

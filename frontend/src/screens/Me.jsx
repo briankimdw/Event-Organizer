@@ -424,6 +424,7 @@ function ProviderView({ detail, bookings }) {
     { done: false, label: 'Set up payouts', sub: 'Coming soon: bank payouts aren’t available yet', Icon: CreditCard, disabled: true },
     { done: packageCount > 0, label: 'Add a package', sub: 'Clients book a package', Icon: Package, tab: 'packages' },
     { done: albumCount > 0, label: 'Add portfolio work', sub: 'Post at least one album', Icon: Images, tab: 'portfolio' },
+    { done: !!provider?.location, label: 'Set your service area', sub: 'Where you’re based and how far you travel', Icon: MapPin, tab: 'calendar' },
   ]
   const doneCount = steps.filter((s) => s.done).length
 

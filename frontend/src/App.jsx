@@ -14,6 +14,7 @@ import Delivery from './screens/Delivery.jsx'
 import Review from './screens/Review.jsx'
 import Inbox from './screens/Inbox.jsx'
 import Chat from './screens/Chat.jsx'
+import NewMessage from './screens/NewMessage.jsx'
 import Me from './screens/Me.jsx'
 import Upload from './screens/Upload.jsx'
 import Verify from './screens/Verify.jsx'
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/bookings/:id/delivery" element={<Delivery />} />
             <Route path="/bookings/:id/review" element={<Review />} />
             <Route path="/inbox" element={<Inbox />} />
+            <Route path="/inbox/new" element={<NewMessage />} />
             <Route path="/inbox/:id" element={<Chat />} />
             <Route path="/me" element={<Me />} />
             <Route path="/upload" element={<Upload />} />

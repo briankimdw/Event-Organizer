@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Bookmark, Flag, Heart, ImageOff, Info, MapPin, Camera, Send, Sparkles, X } from 'lucide-react'
+import { Bookmark, Flag, Heart, ImageOff, Info, MapPin, Camera, MoreHorizontal, Pencil, Send, Sparkles, Trash2, X } from 'lucide-react'
 import Sheet from '../components/Sheet.jsx'
 import ExifPanel from '../components/Exif.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
@@ -9,6 +9,7 @@ import { SaveSheet, ModerationSheet, ShareSheet } from '../components/PostSheets
 import { money, startingPrice } from '../components/Booking.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
+import ManagePostSheets from '../components/upload/ManagePost.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
@@ -45,7 +46,7 @@ export default function Gallery() {
   const { personId } = useParams()
   const [params] = useSearchParams()
   const { user } = useAuth()
-  const { data, loading, error, reload } = useQuery(() => loadGallery(personId), [personId])
+  const { data, loading, error, reload, setData } = useQuery(() => loadGallery(personId), [personId])
 
   if (loading) return <div className="reel reel-state"><Loading /></div>
   if (error) return <div className="reel reel-state"><GalleryClose /><ErrorState error={error} onRetry={reload} /></div>
@@ -78,6 +79,10 @@ export default function Gallery() {
       startPost={params.get('post')}
       startPhoto={params.get('photo')}
       closeFallback={`/u/${p.id}`}
+      manage={isMine ? {
+        onUpdated: (a) => setData((d) => ({ ...d, albums: d.albums.map((x) => (x.id === a.id ? a : x)) })),
+        onDeleted: (id) => setData((d) => ({ ...d, albums: d.albums.filter((x) => x.id !== id) })),
+      } : null}
     />
   )
 }
@@ -96,13 +101,14 @@ function GalleryClose({ to = '/' }) {
 // tags?, autoTags, realPhoto?, photos: [{ id, src, beforeSrc?, exif, autoTags }] }].
 // owner: { name, avatar?, username, idVerified?, pro?, profileId? | profileTo?, providerId?, blockProfileId? }.
 // book: { to, label, line } or null.
-export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeFallback }) {
+// manage (owner only, optional): { onUpdated(viewerAlbum), onDeleted(albumId) } adds edit / delete.
+export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeFallback, manage = null }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { saved, liked, toggleLike } = useStore()
 
   // Open at a given album (or photo, for older links).
-  const [index, setIndex] = useState(() => {
+  const [openIndex, setIndex] = useState(() => {
     const byPost = albums.findIndex((a) => a.id === startPost)
     const byPhoto = albums.findIndex((a) => a.photos.some((p) => photoKey(p) === startPhoto))
     return Math.max(0, byPost >= 0 ? byPost : byPhoto)
@@ -126,6 +132,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
   const [reporting, setReporting] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [hintSeen, setHintSeen] = useState(false)
+  const [manageSheet, setManageSheet] = useState(null) // owner: null | menu | edit | delete
 
   const viewerRef = useRef()
   const panelRef = useRef()
@@ -135,6 +142,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
   const holdTimer = useRef()
   const wheelLock = useRef(false)
 
+  const index = Math.min(openIndex, albums.length - 1) // albums can shrink when the owner deletes one
   const album = albums[index]
   const photoIndex = photoOf[album.id] ?? 0
   const photo = album.photos[photoIndex]
@@ -206,7 +214,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
   // ---- keyboard and wheel ----
   useEffect(() => {
     const onKey = (e) => {
-      if (info || saveFor || reporting || sharing) return
+      if (info || saveFor || reporting || sharing || manageSheet) return
       if (!zoomed) {
         if (e.key === 'ArrowDown') goAlbum(index + 1)
         if (e.key === 'ArrowUp') goAlbum(index - 1)
@@ -459,7 +467,14 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
           {zoomed ? (
             <button className="reel-zoom-pill" onClick={() => setZoom(NO_ZOOM)}>{zoom.s.toFixed(1)}× · reset</button>
           ) : (
-            album.photos.length > 1 && <span className="reel-count">{photoIndex + 1} / {album.photos.length}</span>
+            <span className="reel-top-right">
+              {album.photos.length > 1 && <span className="reel-count">{photoIndex + 1} / {album.photos.length}</span>}
+              {manage && (
+                <button className="icon-btn reel-more" onClick={() => setManageSheet('menu')} aria-label="Edit or delete this post">
+                  <MoreHorizontal size={22} />
+                </button>
+              )}
+            </span>
           )}
         </header>
 
@@ -551,11 +566,34 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
             </div>
           </>
         )}
-        <button className="list-row danger mt" onClick={() => { setInfo(false); setReporting(true) }}>
-          <span className="round-icon"><Flag size={16} /></span>
-          <div className="grow small">Report this album</div>
-        </button>
+        {manage ? (
+          <div className="mt">
+            <button className="list-row" onClick={() => { setInfo(false); setManageSheet('edit') }}>
+              <span className="round-icon"><Pencil size={16} /></span>
+              <div className="grow small">Edit details</div>
+            </button>
+            <button className="list-row danger" onClick={() => { setInfo(false); setManageSheet('delete') }}>
+              <span className="round-icon"><Trash2 size={16} /></span>
+              <div className="grow small">Delete post</div>
+            </button>
+          </div>
+        ) : (
+          <button className="list-row danger mt" onClick={() => { setInfo(false); setReporting(true) }}>
+            <span className="round-icon"><Flag size={16} /></span>
+            <div className="grow small">Report this album</div>
+          </button>
+        )}
       </Sheet>
+
+      {manage && (
+        <ManagePostSheets
+          album={album}
+          sheet={manageSheet}
+          setSheet={setManageSheet}
+          onUpdated={manage.onUpdated}
+          onDeleted={manage.onDeleted}
+        />
+      )}
 
       <SaveSheet open={!!saveFor} onClose={() => setSaveFor(null)} photoId={saveFor} />
       <ShareSheet
