@@ -1,4 +1,4 @@
-// Create the fake test users from docs/private/test-users.json in your Supabase project.
+// Create the fake test users from docs/test-users.json in your Supabase project.
 //
 //   cd frontend
 //   node scripts/seed-test-users.mjs                 # accounts + profiles + photographer listings
@@ -34,9 +34,9 @@ if (!url || !serviceKey) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY (put them in services/ml/.env; see .env.example).')
   process.exit(1)
 }
-const dataPath = resolve(root, 'docs/private/test-users.json')
+const dataPath = resolve(root, 'docs/test-users.json')
 if (!existsSync(dataPath)) {
-  console.error('Missing docs/private/test-users.json')
+  console.error('Missing docs/test-users.json')
   process.exit(1)
 }
 const data = JSON.parse(readFileSync(dataPath, 'utf8'))

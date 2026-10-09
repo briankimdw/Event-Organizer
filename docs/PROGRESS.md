@@ -130,6 +130,8 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
 
 ## Open items / known issues
 
+- **Test users:** 12 fake accounts (7 photographers, 5 clients) with their logins are in `docs/test-users.md` / `docs/test-users.json`, which are public in the repo. Create them all with `cd frontend && node scripts/seed-test-users.mjs --with-photos` (needs the service role key in `services/ml/.env`). **Delete them before launch.**
+
 - **ML worker setup:** put `SUPABASE_SERVICE_ROLE_KEY` and `ML_WEBHOOK_SECRET` in `services/ml/.env` (template: `.env.example`), then run `python -m app.worker --once` after posting photos. Choose a host later (see `services/ml/README.md`).
 - **Supabase advisor:** turn on *leaked password protection* (Authentication → password security), now that accounts use passwords. It may require a paid plan.
 

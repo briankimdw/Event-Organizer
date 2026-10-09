@@ -1,0 +1,235 @@
+{
+  "note": "Test accounts (fake @example.com emails) used by frontend/scripts/seed-test-users.mjs. Throwaway logins for the dev project; delete these users before launch.",
+  "photographers": [
+    {
+      "username": "mayachen",
+      "name": "Maya Chen",
+      "email": "mayachen.test@example.com",
+      "password": "CuUa-VQ3a-aqRM!",
+      "slug": "maya-chen-photo",
+      "city": "Los Angeles, CA",
+      "services": [
+        "wedding",
+        "portrait",
+        "event"
+      ],
+      "bio": "Documentary-style wedding and portrait photographer. Warm tones, honest moments, lots of golden hour.",
+      "albums": [
+        {
+          "title": "Nguyen–Park wedding",
+          "category": "wedding",
+          "count": 6
+        },
+        {
+          "title": "Golden hour portraits",
+          "category": "portrait",
+          "count": 4
+        },
+        {
+          "title": "Beach engagement",
+          "category": "portrait",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "username": "jonahshoots",
+      "name": "Jonah Reyes",
+      "email": "jonahshoots.test@example.com",
+      "password": "BMeY-UBWG-mpwx!",
+      "slug": "jonah-reyes",
+      "city": "Los Angeles, CA",
+      "services": [
+        "event",
+        "portrait"
+      ],
+      "bio": "Street and event shooter. Low light is my comfort zone.",
+      "albums": [
+        {
+          "title": "Rainy night downtown",
+          "category": "event",
+          "count": 3
+        },
+        {
+          "title": "Product launch party",
+          "category": "event",
+          "count": 5
+        },
+        {
+          "title": "Street portrait walk",
+          "category": "portrait",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "username": "priya.frames",
+      "name": "Priya Nair",
+      "email": "priyaframes.test@example.com",
+      "password": "ntX5-rj8a-THWd!",
+      "slug": "priya-frames",
+      "city": "Pasadena, CA",
+      "services": [
+        "graduation",
+        "headshots",
+        "portrait"
+      ],
+      "bio": "Bright, clean portraits. Grad sessions and corporate headshots.",
+      "albums": [
+        {
+          "title": "UCLA class of 2026",
+          "category": "graduation",
+          "count": 4
+        },
+        {
+          "title": "Team headshots",
+          "category": "headshots",
+          "count": 6
+        },
+        {
+          "title": "Grad portrait edit",
+          "category": "graduation",
+          "kind": "before_after"
+        }
+      ]
+    },
+    {
+      "username": "leo.spaces",
+      "name": "Leo Okafor",
+      "email": "leospaces.test@example.com",
+      "password": "MtmK-CkTj-BWbj!",
+      "slug": "leo-spaces",
+      "city": "Santa Monica, CA",
+      "services": [
+        "real-estate",
+        "product"
+      ],
+      "bio": "Interiors, architecture and product work. HDR done tastefully.",
+      "albums": [
+        {
+          "title": "Venice modern listing",
+          "category": "real-estate",
+          "count": 5
+        },
+        {
+          "title": "Skincare launch",
+          "category": "product",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "username": "sofia.wild",
+      "name": "Sofia Marin",
+      "email": "sofiawild.test@example.com",
+      "password": "tpDK-vKHe-Qgv3!",
+      "slug": "sofia-wild",
+      "city": "Malibu, CA",
+      "services": [
+        "coaching",
+        "meetups"
+      ],
+      "bio": "Landscape photographer. Small-group sunrise meetups and 1:1 long-exposure coaching.",
+      "albums": [
+        {
+          "title": "Sunrise at El Matador",
+          "category": "meetups",
+          "count": 4
+        },
+        {
+          "title": "Long exposure workshop",
+          "category": "coaching",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "username": "diego.alvarez",
+      "name": "Diego Alvarez",
+      "email": "diegoalvarez.test@example.com",
+      "password": "dgHg-BFNW-kyQx!",
+      "slug": "diego-alvarez",
+      "city": "Long Beach, CA",
+      "services": [
+        "wedding",
+        "event"
+      ],
+      "bio": "Candid coverage for big families and bigger dance floors. English & Spanish.",
+      "albums": [
+        {
+          "title": "Garden wedding at Descanso",
+          "category": "wedding",
+          "count": 6
+        },
+        {
+          "title": "Rooftop birthday",
+          "category": "event",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "username": "hanakim.studio",
+      "name": "Hana Kim",
+      "email": "hanakimstudio.test@example.com",
+      "password": "Ghcn-4MWk-mBRm!",
+      "slug": "hana-kim-studio",
+      "city": "Koreatown, Los Angeles",
+      "services": [
+        "headshots",
+        "portrait"
+      ],
+      "bio": "Studio portraits with a moody, editorial edge.",
+      "albums": [
+        {
+          "title": "Actor headshots",
+          "category": "headshots",
+          "count": 5
+        },
+        {
+          "title": "Editorial: monochrome",
+          "category": "portrait",
+          "count": 4,
+          "grayscale": true
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "username": "jordanlee",
+      "name": "Jordan Lee",
+      "email": "jordanlee.test@example.com",
+      "password": "kXqB-hR8N-s9MS!",
+      "city": "Los Angeles, CA"
+    },
+    {
+      "username": "sampatel",
+      "name": "Sam Patel",
+      "email": "sampatel.test@example.com",
+      "password": "RBs2-JDMs-nXhK!",
+      "city": "Culver City, CA"
+    },
+    {
+      "username": "taylorb",
+      "name": "Taylor Brooks",
+      "email": "taylorb.test@example.com",
+      "password": "Ch7g-dwdY-7Hky!",
+      "city": "Los Angeles, CA"
+    },
+    {
+      "username": "rosa.d",
+      "name": "Rosa Diaz",
+      "email": "rosad.test@example.com",
+      "password": "zqy7-U7dX-Kghf!",
+      "city": "Long Beach, CA"
+    },
+    {
+      "username": "kai.film",
+      "name": "Kai Tanaka",
+      "email": "kaifilm.test@example.com",
+      "password": "XZEm-bv6f-uf9n!",
+      "city": "Little Tokyo, Los Angeles"
+    }
+  ]
+}
