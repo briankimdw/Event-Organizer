@@ -2,3 +2,6 @@
 .env.*
 !.env.example
 .idea/*
+
+# Private notes and test logins (never pushed)
+docs/private/
