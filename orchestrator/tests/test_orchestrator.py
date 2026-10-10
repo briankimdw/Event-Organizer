@@ -86,7 +86,7 @@ required = true
 {extra_checks}
 
 [guards]
-protected = ["orchestrator/**", ".gitignore"]
+protected = ["orchestrator/**", ".gitignore", "specs/**"]
 test_globs = ["tests/**"]
 secret_file_globs = ["**/.env", "**/.env.*"]
 secret_file_allow = ["**/.env.example"]
@@ -96,6 +96,73 @@ migration_globs = ["migrations/**/*.sql"]
 gh = "{gh}"
 commit_trailers = ["Co-Authored-By: Claude <noreply@anthropic.com>"]
 """
+
+
+SPEC = """# Calculator add and sub
+
+- status: approved        <!-- draft | approved -->
+- project: calc
+- created: 2026-10-10 / approved: 2026-10-10
+- revision: 1
+
+## 1. Purpose and definition of success
+calc can add and subtract two numbers.
+
+## 2. Users and context
+Internal helper module.
+
+## 3. Scope
+**Do (v1):**
+- add(a, b) and sub(a, b) in calc.py
+**Won't do (explicitly out of scope / deferred):**
+- multiplication
+
+## 4. Inputs, outputs and interface
+add(2, 3) -> 5, sub(5, 3) -> 2.
+
+## 5. Main flow and state
+N/A: pure functions.
+
+## 6. Data and persistence
+N/A: nothing persisted.
+
+## 7. Failure handling
+Non-numbers raise TypeError.
+
+## 8. Non-functional requirements (as numbers)
+Each call under 1 ms.
+
+## 9. Environment, constraints and prohibitions
+Plain Python 3.12, no dependencies.
+
+## 10. Integration with existing assets
+Extends calc.py.
+
+### Allowed paths
+- calc.py
+- tests/**
+
+## 11. Acceptance criteria (runnable checks)
+- [ ] AC-1: `python3 -c "from calc import add; assert add(2, 3) == 5"` → no output (exit 0)
+- [ ] AC-2: `python3 -c "from calc import sub; assert sub(5, 3) == 2"` → no output (exit 0)
+- [ ] AC-3: `python3 -c "from calc import add; add('a', 1)"` → TypeError (exit 1)
+- [ ] AC-4: Visual: read calc.py → both functions have docstrings
+
+## 12. Decision log (two layers)
+### User decisions (D): never re-asked; only the user can change them
+- D-1: no float rounding (2026-10-10)
+### AI placeholders (T): the user can veto; may be added during implementation
+- T-1: module-level functions — reason: matches existing calc.py
+### Do-not-decide areas: the agent stops and asks (needs_human) on these
+- none (user answered 2026-10-10)
+### Approvals
+- test-removal
+
+## 13. Implementation log and evidence
+<!-- logs live in the PR -->
+"""
+
+ADD_SUB_IMPL = GOOD_IMPL + "\n\ndef sub(a, b):\n    return a - b\n"
 
 
 def sh(cwd: Path, *args: str) -> str:
@@ -567,6 +634,86 @@ class OrchestratorTest(unittest.TestCase):
     def store_dir(self) -> Path:
         store = Store(self.repo)
         return store.task_dir(store.latest_id())
+
+    # ---------- /spec skill format ----------
+
+    def test_spec_format_is_parsed(self) -> None:
+        from orchestrator.plan import parse_plan
+
+        plan = parse_plan(SPEC)
+        self.assertEqual((plan.format, plan.title), ("spec", "Calculator add and sub"))
+        self.assertIn("add and subtract", plan.sections["objective"])
+        self.assertIn("multiplication", plan.sections["scope"])
+        self.assertIn("Plain Python", plan.sections["design constraints"])
+        self.assertEqual(plan.allowed_paths, ["calc.py", "tests/**"])
+        self.assertEqual(plan.approvals, {"test-removal"})
+        self.assertEqual(
+            [(a.id, a.expect_exit) for a in plan.acceptance],
+            [("AC-1", 0), ("AC-2", 0), ("AC-3", 1)],
+        )
+        self.assertEqual(
+            plan.acceptance[0].command, 'python3 -c "from calc import add; assert add(2, 3) == 5"'
+        )
+        self.assertEqual(len(plan.manual_checks), 1)
+        self.assertIn("Visual", plan.manual_checks[0])
+
+    def test_spec_must_be_approved_and_complete(self) -> None:
+        from orchestrator.plan import PlanError, parse_plan
+
+        cases = {
+            "status is 'draft'": SPEC.replace("- status: approved", "- status: draft"),
+            "missing section '## 5.'": SPEC.replace("## 5. Main flow and state", "## Flow"),
+            "template slot": SPEC.replace("Extends calc.py.", "{conventions to follow}"),
+            "Unconfirmed": SPEC.replace(
+                "- none (user answered 2026-10-10)", "- Unconfirmed (to ask before Gate B)"
+            ),
+        }
+        for expected, text in cases.items():
+            with self.assertRaises(PlanError) as cm:
+                parse_plan(text)
+            self.assertIn(expected, str(cm.exception))
+
+    def test_unfilled_skill_template_is_rejected(self) -> None:
+        from orchestrator.plan import PlanError, parse_plan
+
+        skill = HERE.parent.parent / ".claude" / "skills" / "spec" / "SKILL.md"
+        body = skill.read_text().split("```markdown\n", 1)[1].split("\n```\n", 1)[0]
+        with self.assertRaises(PlanError) as cm:
+            parse_plan(body.replace("- status: draft", "- status: approved"))
+        self.assertIn("template", str(cm.exception))
+
+    def test_spec_acceptance_commands_are_required_checks(self) -> None:
+        spec = self.tmp / "spec.md"
+        spec.write_text(SPEC)
+        self.scenario(
+            self.good_turn(summary="add only"),
+            {"write": {"calc.py": ADD_SUB_IMPL}, "summary": "added sub"},
+        )
+        rc = self.cli("start", "--plan", str(spec), "--auto-ship")
+        st = self.state()
+        self.assertEqual((rc, st.status), (0, "shipped"), self.last_output)
+        self.assertEqual(st.remediations, 1)
+        first, second = self.calls()
+        self.assertIn("AC-2 (required, from the plan", first["prompt"])
+        self.assertIn("### AC-2: failed", second["prompt"])
+        self.assertIn("ImportError", second["prompt"])
+        names = {c["name"]: c["status"] for c in st.last_verification}
+        self.assertEqual(
+            {k: names[k] for k in ("AC-1", "AC-2", "AC-3")},
+            {"AC-1": "passed", "AC-2": "passed", "AC-3": "passed"},
+        )
+        body = json.loads((self.bin / "prs.json").read_text())[0]["body"]
+        self.assertIn("| `AC-3` | ✅", body)
+        self.assertIn("Manual checks for the reviewer", body)
+        self.assertIn("- [ ] AC-4: Visual: read calc.py", body)
+
+    def test_agent_cannot_edit_specs(self) -> None:
+        self.scenario(
+            {**self.good_turn(), "write": {**self.good_turn()["write"], "specs/x.md": "hi\n"}},
+            {"delete": ["specs/x.md"]},
+        )
+        self.assertEqual(self.cli("start", "--plan", str(self.plan)), 0, self.last_output)
+        self.assertIn("[protected] specs/x.md", self.calls()[1]["prompt"])
 
     def test_source_has_no_merge_or_deploy_path(self) -> None:
         src = "\n".join(p.read_text() for p in (HERE.parent).glob("*.py"))

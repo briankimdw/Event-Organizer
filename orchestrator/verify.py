@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from . import proc
+from .plan import AcceptanceCheck
 
 # Dummy settings so the app imports without real credentials (backend/.env is never
 # present in a worktree because it is gitignored).
@@ -151,6 +152,42 @@ def run_checks(
         if r.stopped:
             break
     return results
+
+
+def run_acceptance(
+    checks: list[AcceptanceCheck], worktree: Path, timeout: float
+) -> list[CheckResult]:
+    """The approved plan's command ACs: `bash -c <command>` from the repo root; the exit code
+    decides. Commands come from the frozen plan copy, never from the worktree."""
+    env = proc.scrubbed_env(CHECK_ENV)
+    results = []
+    for ac in checks:
+        argv = ["bash", "-c", ac.command]
+        r = proc.run(argv, worktree, env, timeout)
+        status = _ac_status(r, ac.expect_exit)
+        if status == "failed":
+            r2 = proc.run(argv, worktree, env, timeout)
+            if _ac_status(r2, ac.expect_exit) == "passed":
+                status = "flaky"
+                r.output += "\n--- rerun without changes PASSED (flaky) ---\n" + r2.output[-2000:]
+        header = f"{ac.text}\nexpected exit {ac.expect_exit}, got {r.code}\n\n"
+        results.append(
+            CheckResult(
+                ac.id, status, True, r.code, round(r.seconds, 1), ac.command, header + r.output
+            )
+        )
+        if r.stopped:
+            break
+    return results
+
+
+def _ac_status(r: proc.Result, expect_exit: int) -> str:
+    # Unlike tool checks, exit 127 here means the implementation is missing: a real failure.
+    if r.stopped:
+        return "unavailable"
+    if r.timed_out:
+        return "timeout"
+    return "passed" if r.code == expect_exit else "failed"
 
 
 def _classify(chk: dict[str, Any], r: proc.Result) -> str:

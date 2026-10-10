@@ -3,6 +3,8 @@
 You write and approve a plan. The orchestrator gets Claude Code to implement it, verifies the result itself, sends failures back to Claude until the checks pass (within set limits), and then opens a pull request for you to review. It never merges or deploys.
 
 ```
+/spec <idea> → interview → specs/<slug>.md (you approve)      or hand-write plans/<name>.md
+        │
 plan (you approve) → worktree + branch → claude implements → checks run outside the agent
         ↑                                                         │ fail (bounded retries)
         └──── failure output, plan re-sent, same Claude session ──┘
@@ -25,6 +27,31 @@ Everything is Python 3.12 standard library. Run commands from the repo root.
 
 ## Write a plan
 
+There are two ways. Both produce a file you approve, and the orchestrator never writes or infers one.
+
+### Option A (recommended): `/spec` in Claude Code
+
+Open a normal Claude Code session in this repo and run `/spec <one-line idea>`. The `spec` skill lives in `.claude/skills/spec/`. It's adapted from [dualform-labs/spec-skill](https://github.com/dualform-labs/spec-skill); see `VENDORED.md` for the changes. It:
+
+1. Reads the repo and this orchestrator's config, so it only asks what you have to decide.
+2. Interviews you in rounds of multiple-choice questions, each with a recommended default.
+3. Writes `specs/<slug>.md` using a 13-section template.
+4. Has a fresh agent try to implement from the spec alone, and fills any gaps it would have to ask about.
+5. Shows you the full spec. **Approve** sets `status: approved` and prints the `start` command. The skill never implements anything itself.
+
+```bash
+python3 -m orchestrator start --plan specs/<slug>.md
+```
+
+For spec files, the orchestrator:
+
+- **Requires** `- status: approved`, sections `## 1.` to `## 12.`, no unfilled `{…}` template slots, and no "Unconfirmed (to ask before Gate B)" entries.
+- **Runs command acceptance criteria as required checks.** These are the `` - [ ] AC-n: `command` → … (exit N) `` lines in §11. Each runs with `bash -c` from the repo root, alongside the checks below. Failures go back to Claude like any other check.
+- **Lists `Visual:` acceptance criteria in the PR** as manual checks for the reviewer.
+- **Reads `### Allowed paths` (§10) and `### Approvals` (§12)** exactly like the plan format's sections.
+
+### Option B: hand-write a plan
+
 Copy `plans/TEMPLATE.md` to `plans/<name>.md` and fill it in. The orchestrator refuses a plan that lacks any of these sections, or where one is only a placeholder:
 
 - `## Objective`
@@ -33,7 +60,7 @@ Copy `plans/TEMPLATE.md` to `plans/<name>.md` and fill it in. The orchestrator r
 - `## Design constraints`
 - `## Required tests`
 
-It also refuses any plan without a `Status: approved` line. It never writes or infers a plan.
+It also refuses any plan without a `Status: approved` line. Acceptance criteria written as `` - AC-1: `command` `` run as required checks here too.
 
 There are two optional sections:
 
@@ -91,6 +118,7 @@ Checks are configured in `orchestrator/config.toml`. They run in the task's work
 | secrets | `gitleaks protect --staged` (the task's whole diff) | yes |
 | pip-audit | `pip-audit -r requirements.txt` | no (needs network) |
 | frontend-build | `npm ci && npm run build` | yes, but only when `frontend/**` changed |
+| AC-n | the plan's command acceptance criteria (`bash -c`, repo root, exit code decides) | yes |
 
 The format check covers only the files a task changes, because two existing files aren't ruff-formatted and the orchestrator doesn't reformat code outside a task's scope. `B904` is ignored for the same reason (see `backend/pyproject.toml`).
 
@@ -98,7 +126,7 @@ Each failed check is rerun once with nothing changed. If it passes the second ti
 
 The **guards** inspect the diff at the same point. Claude is sent back to fix these:
 
-- edits to protected files (`orchestrator/`, `plans/`, `backend/pyproject.toml`, `requirements-dev.txt`, `conftest.py`, `.gitignore`, `.claude/`)
+- edits to protected files (`orchestrator/`, `plans/`, `specs/`, `backend/pyproject.toml`, `requirements-dev.txt`, `conftest.py`, `.gitignore`, `.claude/`)
 - changes outside the Allowed paths
 - `.env` or key files
 - added `skip`/`xfail`/`noqa`/`type: ignore`
@@ -198,7 +226,7 @@ git branch -d orch/<slug>
 python3 -m unittest discover -s orchestrator/tests -t . -v
 ```
 
-The suite runs 28 hermetic acceptance tests using a fake `claude` and a fake `gh`, a throwaway repo and a local bare remote. They cover:
+The suite runs 33 hermetic acceptance tests using a fake `claude` and a fake `gh`, a throwaway repo and a local bare remote. They cover:
 
 - plan required
 - happy path to PR
@@ -218,3 +246,4 @@ The suite runs 28 hermetic acceptance tests using a fake `claude` and a fake `gh
 - auth errors not retried
 - no merge or force-push path
 - simplifier: kept when checks pass, discarded when it breaks checks, touches tests or errors, never uses a retry, `--no-simplify`
+- `/spec` files: parsed, refused when unapproved or unfilled (including the skill's own blank template), acceptance commands run as required checks and fed back on failure, `Visual:` criteria listed in the PR, `specs/` protected

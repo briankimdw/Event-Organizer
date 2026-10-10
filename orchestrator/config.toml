@@ -118,10 +118,15 @@ when_changed = ["frontend/**"]
 required = true
 offline_markers = ["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]
 
+# Command acceptance criteria from the approved plan/spec ("AC-n: `command` ... (exit N)")
+# run as extra required checks after the configured ones: `bash -c` from the repo root.
+[acceptance]
+enabled = true
+
 [guards]
 # Changing these needs a human; the agent is told it may not.
 protected = [
-  "orchestrator/**", "plans/**", ".claude/**", "CLAUDE.md", ".gitignore", "*/.gitignore",
+  "orchestrator/**", "plans/**", "specs/**", ".claude/**", "CLAUDE.md", ".gitignore", "*/.gitignore",
   "backend/pyproject.toml", "backend/requirements-dev.txt", "backend/tests/conftest.py",
   ".github/**",
 ]

@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from . import proc
+from .plan import AcceptanceCheck
 
 PROMPTS = Path(__file__).parent / "prompts"
 
@@ -73,12 +74,18 @@ def plan_block(plan_text: str, sha: str) -> str:
     return f'<approved_plan sha256="{sha}">\n{plan_text.strip()}\n</approved_plan>'
 
 
-def checks_overview(cfg: dict[str, Any]) -> str:
+def checks_overview(cfg: dict[str, Any], acceptance: list[AcceptanceCheck] | None = None) -> str:
     lines = []
     for c in cfg.get("checks", []):
         req = "required" if c.get("required", True) else "optional"
         when = f", only if {c['when_changed']} changed" if c.get("when_changed") else ""
         lines.append(f"- {c['name']} ({req}{when}): cd {c.get('cwd', '.')} && {c['cmd']}")
+    if cfg.get("acceptance", {}).get("enabled", True):
+        for ac in acceptance or []:
+            lines.append(
+                f"- {ac.id} (required, from the plan; repo root, must exit {ac.expect_exit}): "
+                f"{ac.command}"
+            )
     return "\n".join(lines)
 
 

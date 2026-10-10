@@ -13,6 +13,9 @@ What should be true when this is done, and why. One short paragraph.
 
 ## Acceptance criteria
 - Observable, checkable behaviours ("GET /x returns 404 when ...").
+<!-- Lines in this form run as required checks (bash -c from the repo root, exit code decides):
+- AC-1: `cd backend && .venv/bin/python -m pytest -q tests/test_x.py` (exit 0)
+-->
 
 ## Design constraints
 - Patterns to follow, libraries to use/avoid, security rules (e.g. "queries run as the user via SupabaseDep so RLS applies").

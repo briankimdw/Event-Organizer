@@ -285,7 +285,7 @@ class Orchestrator:
             return (
                 header + "Implement the approved plan below, including its required tests.\n\n"
                 f"{pb}\n\nAfter your turn the orchestrator independently runs:\n"
-                f"{agent.checks_overview(self.cfg)}\n"
+                f"{agent.checks_overview(self.cfg, plan.acceptance)}\n"
                 "Run the relevant checks yourself before finishing, then report your status."
             )
         if st.stage == "answering":
@@ -329,6 +329,8 @@ class Orchestrator:
         else:
             self.log(st, "verify", msg=f"{len(changed)} changed files; running checks")
             results = verify.run_checks(self.cfg, wt, changed, lim["check_timeout_seconds"])
+            if plan.acceptance and self.cfg.get("acceptance", {}).get("enabled", True):
+                results += verify.run_acceptance(plan.acceptance, wt, lim["check_timeout_seconds"])
         if proc.STOP.is_set():
             return self.finish(st, "stopped", "stopped by user during verification")
         violations, warnings = guards.check(self.cfg, wt, st.base_sha, changed, plan)

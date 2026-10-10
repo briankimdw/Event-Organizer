@@ -57,6 +57,13 @@ def pr_body(st: TaskState, plan: Plan) -> str:
     if not_passed:
         risks.append(f"optional checks not passing: {', '.join(not_passed)}")
     risk_md = "\n".join(f"- {r}" for r in risks) or "- none flagged by the orchestrator"
+    manual_md = ""
+    if plan.manual_checks:
+        manual_md = (
+            "\n## Manual checks for the reviewer (not run automatically)\n"
+            + "\n".join(f"- [ ] {m}" for m in plan.manual_checks)
+            + "\n"
+        )
     return f"""## Objective
 {_first_para(plan.sections["objective"])}
 
@@ -72,7 +79,7 @@ def pr_body(st: TaskState, plan: Plan) -> str:
 
 ## Risks / review notes
 {risk_md}
-
+{manual_md}
 <details><summary>Approved plan</summary>
 
 {plan.text.strip()}
