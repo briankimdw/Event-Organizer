@@ -1,0 +1,22 @@
+{
+  "engine": "rules",
+  "reply": "Here's a first draft for your wedding. I split a $15,000 budget across the big pieces and found photographers who are free on your date and travel to Napa. Photography is the part you can book today; the rest is coming soon.",
+  "brief": {
+    "event_type": "wedding",
+    "title": "Wedding in Napa",
+    "start_date": "2027-06-12",
+    "end_date": "2027-06-12",
+    "dates": ["2027-06-12"],
+    "location_text": "Napa, CA",
+    "location": { "lat": 38.2975, "lng": -122.2869 },
+    "budget_total_cents": 1500000,
+    "guest_count": 120,
+    "styles": ["candid", "golden hour"],
+    "services_needed": ["photography", "venue", "catering", "florals", "music"],
+    "notes": null
+  },
+  "questions": ["Do you want a second shooter?", "Is the ceremony indoors or outdoors?"],
+  "budget": [],
+  "recommendations": [],
+  "coming_soon": []
+}

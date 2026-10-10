@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, Copy, EyeOff, Images, Inbox, MapPin, Package, Plus, Star } from 'lucide-react'
 import Segmented from '../components/Segmented.jsx'
 import Sheet from '../components/Sheet.jsx'
-import ProfileLink from '../components/ProfileLink.jsx'
+import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
 import { VerifiedClient } from '../components/Badges.jsx'
 import { money, priceLabel } from '../components/Booking.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
@@ -100,7 +100,7 @@ function Requests({ bookings }) {
       {list.map((r) => (
         <div key={r.id} className="request-card">
           <div className="row gap-xs">
-            <ProfileLink id={r.client.id}><img className="avatar" src={r.client.avatar} alt="" /></ProfileLink>
+            <PersonAvatar id={r.client.id} src={r.client.avatar} name={r.client.name} username={r.client.username} className="avatar" />
             <div className="grow">
               <ProfileLink id={r.client.id}><b>{r.client.name}</b></ProfileLink>
               <div className="row gap-xs tiny">

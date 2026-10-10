@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import Sheet from '../components/Sheet.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
-import ProfileLink from '../components/ProfileLink.jsx'
+import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
 import SearchLauncher from '../components/SearchLauncher.jsx'
 import { money, priceLabel, startingPrice } from '../components/Booking.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
@@ -349,9 +349,7 @@ export default function Discover() {
 
             <div className="card-foot">
               <div className="row gap-xs">
-                <ProfileLink id={p.id} className="card-profile">
-                  <img className="avatar" src={p.avatar} alt="" />
-                </ProfileLink>
+                <PersonAvatar id={p.id} src={p.avatar} name={p.name} username={p.username} linkClass="card-profile" />
                 <div className="grow">
                   <div className="row gap-xs">
                     <ProfileLink id={p.id} className="card-profile"><b>{p.name}</b></ProfileLink>
@@ -360,7 +358,9 @@ export default function Discover() {
                   </div>
                   <div className="tiny row gap-xs">
                     {p.rating != null ? (
-                      <><Star size={11} fill="currentColor" className="star-on" /> {p.rating.toFixed(1)}</>
+                      <ProfileLink id={p.id} to={`/u/${p.id}?tab=reviews`} className="card-profile" label={`Rated ${p.rating.toFixed(1)}. See reviews`}>
+                        <Star size={11} fill="currentColor" className="star-on" /> {p.rating.toFixed(1)}
+                      </ProfileLink>
                     ) : (
                       <span>New</span>
                     )}
@@ -416,13 +416,19 @@ export default function Discover() {
               <Images size={14} /> View the full album
             </Link>
             <Link to={`/u/${p.id}`} className="row gap-xs mt">
-              <img className="avatar" src={p.avatar} alt="" />
+              <PersonAvatar id={p.id} src={p.avatar} name={p.name} username={p.username} />
               <div className="grow">
                 <div className="person-name">
                   {p.name} {p.idVerified && <IdVerified />} {p.pro && <ProBadge />}
                 </div>
                 <div className="muted tiny">
-                  {[p.city, p.rating != null ? `★ ${p.rating.toFixed(1)} (${p.reviewCount})` : 'New, no reviews yet'].filter(Boolean).join(' · ')}
+                  {p.city}
+                  {p.city && ' · '}
+                  {p.rating != null ? (
+                    <ProfileLink id={p.id} to={`/u/${p.id}?tab=reviews`} className="tap-text">
+                      ★ {p.rating.toFixed(1)} ({p.reviewCount} review{p.reviewCount === 1 ? '' : 's'})
+                    </ProfileLink>
+                  ) : 'New, no reviews yet'}
                 </div>
               </div>
               {cardMatch != null && <div className="match"><b>{cardMatch}%</b><span>match</span></div>}
@@ -442,10 +448,11 @@ export default function Discover() {
             <h4 className="section-title">Packages</h4>
             {p.packages.length === 0 && <div className="muted small">No packages listed yet. Ask for a quote.</div>}
             {p.packages.map((pkg) => (
-              <div key={pkg.id} className="row between small line">
-                <span>{pkg.name}</span>
+              <Link key={pkg.id} to={`/book/${p.id}?pkg=${pkg.id}`} className="pkg-line small line" aria-label={`Book ${pkg.name}, ${priceLabel(pkg)}`}>
+                <span className="grow">{pkg.name}</span>
                 <b>{priceLabel(pkg)}</b>
-              </div>
+                <ChevronRight size={14} className="muted" />
+              </Link>
             ))}
             <h4 className="section-title">Next 2 weeks</h4>
             <NextTwoWeeks providerId={p.id} />
@@ -615,12 +622,14 @@ function ShortlistSheet({ open, uid, shortlist, likedCardsFrom, matchOf, onMessa
   }
   return list.map((sp) => {
     const liked = likedCardsFrom(sp.id)
-    const shots = liked.length ? liked.map((c) => ({ key: c.id, src: c.photos[0]?.src })) : sp.covers.slice(0, 4).map((src) => ({ key: src, src }))
+    const shots = liked.length
+      ? liked.map((c) => ({ key: c.id, src: c.photos[0]?.src, to: `/gallery/${sp.id}?post=${c.albumId}` }))
+      : sp.covers.slice(0, 4).map((src) => ({ key: src, src, to: `/gallery/${sp.id}` }))
     const m = matchOf(sp.id)
     return (
       <div key={sp.id} className="shortlist-item">
         <Link to={`/u/${sp.id}`} className="row gap-xs">
-          <img className="avatar" src={sp.avatar} alt="" />
+          <PersonAvatar id={sp.id} src={sp.avatar} name={sp.name} username={sp.username} />
           <div className="grow">
             <div className="person-name">{sp.name} {sp.pro && <ProBadge />}</div>
             <div className="muted tiny">
@@ -635,7 +644,9 @@ function ShortlistSheet({ open, uid, shortlist, likedCardsFrom, matchOf, onMessa
         </Link>
         {shots.length > 0 && (
           <div className="shortlist-shots">
-            {shots.map((s) => <img key={s.key} src={s.src} alt="" />)}
+            {shots.map((s) => (
+              <Link key={s.key} to={s.to} aria-label="Open in the gallery"><img src={s.src} alt="" /></Link>
+            ))}
           </div>
         )}
         <div className="row gap-xs">
@@ -657,7 +668,9 @@ function MatchOverlay({ provider, cards, tasteMatch, signedIn, shortlisted, onSh
       <div className="match-card" onClick={(e) => e.stopPropagation()}>
         <div className="match-shots">
           {cards.slice(0, 2).map((c, i) => (
-            <img key={c.id} src={c.photos[0]?.src} alt="" className={i ? 'r' : 'l'} />
+            <Link key={c.id} to={`/gallery/${provider.id}?post=${c.albumId}`} aria-label="Open in the gallery">
+              <img src={c.photos[0]?.src} alt="" className={i ? 'r' : 'l'} />
+            </Link>
           ))}
           <Link to={`/u/${provider.id}`}>
             <img className="match-avatar" src={provider.avatar} alt="" />

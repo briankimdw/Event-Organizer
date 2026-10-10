@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom'
+import { ChevronRight } from 'lucide-react'
 import { IdVerified, ProBadge } from './Badges.jsx'
+import { PersonAvatar } from './ProfileLink.jsx'
 
+// A person (photographer or client) that opens their profile. Hold the avatar to preview the photo.
 export default function PersonRow({ person, sub, right, size = 36 }) {
   return (
     <div className="person-row">
       <Link to={`/u/${person.id}`} className="person-link">
-        <img className="avatar" src={person.avatar} alt="" style={{ width: size, height: size }} />
+        <PersonAvatar id={person.id} src={person.avatar} name={person.name} username={person.username} style={{ width: size, height: size }} />
         <div className="person-text">
           <div className="person-name">
             {person.name}
@@ -14,6 +17,7 @@ export default function PersonRow({ person, sub, right, size = 36 }) {
           </div>
           {sub && <div className="muted small">{sub}</div>}
         </div>
+        <ChevronRight size={16} className="muted person-go" />
       </Link>
       {right}
     </div>

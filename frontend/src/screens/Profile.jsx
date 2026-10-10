@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   CalendarCheck, CalendarX, Camera, CircleDot, Copy, MapPin, MessageCircle, MoreHorizontal, Send, Clock, Images, Sparkles,
-  Heart, Plus, UserX, Package, Star,
+  Heart, Plus, UserX, Package, Star, ChevronRight,
 } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Segmented from '../components/Segmented.jsx'
 import Stars from '../components/Stars.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
+import { ViewableAvatar } from '../components/AvatarViewer.jsx'
+import ReviewList from '../components/Reviews.jsx'
+import FollowersSheet from '../components/FollowersSheet.jsx'
 import { PolicyTable, priceLabel } from '../components/Booking.jsx'
 import { ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
@@ -16,7 +19,7 @@ import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
 import { addDays, fmtBooking, fmtChip, fmtMonth, fromKey, parseDates, toKey, today } from '../lib/dates.js'
-import { freeDays, getPerson, getProvider } from '../api/catalog.js'
+import { freeDays, getCategories, getPerson, getProvider } from '../api/catalog.js'
 import { listAlbums, toViewerAlbum } from '../api/portfolio.js'
 import { messageError, startDirectMessage, startInquiry } from '../api/messages.js'
 
@@ -75,13 +78,31 @@ export default function Profile() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { following, toggleFollow, shortlist, toggleShortlist, toast } = useStore()
-  const [tab, setTab] = useState('portfolio')
+  const startTab = params.get('tab')
+  const [tab, setTab] = useState(TABS.includes(startTab) ? startTab : 'portfolio')
   const [share, setShare] = useState(false)
+  const [followers, setFollowers] = useState(false)
+  const tabsRef = useRef()
   const [menu, setMenu] = useState(false)
   const [contacting, setContacting] = useState(false)
 
   const { data: person, loading, error, reload } = useQuery(() => loadPerson(id), [id])
   const provider = person?.kind === 'provider' ? person : null
+  // Specialties that are also service categories link to that category's search.
+  const { data: categories } = useQuery(provider?.specialties?.length ? () => getCategories() : null, [provider?.id])
+  const categoryFor = (name) => categories?.find((c) => c.name.toLowerCase() === name.toLowerCase())?.slug
+
+  // Switch tab and scroll down to it (the star rating opens Reviews).
+  const showTab = (next) => {
+    setTab(next)
+    requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+  // Opened on a tab (e.g. /u/:id?tab=reviews from a rating elsewhere): start scrolled to it.
+  useEffect(() => {
+    if (provider && TABS.includes(startTab) && startTab !== 'portfolio') {
+      requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ block: 'start' }))
+    }
+  }, [!!provider]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: albums, loading: albumsLoading, error: albumsError, reload: reloadAlbums } = useQuery(
     provider ? () => listAlbums(provider.id).then((rows) => rows.filter((a) => a.photos?.length).map(toViewerAlbum)) : null,
@@ -149,26 +170,37 @@ export default function Profile() {
       />
       {provider?.cover && <img className="cover" src={provider.cover} alt="" />}
       <div className={`profile-head ${provider?.cover ? 'has-cover' : ''}`}>
-        <img className="avatar xl" src={person.avatar} alt="" />
+        <ViewableAvatar src={person.avatar} name={person.name} username={handle} />
         <h2>
-          {person.name} {provider?.idVerified && <IdVerified label />} {provider?.pro && <ProBadge />}
+          {person.name} {provider?.idVerified && <IdVerified label explain name={person.name} />} {provider?.pro && <ProBadge explain name={person.name} />}
         </h2>
-        {person.city && (
+        {person.city && (provider?.location ? (
+          <Link to={`/search?view=map&focus=${provider.id}`} className="muted small inline-icon tap-text" aria-label={`${person.city}: see ${firstName} on the map`}>
+            <MapPin size={13} /> {person.city}
+          </Link>
+        ) : (
           <div className="muted small inline-icon">
             <MapPin size={13} /> {person.city}
           </div>
-        )}
+        ))}
         {provider && (
           <div className="row gap-xs small mt-xs">
             {provider.rating != null ? (
-              <>
+              <button className="tap-text rating-link" onClick={() => showTab('reviews')} aria-label={`Rated ${provider.rating.toFixed(1)} from ${provider.reviewCount} review${provider.reviewCount === 1 ? '' : 's'}. Show reviews`}>
                 <Stars value={provider.rating} /> <b>{provider.rating.toFixed(1)}</b>
                 <span className="muted">({provider.reviewCount} review{provider.reviewCount === 1 ? '' : 's'})</span>
-              </>
+              </button>
             ) : (
               <span className="chip">New</span>
             )}
-            <span className="muted">· {provider.followers} follower{provider.followers === 1 ? '' : 's'}</span>
+            <span className="muted">·</span>
+            {provider.followers > 0 ? (
+              <button className="tap-text muted" onClick={() => setFollowers(true)}>
+                <b className="ink">{provider.followers}</b> follower{provider.followers === 1 ? '' : 's'}
+              </button>
+            ) : (
+              <span className="muted">No followers yet</span>
+            )}
           </div>
         )}
         {!provider && person.clientRating != null && (
@@ -181,9 +213,12 @@ export default function Profile() {
         {person.bio && <p className="mt-sm">{person.bio}</p>}
         {provider?.specialties?.length > 0 && (
           <div className="chips center">
-            {provider.specialties.map((s) => (
-              <span key={s} className="chip">{s}</span>
-            ))}
+            {provider.specialties.map((s) => {
+              const slug = categoryFor(s)
+              // Service categories filter by category; anything else (e.g. "Nightlife") is a text search.
+              const to = slug ? `/search?cat=${encodeURIComponent(slug)}` : `/search?q=${encodeURIComponent(s)}`
+              return <Link key={s} to={to} className="chip chip-link">{s}</Link>
+            })}
           </div>
         )}
         {provider && !isMine && (
@@ -246,7 +281,7 @@ export default function Profile() {
       )}
 
       {provider && (
-        <div className="pad-x mt">
+        <div className="pad-x mt profile-tabs" ref={tabsRef}>
           <Segmented
             options={[
               { value: 'portfolio', label: 'Portfolio' },
@@ -297,8 +332,11 @@ export default function Profile() {
           {provider.packages.length === 0 && (
             <EmptyState compact icon={Package} title="No packages listed yet" text={isMine ? null : 'Ask a question to get a quote.'} />
           )}
-          {provider.packages.map((pkg) => (
-            <div key={pkg.id} className="package-card">
+          {provider.packages.map((pkg) => {
+            const Card = isMine ? 'div' : Link
+            const cardProps = isMine ? {} : { to: `/book/${provider.id}?pkg=${pkg.id}${datesQuery && `&${datesQuery}`}` }
+            return (
+            <Card key={pkg.id} className={`package-card ${isMine ? '' : 'tappable'}`} {...cardProps}>
               <div className="row between">
                 <h4>{pkg.name}</h4>
                 <b>{priceLabel(pkg)}</b>
@@ -315,10 +353,11 @@ export default function Profile() {
               {pkg.deliverables?.length > 0 && <div className="muted small">Includes: {pkg.deliverables.join(', ')}</div>}
               {pkg.depositPct != null && <div className="muted small">{pkg.depositPct}% deposit to confirm</div>}
               {!isMine && (
-                <Link to={`/book/${provider.id}?pkg=${pkg.id}${datesQuery && `&${datesQuery}`}`} className="btn sm mt-sm">Select</Link>
+                <span className="btn sm mt-sm pkg-select" aria-hidden="true">Select <ChevronRight size={14} /></span>
               )}
-            </div>
-          ))}
+            </Card>
+            )
+          })}
           {provider.addons?.length > 0 && (
             <>
               <h4 className="section-title">Add-ons</h4>
@@ -383,20 +422,13 @@ export default function Profile() {
             <EmptyState compact icon={Star} title="No reviews yet" text="Reviews appear here after completed bookings." />
           )}
           {provider.rating != null && provider.reviews.length === 0 && <div className="muted small mt">No written reviews yet.</div>}
-          {provider.reviews.map((r) => (
-            <div key={r.id} className="review">
-              <div className="row gap-xs">
-                <img className="avatar sm" src={r.avatar} alt="" />
-                <b className="small">{r.name}</b>
-                <Stars value={r.rating} size={12} />
-                <span className="muted tiny grow right-text">{r.date}</span>
-              </div>
-              {r.text && <p className="small">{r.text}</p>}
-            </div>
-          ))}
+          <ReviewList reviews={provider.reviews} provider={provider} here />
         </div>
       )}
 
+      {provider && (
+        <FollowersSheet open={followers} onClose={() => setFollowers(false)} providerId={provider.id} count={provider.followers} />
+      )}
       <ShareSheet
         open={share}
         onClose={() => setShare(false)}
@@ -415,4 +447,5 @@ export default function Profile() {
   )
 }
 
+const TABS = ['portfolio', 'packages', 'gear', 'reviews']
 const ALBUM_STATUS = { processing: 'Processing', under_review: 'In review', hidden: 'Hidden' }

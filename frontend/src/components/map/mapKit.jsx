@@ -24,17 +24,35 @@ const esc = (s = '') => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
 
 // Round avatar pin. Icons are cached so markers don't re-render their DOM.
 const icons = new Map()
-export function avatarIcon(avatar, { selected = false, size = 40 } = {}) {
-  const key = `${avatar}|${selected}|${size}`
+// dim: faded (e.g. outside the searched map area).
+export function avatarIcon(avatar, { selected = false, size = 40, dim = false } = {}) {
+  const key = `${avatar}|${selected}|${size}|${dim}`
   if (!icons.has(key)) {
     const box = selected ? size + 8 : size
     icons.set(
       key,
       L.divIcon({
         className: 'pm-pin-wrap',
-        html: `<div class="pm-pin${selected ? ' on' : ''}" style="width:${box}px;height:${box}px"><img src="${esc(avatar)}" alt="" draggable="false"/></div>`,
+        html: `<div class="pm-pin${selected ? ' on' : ''}${dim ? ' dim' : ''}" style="width:${box}px;height:${box}px"><img src="${esc(avatar)}" alt="" draggable="false"/></div>`,
         iconSize: [box, box],
         iconAnchor: [box / 2, box / 2],
+      }),
+    )
+  }
+  return icons.get(key)
+}
+
+// A group of pins too close to tell apart: the first avatar with a count badge.
+export function clusterIcon(avatar, count, { size = 40, dim = false } = {}) {
+  const key = `cluster|${avatar}|${count}|${size}|${dim}`
+  if (!icons.has(key)) {
+    icons.set(
+      key,
+      L.divIcon({
+        className: 'pm-pin-wrap',
+        html: `<div class="pm-cluster${dim ? ' dim' : ''}" style="width:${size}px;height:${size}px"><div class="pm-pin pm-stack"></div><div class="pm-pin"><img src="${esc(avatar)}" alt="" draggable="false"/></div><span class="pm-count">${count}</span></div>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
       }),
     )
   }

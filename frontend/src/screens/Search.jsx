@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  ArrowUpDown, CalendarCheck, CalendarDays, Check, List, LocateFixed, Map as MapIcon, MapPinOff, Plus, Search as SearchIcon, SearchX,
+  ArrowUpDown, CalendarCheck, CalendarDays, Check, List, LocateFixed, Map as MapIcon, MapPin, MapPinOff, Plus, Search as SearchIcon, SearchX,
   SlidersHorizontal, Star, X,
 } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
@@ -16,7 +16,7 @@ import { ProviderMap } from '../components/map/LazyMap.jsx'
 import useQuery from '../lib/useQuery.js'
 import { fmtChip, fromKey, isPast, parseDates } from '../lib/dates.js'
 import { getCategories, listProviders, searchProviders, withMatches } from '../api/catalog.js'
-import { distanceKm, fmtKm, getMyLocation, lastKnownLocation, parsePoint } from '../api/locations.js'
+import { distanceKm, fmtBbox, fmtKm, getMyLocation, lastKnownLocation, parseBbox, parsePoint, splitByArea } from '../api/locations.js'
 
 const PRICE_OPTIONS = [
   { value: null, label: 'Any' },
@@ -51,7 +51,7 @@ export default function Search() {
   const { user, profile } = useAuth()
   const { toast } = useStore()
   const [params, setParams] = useSearchParams()
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(() => params.get('q') || '') // ?q= lets other screens link to a text search
   const [catParam, setCatParam] = useState(params.get('cat')) // a service slug (or a category name from older links)
   const [filters, setFilters] = useState(NO_FILTERS)
   const [sort, setSort] = useState('match')
@@ -73,6 +73,16 @@ export default function Search() {
     setParams((prev) => {
       const p = new URLSearchParams(prev)
       id ? p.set('focus', id) : p.delete('focus')
+      return p
+    }, { replace: true })
+
+  // Map area ("Search this area" on the map): ?bbox=w,s,e,n. Kept by the List/Map toggle.
+  const bboxParam = params.get('bbox')
+  const area = useMemo(() => parseBbox(bboxParam), [bboxParam])
+  const setArea = (box) =>
+    setParams((prev) => {
+      const p = new URLSearchParams(prev)
+      box ? p.set('bbox', fmtBbox(box)) : p.delete('bbox')
       return p
     }, { replace: true })
 
@@ -124,17 +134,21 @@ export default function Search() {
   const loading = waitingForCategory || (all.data === undefined && !all.error) || (source.data === undefined && !source.error)
   const error = all.error || source.error || (catParam && cats.error)
   const q = query.trim().toLowerCase()
-  const results = (source.data || [])
+  const allResults = (source.data || [])
     .map((p) => ({ ...p, tasteMatch: matchOf.get(p.id) ?? null, distanceKm: distanceKm(userLocation, p.location) }))
     .filter((p) => distanceFilter == null || (p.distanceKm != null && withinDistance(p, distanceFilter)))
     .filter((p) => !q || [p.name, p.username, p.city, ...p.specialties, ...p.categories].join(' ').toLowerCase().includes(q))
     .filter((p) => !filters.idOnly || p.idVerified)
     .sort((a, b) => freeOn(b).length - freeOn(a).length || SORTS[sortKey].fn(a, b))
+  const onMap = allResults.filter((p) => p.location)
+  // In a map area: photographers based in it, then ones based elsewhere who travel to it.
+  const { inside: areaInside, travels: areaTravels } = splitByArea(onMap, area)
+  const results = area ? [...areaInside, ...areaTravels] : allResults
   const fullyFree = results.filter((p) => freeOn(p).length === dates.length).length
-  const onMap = results.filter((p) => p.location)
 
   // Removable chips for whatever is currently filtering the list.
   const activeChips = [
+    area && { key: 'area', label: 'Map area', icon: MapPin, clear: () => setArea(null) },
     filters.maxPrice != null && { key: 'maxPrice', label: `Under ${money(filters.maxPrice)}`, clear: () => setFilter('maxPrice', null) },
     filters.minRating != null && { key: 'minRating', label: `${filters.minRating}+ stars`, clear: () => setFilter('minRating', null) },
     filters.proOnly && { key: 'pro', label: 'Verified Pro', clear: () => setFilter('proOnly', false) },
@@ -145,6 +159,7 @@ export default function Search() {
       clear: () => setFilter('distance', null),
     },
   ].filter(Boolean)
+  const filterCount = activeChips.filter((c) => c.key !== 'area').length // what the Filters sheet controls
 
   const reload = () => {
     all.reload()
@@ -195,16 +210,16 @@ export default function Search() {
       </div>
 
       <div className="filter-row scroll-x pad-x">
-        <button className={`filter-btn ${activeChips.length ? 'on' : ''}`} onClick={() => setSheet('filters')}>
+        <button className={`filter-btn ${filterCount ? 'on' : ''}`} onClick={() => setSheet('filters')}>
           <SlidersHorizontal size={14} /> Filters
-          {activeChips.length > 0 && <span className="filter-count">{activeChips.length}</span>}
+          {filterCount > 0 && <span className="filter-count">{filterCount}</span>}
         </button>
         <button className="filter-btn" onClick={() => setSheet('sort')}>
           <ArrowUpDown size={14} /> {SORTS[sortKey].label}
         </button>
         {activeChips.map((c) => (
-          <button key={c.key} className="chip active-filter" onClick={c.clear}>
-            {c.label} <X size={12} />
+          <button key={c.key} className="chip active-filter" onClick={c.clear} aria-label={`Remove filter: ${c.label}`}>
+            {c.icon && <c.icon size={12} />}{c.label} <X size={12} />
           </button>
         ))}
       </div>
@@ -217,10 +232,14 @@ export default function Search() {
         <>
           <div className="pad-x result-bar">
             <div className="result-summary grow ellipsis">
-              {dates.length
-                ? `${fullyFree} free on ${dates.length === 1 ? 'your date' : `all ${dates.length} dates`}${results.length > fullyFree ? ` · ${results.length - fullyFree} partly free` : ''}`
-                : `${results.length} photographer${results.length === 1 ? '' : 's'}`}
-              {view === 'map' && results.length > onMap.length && onMap.length > 0 && ` · ${results.length - onMap.length} not on map`}
+              {area && !dates.length
+                ? areaTravels.length
+                  ? `${areaInside.length ? `${areaInside.length} based here · ` : ''}${areaTravels.length} travel${areaTravels.length === 1 ? 's' : ''} here`
+                  : `${areaInside.length} photographer${areaInside.length === 1 ? '' : 's'} in this area`
+                : dates.length
+                  ? `${fullyFree} free on ${dates.length === 1 ? 'your date' : `all ${dates.length} dates`}${results.length > fullyFree ? ` · ${results.length - fullyFree} partly free` : ''}${area ? ' here' : ''}`
+                  : `${results.length} photographer${results.length === 1 ? '' : 's'}`}
+              {view === 'map' && !area && results.length > onMap.length && onMap.length > 0 && ` · ${results.length - onMap.length} not on map`}
             </div>
             <div className="view-toggle" role="tablist" aria-label="View">
               <button role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
@@ -232,10 +251,12 @@ export default function Search() {
             </div>
           </div>
 
-          {view === 'map' && results.length > 0 && (
+          {view === 'map' && allResults.length > 0 && (
             onMap.length ? (
               <ProviderMap
                 providers={onMap}
+                area={area}
+                onAreaChange={setArea}
                 userLocation={userLocation}
                 onLocate={locate}
                 focusId={focusId}
@@ -247,18 +268,25 @@ export default function Search() {
               <EmptyState
                 icon={MapPinOff}
                 title="Not on the map yet"
-                text={`${results.length === 1 ? 'This photographer hasn’t' : 'These photographers haven’t'} set where they’re based yet.`}
+                text={`${allResults.length === 1 ? 'This photographer hasn’t' : 'These photographers haven’t'} set where they’re based yet.`}
                 action={<button className="btn ghost sm" onClick={() => setView('list')}>Show the list</button>}
               />
             )
           )}
 
           <div className="pad-x">
-            {view === 'list' && results.map((p) => {
+            {view === 'list' && results.map((p, i) => {
               const free = freeOn(p)
               const thumbs = p.covers.slice(0, 3)
               return (
-                <div key={p.id} className="result-card">
+                <Fragment key={p.id}>
+                {area && areaTravels.length > 0 && i === areaInside.length && (
+                  <div className="area-section">
+                    <div className="area-section-title">{areaInside.length ? 'Also travels here' : 'Nobody’s based here yet, but these photographers travel here'}</div>
+                    <div className="muted tiny">Based outside this map area; it’s within how far they travel.</div>
+                  </div>
+                )}
+                <div className="result-card">
                   <Link to={`/u/${p.id}${datesQuery && `?${datesQuery}`}`}>
                     <div className="result-photos">
                       {thumbs.map((src) => (
@@ -308,9 +336,22 @@ export default function Search() {
                     </div>
                   )}
                 </div>
+                </Fragment>
               )
             })}
-            {results.length === 0 && (
+            {area && view === 'list' && results.length === 0 && allResults.length > 0 ? (
+              <EmptyState
+                icon={MapPinOff}
+                title="No photographers in this area"
+                text="Nobody matching your search is based in this map area or travels to it."
+                action={
+                  <div className="row gap-xs">
+                    <button className="btn ghost sm" onClick={() => setArea(null)}>Search everywhere</button>
+                    <button className="btn ghost sm" onClick={() => setView('map')}>Move the map</button>
+                  </div>
+                }
+              />
+            ) : (view === 'list' ? results : allResults).length === 0 && (
               <EmptyState
                 icon={SearchX}
                 title={dates.length ? 'Nobody free on those dates' : 'No photographers found'}
@@ -318,9 +359,10 @@ export default function Search() {
                 action={
                   (activeChips.length > 0 || dates.length > 0 || q || catParam) && (
                     <div className="row gap-xs">
-                      {(activeChips.length > 0 || q || catParam) && (
+                      {(filterCount > 0 || q || catParam) && (
                         <button className="btn ghost sm" onClick={() => { setFilters(NO_FILTERS); setQuery(''); setCatParam(null) }}>Clear filters</button>
                       )}
+                      {area && <button className="btn ghost sm" onClick={() => setArea(null)}>Search everywhere</button>}
                       {dates.length > 0 && <button className="btn ghost sm" onClick={() => setDates([])}>Clear dates</button>}
                     </div>
                   )
@@ -373,7 +415,7 @@ export default function Search() {
           </label>
         </div>
         <div className="row gap-xs mt">
-          <button className="btn ghost" disabled={!activeChips.length} onClick={() => setFilters(NO_FILTERS)}>Clear all</button>
+          <button className="btn ghost" disabled={!filterCount} onClick={() => setFilters(NO_FILTERS)}>Clear all</button>
           <button className="btn grow" onClick={() => setSheet(null)}>
             {loading ? 'Show photographers' : `Show ${results.length} photographer${results.length === 1 ? '' : 's'}`}
           </button>

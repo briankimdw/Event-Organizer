@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Briefcase, MessageCircle, PenSquare, Search, Users } from 'lucide-react'
-import ProfileLink from '../components/ProfileLink.jsx'
+import { PersonAvatar } from '../components/ProfileLink.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
@@ -71,7 +71,7 @@ export default function Inbox() {
                 return (
                   <Link key={c.id} to={`/inbox/${c.id}`} className={`convo ${c.unread ? 'unread' : ''}`}>
                     <div className="convo-avatar">
-                      {first && <ProfileLink id={first.id}><img className="avatar" src={first.avatar} alt="" /></ProfileLink>}
+                      {first && <PersonAvatar id={first.id} src={first.avatar} name={first.name} username={first.username} className="avatar" />}
                       {c.isGroup && c.members.length > 1 && <span className="group-count">+{c.members.length}</span>}
                     </div>
                     <div className="grow ellipsis">

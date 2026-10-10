@@ -161,6 +161,23 @@ Applied to the hosted project `ktjvbajrfrbwpndforcy` (us-east-1, Postgres 17):
   Until they're applied, the app shows "database update pending" when you try to start a new chat.
 - **Needs a signed-in check:** a real post, editing and deleting a post, the service-area save, direct and group messages between two accounts.
 
+### Map area search, tappable everything, AI planner (2026-10-09)
+- **Map "Search this area":** pan or zoom, then tap the pill. Results are split into "based here" and "travel here", nearby pins are grouped, and the area is kept in the URL (`?bbox=`).
+- **Tappable everything:**
+  - Profile photos open an Instagram-style viewer.
+  - Reviews open a detail sheet, and reviewers link to their profiles.
+  - Follower count opens a followers list; badges open short explainers.
+  - Chips search, packages open the booking form, and locations open the map.
+  - Search accepts `?q=`.
+- **AI planner** (`/plan`, with a card on Home):
+  - Describe an event to get the parsed brief (editable chips), a budget split by category, and real photographers who are free, nearby, within budget and in style, each with reasons and a "Request booking" button.
+  - Plans can be saved as events.
+  - The backend is in `services/ml` (`POST /plan`). It uses Claude (`claude-opus-5-5`) when `ANTHROPIC_API_KEY` is set, otherwise a rules parser; 25 tests pass with Claude mocked.
+  - Run it with `uvicorn app.main:app --host 0.0.0.0 --port 8000`. See the "AI planner" section in `services/ml/README.md`.
+- **Planner follow-ups:**
+  - `events` has no columns for styles, the exact dates or notes. Add a `brief jsonb` column; the frontend keeps them in localStorage for now.
+  - Only photography is bookable; the other categories are budget placeholders.
+
 ---
 
 ## Decisions made (defaults; revisit with Tim)

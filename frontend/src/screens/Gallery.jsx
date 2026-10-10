@@ -75,6 +75,7 @@ export default function Gallery() {
         to: `/book/${p.id}`,
         label: `Book ${p.name.split(' ')[0]}`,
         line: `${from != null ? `from ${money(from)}` : 'Custom quote'} · ${p.rating != null ? `★ ${p.rating.toFixed(1)}` : 'New'}`,
+        lineTo: `/u/${p.id}?tab=${p.rating != null ? 'reviews' : 'packages'}`,
       }}
       startPost={params.get('post')}
       startPhoto={params.get('photo')}
@@ -100,7 +101,7 @@ function GalleryClose({ to = '/' }) {
 // The full-screen viewer. albums: from toViewerAlbum: [{ id, providerId, title, location, date, type, caption, genre,
 // tags?, autoTags, realPhoto?, photos: [{ id, src, beforeSrc?, exif, autoTags }] }].
 // owner: { name, avatar?, username, idVerified?, pro?, profileId? | profileTo?, providerId?, blockProfileId? }.
-// book: { to, label, line } or null.
+// book: { to, label, line, lineTo? } or null.
 // manage (owner only, optional): { onUpdated(viewerAlbum), onDeleted(albumId) } adds edit / delete.
 export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeFallback, manage = null }) {
   const location = useLocation()
@@ -521,13 +522,13 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
               </>
             )
             return owner.profileId
-              ? <ProfileLink id={owner.profileId} className="reel-who">{who}</ProfileLink>
+              ? <ProfileLink id={owner.profileId} className="reel-who" preview={owner.avatar ? { src: owner.avatar, name: owner.name, username: owner.username } : null}>{who}</ProfileLink>
               : <Link to={owner.profileTo || '/me'} className="reel-who profile-link">{who}</Link>
           })()}
           {shortExif(photo.exif) && <div className="reel-exif">{shortExif(photo.exif)}</div>}
           {book && (
             <div className="reel-book">
-              <span className="small">{book.line}</span>
+              {book.lineTo ? <Link to={book.lineTo} className="small tap-text">{book.line}</Link> : <span className="small">{book.line}</span>}
               <Link to={book.to} className="btn sm accent">{book.label}</Link>
             </div>
           )}
@@ -558,7 +559,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
           <>
             <h4 className="section-title">Tags</h4>
             <div className="chips">
-              {album.genre && <span className="chip solid">{album.genre}</span>}
+              {album.genre && <Link to={`/search?cat=${encodeURIComponent(album.genre)}`} className="chip solid chip-link" aria-label={`Find ${album.genre} photographers`}>{album.genre}</Link>}
               {(album.tags || []).map((t) => <span key={t} className="chip">#{t}</span>)}
               {(album.autoTags || []).map((t) => (
                 <span key={t} className="chip auto" title="Suggested automatically from the photos"><Sparkles size={11} /> {t}</span>

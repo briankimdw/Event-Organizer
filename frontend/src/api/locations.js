@@ -60,6 +60,58 @@ export const travelsTo = (provider, point) => {
 }
 
 // ---------------------------------------------------------------------------
+// Map areas ("Search this area"): a box { w, s, e, n } in degrees.
+// e can be past 180 when the box crosses the date line (e - w is the width).
+// ---------------------------------------------------------------------------
+
+// "w,s,e,n" from the URL -> { w, s, e, n }, or null when missing or invalid.
+export function parseBbox(value) {
+  const parts = String(value || '').split(',').map(Number)
+  if (parts.length !== 4 || !parts.every(Number.isFinite)) return null
+  const [w, s, e, n] = parts
+  if (s < -90 || n > 90 || s >= n || e <= w || e - w > 360) return null
+  return { w, s, e, n }
+}
+
+// Leaflet-style bounds (getWest/getSouth/...) or { w, s, e, n } -> "w,s,e,n".
+// Rounded inward to ~10 m so re-framing the saved box never needs a wider view.
+export function fmtBbox(b) {
+  const box = toBox(b)
+  const f = 1e4
+  const w = Math.ceil(box.w * f) / f
+  const shift = Math.floor((w + 180) / 360) * 360 // keep west in [-180, 180)
+  return [w - shift, Math.ceil(box.s * f) / f, Math.floor(box.e * f) / f - shift, Math.floor(box.n * f) / f].map(String).join(',')
+}
+
+const toBox = (b) => (typeof b.getWest === 'function' ? { w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() } : b)
+
+export const bboxCenter = ({ w, s, e, n }) => ({ lat: (s + n) / 2, lng: ((((w + e) / 2 + 180) % 360) + 360) % 360 - 180 })
+
+// Is a { lat, lng } inside the box?
+export function inBbox(box, point) {
+  if (!box || !point) return false
+  if (point.lat < box.s || point.lat > box.n) return false
+  return ((((point.lng - box.w) % 360) + 360) % 360) <= box.e - box.w
+}
+
+// Split photographers by a map area:
+//   inside  - based inside the box
+//   travels - based outside, but their service radius covers the box's center
+// (anyone else is neither). Order is kept.
+export function splitByArea(providers, box) {
+  const inside = []
+  const travels = []
+  if (!box) return { inside, travels }
+  const center = bboxCenter(box)
+  for (const p of providers) {
+    if (!p.location) continue
+    if (inBbox(box, p.location)) inside.push(p)
+    else if (p.radiusKm != null && distanceKm(p.location, center) <= p.radiusKm) travels.push(p)
+  }
+  return { inside, travels }
+}
+
+// ---------------------------------------------------------------------------
 // Photographers
 // ---------------------------------------------------------------------------
 

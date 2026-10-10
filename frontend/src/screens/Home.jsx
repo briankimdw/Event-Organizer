@@ -6,6 +6,7 @@ import {
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
 import SearchLauncher from '../components/SearchLauncher.jsx'
+import PlanCard from '../components/planner/PlanCard.jsx'
 import { StatusPill, money, startingPrice } from '../components/Booking.jsx'
 import { ErrorState, Loading } from '../components/States.jsx'
 import { useAuth } from '../auth.jsx'
@@ -95,6 +96,7 @@ export default function Home() {
 
       <div className="pad-x">
         <SearchLauncher placeholder="Search styles, occasions, names" />
+        <PlanCard />
       </div>
 
       {bookings.error && (
@@ -109,7 +111,7 @@ export default function Home() {
           <div className="h-scroll">
             {bookingTiles.map((b) => (
               <Link key={b.id} to={`/bookings/${b.id}`} className={`booking-tile ${NEEDS_ACTION[b.status] ? 'action' : ''}`}>
-                <ProfileLink id={b.provider.id} className="row gap-xs">
+                <ProfileLink id={b.provider.id} className="row gap-xs" preview={{ src: b.provider.avatar, name: b.provider.name }}>
                   <img className="avatar sm" src={b.provider.avatar} alt="" />
                   <b className="small grow ellipsis">{b.provider.name}</b>
                 </ProfileLink>
@@ -237,11 +239,12 @@ function SectionHead({ title, sub, to }) {
 // "★ 4.9 (12)", or "New" before the first review.
 function RatingInline({ p, count = false }) {
   if (p.rating == null) return <span className="new-tag">New</span>
+  // Inside the photographer's card link: the rating itself opens their reviews.
   return (
-    <>
+    <ProfileLink id={p.id} to={`/u/${p.id}?tab=reviews`} className="tap-text" label={`Rated ${p.rating.toFixed(1)}. See reviews`}>
       <Star size={11} className="star-on" fill="currentColor" /> {p.rating.toFixed(1)}
       {count && ` (${p.reviewCount})`}
-    </>
+    </ProfileLink>
   )
 }
 

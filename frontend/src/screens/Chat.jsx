@@ -6,7 +6,7 @@ import Sheet from '../components/Sheet.jsx'
 import PeoplePicker from '../components/PeoplePicker.jsx'
 import { StatusPill } from '../components/Booking.jsx'
 import { ModerationSheet } from '../components/PostSheets.jsx'
-import ProfileLink from '../components/ProfileLink.jsx'
+import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
@@ -209,12 +209,13 @@ export default function Chat() {
           <div className="chat-intro">
             {isGroup ? (
               <div className="chat-intro-avatars">
-                {c.members.slice(0, 3).map((m) => <img key={m.profileId} className="avatar" src={m.avatar} alt="" />)}
+                {c.members.slice(0, 3).map((m) => <PersonAvatar key={m.profileId} id={m.id} src={m.avatar} name={m.name} username={m.username} />)}
               </div>
             ) : (
-              other && <img className="avatar lg" src={other.avatar} alt="" />
+              other && <PersonAvatar id={other.id} src={other.avatar} name={other.name} username={other.username} className="avatar lg" />
             )}
-            <b>{c.title}</b>
+            {!isGroup && other ? <ProfileLink id={other.id}><b>{c.title}</b></ProfileLink> : <b>{c.title}</b>}
+            {!isGroup && other && <Link to={`/u/${other.id}`} className="btn ghost sm">View profile</Link>}
             <div className="muted small">
               {c.kind === 'inquiry' && other
                 ? `Ask ${other.name?.split(' ')[0] || 'them'} about availability, pricing or style.`
@@ -238,7 +239,7 @@ export default function Chat() {
               <div className={`msg ${m.mine ? 'mine' : ''} ${joinsPrev ? 'joined' : ''} ${m.pending ? 'pending' : ''} ${m.failed ? 'failed' : ''}`}>
                 {!m.mine && (
                   <span className="msg-avatar">
-                    {!joinsNext && <ProfileLink id={author.id}><img className="avatar sm" src={author.avatar} alt="" /></ProfileLink>}
+                    {!joinsNext && <PersonAvatar id={author.id} src={author.avatar} name={author.name} username={author.username} className="avatar sm" />}
                   </span>
                 )}
                 <div className="msg-col">
@@ -278,7 +279,7 @@ export default function Chat() {
         })}
         {typers.length > 0 && (
           <div className="msg typing-row">
-            <span className="msg-avatar"><img className="avatar sm" src={typers[0].avatar} alt="" /></span>
+            <span className="msg-avatar"><PersonAvatar id={typers[0].id} src={typers[0].avatar} name={typers[0].name} username={typers[0].username} className="avatar sm" /></span>
             <div className="bubble typing" aria-label={`${typers[0].name} is typing`}>
               <i /><i /><i />
             </div>

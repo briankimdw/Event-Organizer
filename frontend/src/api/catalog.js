@@ -145,7 +145,7 @@ export async function listReviews(providerId, limit = 20) {
   const rows = must(
     await supabase
       .from('reviews')
-      .select('id, rating, body, created_at, author:profiles!reviews_author_id_fkey(id, display_name, avatar_path)')
+      .select('id, rating, body, created_at, booking_id, author:profiles!reviews_author_id_fkey(id, username, display_name, avatar_path)')
       .eq('provider_id', providerId)
       .eq('direction', 'client_to_provider')
       .not('revealed_at', 'is', null)
@@ -155,12 +155,27 @@ export async function listReviews(providerId, limit = 20) {
   return rows.map((r) => ({
     id: r.id,
     authorId: r.author?.id,
+    username: r.author?.username ?? null,
+    bookingId: r.booking_id,
+    createdAt: r.created_at,
     name: shortName(r.author?.display_name),
     avatar: avatarUrl(r.author?.avatar_path, r.author?.display_name),
     rating: r.rating,
     text: r.body ?? '',
     date: new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
   }))
+}
+
+// What a review was for: { packageName, completed } — only for people who can see the
+// booking (its client and photographer); null for everyone else.
+export async function reviewBooking(bookingId) {
+  if (!bookingId) return null
+  const { data } = await supabase.from('bookings').select('package_snapshot, completed_at').eq('id', bookingId).maybeSingle()
+  if (!data) return null
+  return {
+    packageName: data.package_snapshot?.name ?? null,
+    completed: data.completed_at ? new Date(data.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
+  }
 }
 
 // "Hannah Park" -> "Hannah P."

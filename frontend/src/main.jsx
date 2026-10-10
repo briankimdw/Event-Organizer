@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import { StoreProvider } from './store.jsx'
 import { AuthProvider } from './auth.jsx'
+import { AvatarViewerProvider } from './components/AvatarViewer.jsx'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <AuthProvider>
         <StoreProvider>
-          <App />
+          <AvatarViewerProvider>
+            <App />
+          </AvatarViewerProvider>
         </StoreProvider>
       </AuthProvider>
     </BrowserRouter>

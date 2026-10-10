@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { CalendarX, EyeOff } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Stars from '../components/Stars.jsx'
-import ProfileLink from '../components/ProfileLink.jsx'
+import { PersonAvatar } from '../components/ProfileLink.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
@@ -46,7 +46,7 @@ function ReviewView({ b, reload }) {
 
   const header = (
     <>
-      <ProfileLink id={other.id}><img className="avatar xl" src={other.avatar} alt="" /></ProfileLink>
+      <PersonAvatar id={other.id} src={other.avatar} name={other.name} username={other.username} className="avatar xl" />
       <div className="muted small">{b.packageName} · {b.date}</div>
     </>
   )
@@ -97,7 +97,7 @@ function ReviewView({ b, reload }) {
     <div>
       <TopBar title="Leave a review" />
       <div className="pad center-col">
-        <ProfileLink id={other.id}><img className="avatar xl" src={other.avatar} alt="" /></ProfileLink>
+        <PersonAvatar id={other.id} src={other.avatar} name={other.name} username={other.username} className="avatar xl" />
         <h3>{isClient ? `How was your shoot with ${first}?` : `How was working with ${first}?`}</h3>
         <div className="muted small">{b.packageName} · {b.date}</div>
         <div className="mt">

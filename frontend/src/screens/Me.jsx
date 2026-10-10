@@ -5,8 +5,9 @@ import {
   Settings, ShieldCheck, Sparkles, Star,
 } from 'lucide-react'
 import Sheet from '../components/Sheet.jsx'
-import ProfileLink from '../components/ProfileLink.jsx'
+import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
 import { IdVerified } from '../components/Badges.jsx'
+import { ViewableAvatar } from '../components/AvatarViewer.jsx'
 import { StatusPill } from '../components/Booking.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import Dashboard, { BOOKED } from './Dashboard.jsx'
@@ -132,15 +133,15 @@ function ProfileHero({ provider }) {
   return (
     <section className="me-hero">
       <div className="row gap-xs top">
-        <img className="avatar xl" src={avatarUrl(profile.avatar_path, name)} alt="" />
+        <ViewableAvatar src={avatarUrl(profile.avatar_path, name)} name={name} username={profile.username} />
         <div className="grow">
           <h2>{name}</h2>
           <div className="muted small inline-icon">
-            @{profile.username}
+            <Link to={`/u/${profile.username || profile.id}`} className="tap-text" aria-label="View your public profile">@{profile.username}</Link>
             {profile.city && <> · <MapPin size={12} /> {profile.city}</>}
           </div>
           <div className="row gap-xs wrap mt-xs">
-            {identityStatus === 'verified' && <IdVerified label />}
+            {identityStatus === 'verified' && <IdVerified label explain name={name} />}
           </div>
         </div>
         <button className="pill-btn" onClick={openEdit}>
@@ -156,19 +157,17 @@ function ProfileHero({ provider }) {
           <b><Star size={14} className="star-on" fill="currentColor" /> {clientRating ?? 'New'}</b>
           <span>as a client · {clientReviews} review{clientReviews === 1 ? '' : 's'}</span>
         </div>
-        <div className={`rating-cell ${isProvider ? 'on' : ''}`}>
-          {myProvider ? (
-            <>
-              <b><Star size={14} className="star-on" fill="currentColor" /> {rating(provider?.rating) ?? 'New'}</b>
-              <span>as a photographer · {provider?.reviewCount ?? 0} review{provider?.reviewCount === 1 ? '' : 's'}</span>
-            </>
-          ) : (
-            <>
-              <b><Camera size={14} /> —</b>
-              <span>not taking bookings yet</span>
-            </>
-          )}
-        </div>
+        {myProvider ? (
+          <Link to={`/u/${myProvider.id}?tab=reviews`} className={`rating-cell tappable ${isProvider ? 'on' : ''}`} aria-label="See the reviews on your photographer profile">
+            <b><Star size={14} className="star-on" fill="currentColor" /> {rating(provider?.rating) ?? 'New'} <ChevronRight size={14} className="muted rating-cell-go" /></b>
+            <span>as a photographer · {provider?.reviewCount ?? 0} review{provider?.reviewCount === 1 ? '' : 's'}</span>
+          </Link>
+        ) : (
+          <div className={`rating-cell ${isProvider ? 'on' : ''}`}>
+            <b><Camera size={14} /> —</b>
+            <span>not taking bookings yet</span>
+          </div>
+        )}
       </div>
 
       <Sheet open={editing} onClose={() => setEditing(false)} title="Edit profile">
@@ -231,6 +230,7 @@ function ClientView({ bookings }) {
   const { data: providers } = useQuery(() => listProviders().then(withMatches), [user?.id])
   const collections = useQuery(listCollections, [user?.id])
   const taste = useQuery(getTasteProfile, [user?.id])
+  const [openCollection, setOpenCollection] = useState(null)
 
   const all = bookings.data || []
   const active = all.filter((b) => ACTIVE.includes(b.status))
@@ -305,7 +305,7 @@ function ClientView({ bookings }) {
       ) : collections.data?.length ? (
         <div className="grid2 pad-x-only">
           {collections.data.map((c) => (
-            <div key={c.id} className="collection">
+            <button key={c.id} className="collection tappable left-text" onClick={() => setOpenCollection(c)} aria-label={`Open ${c.name}, ${c.count} saved`}>
               {c.cover ? (
                 <img src={c.cover} alt="" loading="lazy" />
               ) : (
@@ -313,7 +313,7 @@ function ClientView({ bookings }) {
               )}
               <b className="small">{c.name}</b>
               <div className="muted tiny">{c.count} saved</div>
-            </div>
+            </button>
           ))}
         </div>
       ) : (
@@ -321,6 +321,21 @@ function ClientView({ bookings }) {
           <EmptyState compact icon={Bookmark} title="No collections yet" text="Tap the bookmark on any photo to save it here." />
         </div>
       )}
+
+      <Sheet open={!!openCollection} onClose={() => setOpenCollection(null)} title={openCollection?.name}>
+        {openCollection?.photos.length === 0 && <EmptyState compact icon={Bookmark} title="Nothing saved here yet" text="Tap the bookmark on any photo to save it here." />}
+        <div className="collection-grid">
+          {openCollection?.photos.map((ph) =>
+            ph.providerId && ph.albumId ? (
+              <Link key={ph.id} to={`/gallery/${ph.providerId}?post=${ph.albumId}&photo=${ph.id}`} aria-label="Open in the gallery">
+                <img src={ph.src} alt="" loading="lazy" />
+              </Link>
+            ) : (
+              <img key={ph.id} src={ph.src} alt="" loading="lazy" />
+            ),
+          )}
+        </div>
+      </Sheet>
 
       <div className="pad-x mt muted tiny inline-icon">
         <Info size={12} /> Photographers see your client rating when you send a request.
@@ -379,7 +394,7 @@ function NextBooking({ b }) {
   const provider = b.provider
   return (
     <Link to={`/bookings/${b.id}`} className="booking-card">
-      <ProfileLink id={provider.id}><img className="avatar" src={provider.avatar} alt="" /></ProfileLink>
+      <PersonAvatar id={provider.id} src={provider.avatar} name={provider.name} username={provider.username} className="avatar" />
       <div className="grow">
         <b className="small">{b.packageName}</b>
         <div className="muted tiny"><ProfileLink id={provider.id}>{provider.name}</ProfileLink> · {b.date}</div>

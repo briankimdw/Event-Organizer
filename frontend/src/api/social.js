@@ -1,6 +1,6 @@
 // Follows, the shortlist (saved photographers) and photo collections.
 import { supabase } from '../lib/supabase.js'
-import { photoUrl } from '../lib/format.js'
+import { avatarUrl, photoUrl } from '../lib/format.js'
 
 const must = ({ data, error }) => {
   if (error) throw error
@@ -14,6 +14,22 @@ export async function listFollowing() {
   const uid = await viewer()
   if (!uid) return []
   return must(await supabase.from('follows').select('provider_id').eq('follower_id', uid)).map((r) => r.provider_id)
+}
+// People following a photographer, newest first: [{ id (profile id), name, username, avatar }].
+// Public, like the follower count.
+export async function listFollowers(providerId, limit = 200) {
+  const rows = must(
+    await supabase
+      .from('follows')
+      .select('created_at, follower:profiles!follows_follower_id_fkey(id, username, display_name, avatar_path)')
+      .eq('provider_id', providerId)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  )
+  return rows
+    .map((r) => r.follower)
+    .filter(Boolean)
+    .map((p) => ({ id: p.id, name: p.display_name || p.username, username: p.username, avatar: avatarUrl(p.avatar_path, p.display_name || p.username) }))
 }
 export const follow = async (providerId) => must(await supabase.from('follows').insert({ provider_id: providerId }))
 export const unfollow = async (providerId) => {
@@ -43,7 +59,7 @@ export async function listCollections() {
   const rows = must(
     await supabase
       .from('collections')
-      .select('id, name, created_at, items:collection_items(photo_id, created_at, photo:photos(display_path))')
+      .select('id, name, created_at, items:collection_items(photo_id, created_at, photo:photos(display_path, album_id, album:albums!photos_album_id_fkey(provider_id)))')
       .eq('owner_id', uid)
       .order('created_at', { ascending: true }),
   )
@@ -54,7 +70,7 @@ export async function listCollections() {
       name: c.name,
       count: items.length,
       cover: photoUrl(items[0]?.photo?.display_path),
-      photos: items.map((i) => ({ id: i.photo_id, src: photoUrl(i.photo?.display_path) })),
+      photos: items.map((i) => ({ id: i.photo_id, src: photoUrl(i.photo?.display_path), albumId: i.photo?.album_id ?? null, providerId: i.photo?.album?.provider_id ?? null })),
       photoIds: items.map((i) => i.photo_id),
     }
   })

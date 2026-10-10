@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CalendarX, ChevronDown, ChevronRight, Clock, History, MapPin, Search, Star, X } from 'lucide-react'
 import DatePicker from '../components/DatePicker.jsx'
-import ProfileLink from '../components/ProfileLink.jsx'
+import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
 import SearchLauncher from '../components/SearchLauncher.jsx'
 import { StatusPill, money } from '../components/Booking.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
@@ -147,7 +147,7 @@ export default function Bookings() {
                 const a = attentionFor(b)
                 return (
                   <Link key={b.id} to={a.to || `/bookings/${b.id}`} className="attention-card">
-                    <ProfileLink id={b.provider.id}><img className="attention-img" src={b.provider.avatar} alt="" /></ProfileLink>
+                    <PersonAvatar id={b.provider.id} src={b.provider.avatar} name={b.provider.name} username={b.provider.username} className="attention-img" />
                     <div className="grow">
                       <b className="small">{a.title}</b>
                       <div className="muted tiny">
@@ -220,7 +220,7 @@ function TimelineItem({ b, past }) {
           <b className="small">{b.packageName}</b>
           <StatusPill status={b.status} />
         </div>
-        <ProfileLink id={b.provider.id} className="row gap-xs mt-xs">
+        <ProfileLink id={b.provider.id} className="row gap-xs mt-xs" preview={{ src: b.provider.avatar, name: b.provider.name }}>
           <img className="avatar sm" src={b.provider.avatar} alt="" />
           <span className="small">{b.provider.name}</span>
         </ProfileLink>
@@ -244,7 +244,7 @@ function TimelineItem({ b, past }) {
 function MiniBooking({ b }) {
   return (
     <Link to={`/bookings/${b.id}`} className="mini-booking">
-      <ProfileLink id={b.provider.id}><img className="avatar sm" src={b.provider.avatar} alt="" /></ProfileLink>
+      <PersonAvatar id={b.provider.id} src={b.provider.avatar} name={b.provider.name} username={b.provider.username} className="avatar sm" />
       <div className="grow">
         <b className="small">{b.packageName}</b>
         <div className="muted tiny">{fmtChip(b.day)} · {b.time} · <ProfileLink id={b.provider.id}>{b.provider.name}</ProfileLink></div>
