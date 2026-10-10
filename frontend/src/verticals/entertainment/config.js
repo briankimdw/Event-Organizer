@@ -20,4 +20,12 @@ export default {
   cardKeys: ['acts'],
   packageKeys: ['performers'],
   filters: [{ key: 'age_groups', label: 'Best for', type: 'tags', attr: 'age_groups', options: AGES }],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'act',
+    headline: 'Show your act',
+    prompts: ['Mid-performance', 'Your setup', 'Guests having fun'],
+    title: 'e.g. Photo booth at a 30th birthday',
+  },
 }

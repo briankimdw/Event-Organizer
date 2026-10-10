@@ -10,7 +10,7 @@ import { createEvent, listMyEvents, titleFor, updateEvent } from '@shared/api/ev
 import { planEvent, plannerHealth } from '@shared/api/planner.js'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import {
-  BookmarkCheck, BookmarkPlus, Cake, Clock, FolderOpen, GraduationCap, Heart, MessageCircleQuestion, PlugZap, SquarePen, UserSquare,
+  BookmarkCheck, BookmarkPlus, Cake, CalendarHeart, Clock, FolderOpen, GraduationCap, Heart, MessageCircleQuestion, PlugZap, SquarePen, UserPlus, UserSquare,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -21,6 +21,7 @@ import { Button, IconButton, Loading, Screen, Sheet, SignInPrompt, Text } from '
 import useQuery from '@/hooks/useQuery'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
+import { SharePlanButton } from '@/components/share/SharePlanButton'
 import { makeStyles, useTheme } from '@/theme'
 import type { Provider } from '@/types'
 import { AiMark } from './AiMark'
@@ -295,7 +296,7 @@ function PlannerChat({ userId }: { userId: string }) {
                       providersLoading={providers.loading && !providers.data}
                       onEdit={editField}
                       onAnswer={setReplyTo}
-                      save={{ onSave: save, saving, saved: !!saved, dirty }}
+                      save={{ onSave: save, saving, saved: !!saved, dirty, eventId: saved?.id }}
                     />
                   )
                 }
@@ -342,10 +343,11 @@ type ResultProps = {
   providersLoading: boolean
   onEdit: (field: string, brief: Brief) => void
   onAnswer: (q: string) => void
-  save: { onSave: () => void; saving: boolean; saved: boolean; dirty: boolean }
+  save: { onSave: () => void; saving: boolean; saved: boolean; dirty: boolean; eventId?: string | null }
 }
 
 function PlanResult({ plan, busy, providers, providersLoading, onEdit, onAnswer, save }: ResultProps) {
+  const router = useRouter()
   const s = useStyles()
   const { c } = useTheme()
   const { brief, questions, budget, recommendations, coming_soon: comingSoon } = plan
@@ -406,7 +408,16 @@ function PlanResult({ plan, busy, providers, providersLoading, onEdit, onAnswer,
             <View style={s.saved}>
               <BookmarkCheck size={16} color={c.ok} />
               <Text variant="body" weight="600" style={{ color: c.ok }}>Saved to My events</Text>
+              <SharePlanButton eventId={save.eventId} title={titleFor(brief as any)} subtitle="Event plan" />
             </View>
+          ) : null}
+          {save.saved && !save.dirty ? (
+            !!save.eventId && (
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <Button title="Invite friends" icon={UserPlus} grow onPress={() => router.push({ pathname: '/events/[id]', params: { id: save.eventId!, invite: '1' } })} />
+                <Button title="Open event" icon={CalendarHeart} variant="ghost" grow onPress={() => router.push({ pathname: '/events/[id]', params: { id: save.eventId! } })} />
+              </View>
+            )
           ) : (
             <Button
               title={save.saving ? 'Saving…' : save.saved ? 'Save changes to this event' : 'Save as event'}

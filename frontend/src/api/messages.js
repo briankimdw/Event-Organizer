@@ -3,7 +3,8 @@
 // member of (Row-Level Security); new conversations are created through
 // database functions that also enforce blocks.
 import { supabase } from '../lib/supabase.js'
-import { avatarUrl, photoUrl } from '../lib/format.js'
+import { avatarUrl, fromPriceLabel, photoUrl } from '../lib/format.js'
+import { listProviders } from './catalog.js'
 
 const must = ({ data, error }) => {
   if (error) throw error
@@ -61,7 +62,7 @@ function toConversation(row, uid, last = null) {
     members: others, // everyone except me
     memberIds: others.map((o) => o.id),
     myLastReadAt: me?.last_read_at ?? null,
-    lastMessage: last ? { text: last.body || (last.shared_album_id ? 'Shared a post' : ''), fromMe: last.sender_id === uid, at: last.created_at, senderId: last.sender_id } : null,
+    lastMessage: last ? { text: last.body || shareLabel(last), fromMe: last.sender_id === uid, at: last.created_at, senderId: last.sender_id } : null,
     lastMessageAt: lastAt || row.created_at,
     unread: !!(last && last.sender_id !== uid && (!me?.last_read_at || me.last_read_at < last.created_at)),
   }
@@ -74,11 +75,12 @@ export async function listConversations() {
   const rows = must(await supabase.from('conversations').select(CONVERSATION_COLUMNS).order('last_message_at', { ascending: false, nullsFirst: false }).limit(100))
   if (!rows.length) return []
   // The last message of each conversation (small parallel queries; each uses the (conversation_id, created_at) index).
+  const lastColumns = `conversation_id, body, shared_album_id, sender_id, created_at${(await shareColumnsReady()) ? ', shared_provider_id, shared_event_id, share_preview' : ''}`
   const lasts = await Promise.all(
     rows.map((r) =>
       supabase
         .from('messages')
-        .select('conversation_id, body, shared_album_id, sender_id, created_at')
+        .select(lastColumns)
         .eq('conversation_id', r.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -108,41 +110,276 @@ export async function unreadCount() {
 // Messages
 // ---------------------------------------------------------------------------
 
-export const MESSAGE_COLUMNS = `
+// Base columns work on every database; the share-card columns (vendor and event
+// cards, migration 20261011000000_share_cards) are added once that migration is applied.
+const BASE_MESSAGE_COLUMNS = `
   id, conversation_id, sender_id, body, shared_album_id, created_at,
-  album:albums!messages_shared_album_id_fkey(id, title, provider_id, cover:photos!albums_cover_photo_fk(display_path))`
+  album:albums!messages_shared_album_id_fkey(id, title, caption, provider_id, cover:photos!albums_cover_photo_fk(display_path),
+    owner:providers!albums_provider_id_fkey(display_name))`
+const SHARE_MESSAGE_COLUMNS = `,
+  shared_provider_id, shared_event_id, share_preview,
+  provider:providers!messages_shared_provider_id_fkey(id, display_name, slug, status, rating_avg, rating_count,
+    profile:profiles!providers_profile_id_fkey(avatar_path))`
+export const MESSAGE_COLUMNS = BASE_MESSAGE_COLUMNS // back-compat export
 
-const toMessage = (m, uid) => ({
-  id: m.id,
-  conversationId: m.conversation_id,
-  from: m.sender_id,
-  mine: m.sender_id === uid,
-  text: m.body ?? '',
-  sharedAlbum: m.album ? { id: m.album.id, title: m.album.title, providerId: m.album.provider_id, cover: photoUrl(m.album.cover?.display_path) } : null,
-  sharedAlbumId: m.shared_album_id,
-  at: m.created_at,
-  time: new Date(m.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-})
+// Does the database have the share-card columns? Probed once per session (a
+// missing column is remembered; network errors are retried next time).
+let shareColumns = null
+export async function shareColumnsReady() {
+  if (shareColumns !== null) return shareColumns
+  const { error } = await supabase.from('messages').select('shared_provider_id, shared_event_id, share_preview').limit(0)
+  if (!error) shareColumns = true
+  else if (/column|does not exist|schema cache|42703|PGRST20/i.test(`${error.code} ${error.message}`)) shareColumns = false
+  return shareColumns ?? false
+}
+const messageColumns = async () => BASE_MESSAGE_COLUMNS + ((await shareColumnsReady()) ? SHARE_MESSAGE_COLUMNS : '')
+
+// What can be sent as a card in chat. Posts always work; vendor and event
+// cards need the share-card migration.
+export async function shareSupport() {
+  const ready = await shareColumnsReady()
+  return { post: true, provider: ready, event: ready }
+}
+
+// In-app path of a shared thing (also used for "Copy link").
+export const shareLink = ({ kind, id, providerId } = {}) =>
+  kind === 'post' ? (providerId ? `/gallery/${providerId}?post=${id}` : `/post/${id}`)
+    : kind === 'provider' ? `/u/${id}`
+      : kind === 'event' ? `/events/${id}`
+        : kind === 'plan' ? '/plan'
+          : '/'
+
+// One-line summary of a message without text ("Shared Lumen Studio").
+export function shareLabel(m) {
+  const p = m?.share_preview || {}
+  if (m?.shared_event_id || p.kind === 'event') return p.title ? `Shared an event: ${p.title}` : 'Shared an event'
+  if (m?.shared_provider_id || p.kind === 'provider') return p.name ? `Shared ${p.name}` : 'Shared a vendor'
+  if (m?.shared_album_id || p.kind === 'post') return 'Shared a post'
+  return ''
+}
+
+const fmtEventDate = (start, end) => {
+  if (!start) return null
+  const opts = { weekday: 'short', month: 'short', day: 'numeric' }
+  const a = new Date(start)
+  const yearly = a.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}
+  const first = a.toLocaleDateString('en-US', { ...opts, ...yearly })
+  if (!end) return first
+  const b = new Date(end)
+  if (b.toDateString() === a.toDateString()) return first
+  return `${a.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${b.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...yearly })}`
+}
+
+// The card a message carries, or null:
+//   { kind: 'post', id, providerId, title, caption, cover, vendorName, available }
+//   { kind: 'provider', id, name, avatar, cover, noun, rating, reviewCount, fromPrice, available }
+//   { kind: 'event', id, title, typeName, date, location, cover, available }
+function toShared(m) {
+  const p = m.share_preview || {}
+  if (m.shared_album_id || p.kind === 'post') {
+    const a = m.album
+    return {
+      kind: 'post',
+      id: a?.id ?? m.shared_album_id ?? p.id ?? null,
+      providerId: a?.provider_id ?? p.provider_id ?? null,
+      title: a?.title ?? p.title ?? null,
+      caption: a?.caption ?? null,
+      cover: photoUrl(a?.cover?.display_path ?? p.cover ?? null),
+      vendorName: a?.owner?.display_name ?? p.vendor ?? null,
+      available: !!a,
+    }
+  }
+  if (m.shared_provider_id || p.kind === 'provider') {
+    const v = m.provider
+    const name = v?.display_name ?? p.name ?? 'Vendor'
+    return {
+      kind: 'provider',
+      id: v?.id ?? m.shared_provider_id ?? p.id ?? null,
+      name,
+      avatar: avatarUrl(v?.profile?.avatar_path ?? p.avatar ?? null, name),
+      cover: null,
+      noun: null,
+      rating: v?.rating_avg == null ? null : Number(v.rating_avg),
+      reviewCount: v?.rating_count ?? 0,
+      fromPrice: null,
+      available: !!v && v.status === 'active',
+    }
+  }
+  if (m.shared_event_id || p.kind === 'event') {
+    return {
+      kind: 'event',
+      id: m.shared_event_id ?? p.id ?? null,
+      title: p.title || 'Event',
+      type: p.type ?? null,
+      date: fmtEventDate(p.starts_at, p.ends_at),
+      startsAt: p.starts_at ?? null,
+      location: p.location_text ?? null,
+      cover: p.cover ? photoUrl(p.cover) : null,
+      available: !!m.shared_event_id,
+    }
+  }
+  return null
+}
+
+const toMessage = (m, uid) => {
+  const shared = toShared(m)
+  return {
+    id: m.id,
+    conversationId: m.conversation_id,
+    from: m.sender_id,
+    mine: m.sender_id === uid,
+    text: m.body ?? '',
+    shared,
+    // Back-compat (older screens): the post card only.
+    sharedAlbum: shared?.kind === 'post' && shared.available ? { id: shared.id, title: shared.title, providerId: shared.providerId, cover: shared.cover } : null,
+    sharedAlbumId: m.shared_album_id,
+    at: m.created_at,
+    time: new Date(m.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+  }
+}
+
+// Vendor cards: fill in the vertical noun, cover and "from $X" from the
+// (cached) provider list. Best effort; the card works without it.
+async function withVendorDetails(messages) {
+  if (!messages.some((m) => m.shared?.kind === 'provider' && m.shared.available)) return messages
+  let byId
+  try {
+    byId = new Map((await listProviders()).map((p) => [p.id, p]))
+  } catch (e) {
+    console.warn(e)
+    return messages
+  }
+  for (const m of messages) {
+    const s = m.shared
+    const p = s?.kind === 'provider' ? byId.get(s.id) : null
+    if (!p) continue
+    m.shared = { ...s, name: p.name, avatar: p.avatar, cover: p.cover, noun: p.verticalInfo?.noun ?? null, vertical: p.vertical, city: p.city, rating: p.rating, reviewCount: p.reviewCount, fromPrice: fromPriceLabel(p) }
+  }
+  return messages
+}
 
 // The latest messages of a conversation, oldest first.
 export async function listMessages(conversationId, limit = 300) {
   const uid = await viewer()
-  const rows = must(await supabase.from('messages').select(MESSAGE_COLUMNS).eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(limit))
-  return rows.reverse().map((m) => toMessage(m, uid))
+  const rows = must(await supabase.from('messages').select(await messageColumns()).eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(limit))
+  return withVendorDetails(rows.reverse().map((m) => toMessage(m, uid)))
 }
 
-// Send a message (text and/or a shared album). Returns the saved message.
-export async function sendMessage(conversationId, { text = null, sharedAlbumId = null }) {
-  const uid = await viewer()
-  const row = must(
-    await supabase
-      .from('messages')
-      .insert({ conversation_id: conversationId, body: text?.trim() || null, shared_album_id: sharedAlbumId })
-      .select(MESSAGE_COLUMNS)
-      .single(),
-  )
-  return toMessage(row, uid)
+const fetchMessage = async (id, uid) => {
+  const { data } = await supabase.from('messages').select(await messageColumns()).eq('id', id).maybeSingle()
+  if (!data) return null
+  return (await withVendorDetails([toMessage(data, uid)]))[0]
 }
+
+// Send a message: text and/or one shared thing (a post, a vendor or an event).
+// Returns the saved message.
+export async function sendMessage(conversationId, { text = null, sharedAlbumId = null, sharedProviderId = null, sharedEventId = null }) {
+  const uid = await viewer()
+  const row = { conversation_id: conversationId, body: text?.trim() || null, shared_album_id: sharedAlbumId }
+  if (sharedProviderId) row.shared_provider_id = sharedProviderId
+  if (sharedEventId) row.shared_event_id = sharedEventId
+  const saved = must(await supabase.from('messages').insert(row).select(await messageColumns()).single())
+  return (await withVendorDetails([toMessage(saved, uid)]))[0]
+}
+
+// ---------------------------------------------------------------------------
+// Sharing ("Send to"): one message with a card in each chosen conversation.
+// ---------------------------------------------------------------------------
+
+//   await shareToChats({ conversationIds, profileIds, kind: 'post'|'provider'|'event', id, text })
+// profileIds: people to send to directly; their one-to-one thread is opened
+// (or created) first. text: an optional note sent with the card.
+// Returns { sent: [conversationId], failed: [{ target, error }] }; throws only
+// when nothing could be sent.
+export async function shareToChats({ conversationIds = [], profileIds = [], kind, id, text = null, link = null } = {}) {
+  if (!['post', 'provider', 'event'].includes(kind) || !id) throw new Error('Nothing to share')
+  const support = await shareSupport()
+  const note = text?.trim() || null
+  let payload
+  if (kind === 'post') payload = { sharedAlbumId: id }
+  else if (support[kind]) payload = kind === 'provider' ? { sharedProviderId: id } : { sharedEventId: id }
+  else if (kind === 'provider') {
+    // Older database: send the vendor's link as text instead of a card.
+    const url = `${typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://photomatch.app'}${link || shareLink({ kind, id })}`
+    payload = { text: note ? `${note}\n${url}` : url }
+  } else throw new Error('Sharing events in chat isn’t set up yet (database update pending).')
+
+  const failed = []
+  const direct = await Promise.all(
+    [...new Set(profileIds)].map((pid) =>
+      startDirectMessage(pid).catch((error) => {
+        failed.push({ target: { profileId: pid }, error })
+        return null
+      }),
+    ),
+  )
+  const targets = [...new Set([...conversationIds, ...direct.filter(Boolean)])]
+  const sent = []
+  await Promise.all(
+    targets.map((cid) =>
+      sendMessage(cid, { text: note, ...payload })
+        .then(() => sent.push(cid))
+        .catch((error) => failed.push({ target: { conversationId: cid }, error })),
+    ),
+  )
+  if (!sent.length && failed.length) throw failed[0].error
+  return { sent, failed }
+}
+
+// Recipients for the share sheet, as one list:
+//   { key, type: 'conversation'|'person', conversationId?, profileId?, name, avatar, avatars[], sub, isGroup }
+// With an empty query: my recent chats (DMs, groups, event chats, vendor threads).
+// With a query: matching chats, then matching people. A person I already have a
+// one-to-one thread with shows as that thread.
+export const conversationTarget = (c) => ({
+  key: `c:${c.id}`,
+  type: 'conversation',
+  conversationId: c.id,
+  name: c.title,
+  avatar: c.members[0]?.avatar ?? avatarUrl(null, c.title),
+  avatars: c.members.slice(0, 2).map((m) => m.avatar),
+  isGroup: c.isGroup || c.kind === 'event' || c.members.length > 1,
+  kind: c.kind,
+  sub: c.kind === 'event' ? 'Event chat' : c.isGroup ? `${c.members.length + 1} people` : c.members[0]?.username ? `@${c.members[0].username}` : '',
+})
+
+export const personTarget = (p) => ({
+  key: `p:${p.profileId}`,
+  type: 'person',
+  profileId: p.profileId,
+  name: p.name,
+  avatar: p.avatar,
+  avatars: [p.avatar],
+  isGroup: false,
+  kind: 'person',
+  sub: p.username ? `@${p.username}` : p.city || '',
+})
+
+export function mergeShareTargets(conversations = [], people = [], q = '') {
+  const term = q.trim().replace(/^@/, '').toLowerCase()
+  const direct = new Map()
+  for (const c of conversations) if (c.kind === 'direct' && c.members.length === 1) direct.set(c.members[0].profileId, c)
+  const matches = (c) =>
+    !term || c.title.toLowerCase().includes(term) || c.members.some((m) => m.name?.toLowerCase().includes(term) || m.username?.toLowerCase().includes(term))
+  const out = conversations.filter(matches).map(conversationTarget)
+  if (!term) return out
+  const seen = new Set(out.map((t) => t.key))
+  for (const p of people) {
+    const c = direct.get(p.profileId)
+    const t = c ? conversationTarget(c) : personTarget(p)
+    if (!seen.has(t.key)) {
+      seen.add(t.key)
+      out.push(t)
+    }
+  }
+  return out
+}
+
+// Split chosen targets into the shareToChats arguments.
+export const shareRecipients = (targets) => ({
+  conversationIds: targets.filter((t) => t.type === 'conversation').map((t) => t.conversationId),
+  profileIds: targets.filter((t) => t.type === 'person').map((t) => t.profileId),
+})
 
 export async function markRead(conversationId) {
   const uid = await viewer()
@@ -222,8 +459,8 @@ export function openChat(conversationId, { onMessage, onRead, onTyping } = {}) {
   const db = supabase
     .channel(`chat-db:${conversationId}:${++channelSeq}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, async (payload) => {
-      const { data } = await supabase.from('messages').select(MESSAGE_COLUMNS).eq('id', payload.new.id).maybeSingle()
-      onMessage?.(toMessage(data || payload.new, uid))
+      const msg = await fetchMessage(payload.new.id, uid).catch(() => null)
+      onMessage?.(msg || toMessage(payload.new, uid))
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_members', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
       if (payload.new.profile_id !== uid) onRead?.(payload.new.profile_id, payload.new.last_read_at)

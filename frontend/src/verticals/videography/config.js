@@ -18,4 +18,14 @@ export default {
   ],
   cardKeys: ['styles'],
   packageKeys: ['film_minutes', 'turnaround_days'],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'still',
+    headline: 'Share stills from a film',
+    prompts: ['Frames from a wedding film', 'Behind the scenes', 'Your rig on set'],
+    title: 'e.g. Lakeside wedding film',
+    showCamera: true,
+    beforeAfter: true,
+  },
 }

@@ -3,13 +3,18 @@ import { Pencil, Trash2 } from 'lucide-react'
 import Sheet from '../Sheet.jsx'
 import { useStore } from '../../store.jsx'
 import { invalidate } from '../../api/catalog.js'
-import { deleteAlbum, getPhotographyServices, toViewerAlbum, updateAlbum } from '../../api/portfolio.js'
-import { CaptionField, CategoryField, PlaceDateFields, TitleField, validatePost } from './PostFields.jsx'
+import { creditsSupported, deleteAlbum, getServicesOf, toViewerAlbum, updateAlbum } from '../../api/portfolio.js'
+import { autoPostTitle, getOccasion, occasionsFor, postConfig } from '../../verticals/index.js'
+import { CaptionField, CategoryField, OccasionField, PlaceDateFields, TitleField, validatePost } from './PostFields.jsx'
+import { CreditsField } from './Credits.jsx'
 
 // Owner-only sheets for a post in the viewer: a small menu, the edit form and the
 // delete confirmation. sheet: null | 'menu' | 'edit' | 'delete'.
 // album: a viewer album (toViewerAlbum). onUpdated(viewerAlbum), onDeleted(albumId).
-export default function ManagePostSheets({ album, sheet, setSheet, onUpdated, onDeleted }) {
+// vertical: the listing's vertical slug (else looked up in your listings; photography by default).
+export default function ManagePostSheets({ album, sheet, setSheet, onUpdated, onDeleted, vertical = null }) {
+  const { myProviders } = useStore()
+  const slug = vertical || myProviders?.find((p) => p.id === album.providerId)?.vertical || 'photography'
   const close = () => setSheet(null)
   return (
     <>
@@ -18,7 +23,7 @@ export default function ManagePostSheets({ album, sheet, setSheet, onUpdated, on
           <span className="round-icon"><Pencil size={16} /></span>
           <div className="grow">
             <div className="small"><b>Edit details</b></div>
-            <div className="muted tiny">Title, category, caption, location, date</div>
+            <div className="muted tiny">Category, occasion, title, credits, caption…</div>
           </div>
         </button>
         <button className="list-row danger" onClick={() => setSheet('delete')}>
@@ -26,16 +31,20 @@ export default function ManagePostSheets({ album, sheet, setSheet, onUpdated, on
           <div className="grow small"><b>Delete post</b></div>
         </button>
       </Sheet>
-      {sheet === 'edit' && <EditSheet album={album} onClose={close} onSaved={(a) => { onUpdated(a); close() }} />}
+      {sheet === 'edit' && <EditSheet album={album} vertical={slug} onClose={close} onSaved={(a) => { onUpdated(a); close() }} />}
       {sheet === 'delete' && <DeleteSheet album={album} onClose={close} onDeleted={(id) => { close(); onDeleted(id) }} />}
     </>
   )
 }
 
-function EditSheet({ album, onClose, onSaved }) {
+function EditSheet({ album, vertical, onClose, onSaved }) {
   const { toast } = useStore()
+  const post = postConfig(vertical)
   const [title, setTitle] = useState(album.title || '')
   const [categoryId, setCategoryId] = useState(album.categoryId ?? null)
+  const [occasion, setOccasion] = useState(album.occasion?.slug ?? null)
+  const [credits, setCredits] = useState(album.credits || [])
+  const [canCredit, setCanCredit] = useState(false)
   const [caption, setCaption] = useState(album.caption || '')
   const [place, setPlace] = useState(album.location || '')
   const [shotOn, setShotOn] = useState(album.shotOn || '')
@@ -45,8 +54,11 @@ function EditSheet({ album, onClose, onSaved }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    getPhotographyServices().then(setServices).catch(() => setServices([]))
-  }, [])
+    getServicesOf(vertical).then(setServices).catch(() => setServices([]))
+    creditsSupported().then(setCanCredit).catch(() => {})
+  }, [vertical])
+
+  const fallbackTitle = autoPostTitle({ service: services?.find((s) => s.id === categoryId)?.name, occasion: getOccasion(occasion)?.name, slug: vertical })
 
   const save = async () => {
     const errs = validatePost({ title, categoryId, shotOn })
@@ -56,7 +68,10 @@ function EditSheet({ album, onClose, onSaved }) {
     setBusy(true)
     setError('')
     try {
-      const row = await updateAlbum(album.id, { title, caption, location: place, shotOn, categoryId })
+      const row = await updateAlbum(album.id, {
+        title: title.trim() || fallbackTitle, caption, location: place, shotOn, categoryId, occasion,
+        ...(canCredit ? { credits } : {}),
+      })
       invalidate('providers')
       toast('Changes saved')
       onSaved(toViewerAlbum(row))
@@ -69,9 +84,11 @@ function EditSheet({ album, onClose, onSaved }) {
   return (
     <Sheet open onClose={busy ? () => {} : onClose} title="Edit post">
       <div className="mp-form">
-        <TitleField value={title} onChange={setTitle} error={errors.title} />
-        <CategoryField value={categoryId} onChange={setCategoryId} services={services} error={errors.category} />
-        <CaptionField value={caption} onChange={setCaption} />
+        <CategoryField label="What is it?" value={categoryId} onChange={setCategoryId} services={services} error={errors.category} />
+        <OccasionField value={occasion} onChange={setOccasion} occasions={occasionsFor(vertical)} />
+        <TitleField value={title} onChange={setTitle} error={errors.title} placeholder={post.title} fallback={categoryId ? fallbackTitle : null} />
+        {canCredit && <CreditsField value={credits} onChange={setCredits} exclude={[album.providerId]} />}
+        <CaptionField value={caption} onChange={setCaption} placeholder={post.caption} />
         <PlaceDateFields location={place} onLocation={setPlace} shotOn={shotOn} onShotOn={setShotOn} dateError={errors.shotOn} />
         {error && <div className="form-error" role="alert">{error}</div>}
         <div className="sheet-actions">

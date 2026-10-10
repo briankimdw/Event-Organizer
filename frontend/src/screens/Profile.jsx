@@ -13,6 +13,8 @@ import ReviewList from '../components/Reviews.jsx'
 import FollowersSheet from '../components/FollowersSheet.jsx'
 import { PolicyTable, priceLabel } from '../components/Booking.jsx'
 import { ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
+import SendToSheet from '../components/share/ShareSheet.jsx'
+import { AddToEventButton } from '../components/events/EventParts.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import { MapPreview } from '../components/map/LazyMap.jsx'
 import AttributeList from '../components/verticals/AttributeList.jsx'
@@ -23,7 +25,7 @@ import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
 import { addDays, fmtBooking, fmtChip, fmtMonth, fromKey, parseDates, toKey, today } from '../lib/dates.js'
 import { freeDays, getCategories, getPerson, getProvider } from '../api/catalog.js'
-import { listAlbums, toViewerAlbum } from '../api/portfolio.js'
+import { listAlbums, listTaggedAlbums, toViewerAlbum } from '../api/portfolio.js'
 import { messageError, startDirectMessage, startInquiry } from '../api/messages.js'
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -126,6 +128,10 @@ export default function Profile() {
     provider && (visual || provider.albumCount > 0) ? () => listAlbums(provider.id).then((rows) => rows.filter((a) => a.photos?.length).map(toViewerAlbum)) : null,
     [provider?.id],
   )
+
+  // Other vendors' posts that credit this one ("Catering by Golden Spoon" on a wedding album).
+  // Empty (and the section hidden) until the album_credits migration exists.
+  const { data: tagged } = useQuery(provider ? () => listTaggedAlbums(provider.id) : null, [provider?.id])
 
   // Dates carried over from a date search, plus the strip's two weeks: one availability lookup.
   const datesParam = params.get('dates') || ''
@@ -252,9 +258,12 @@ export default function Profile() {
                 <MessageCircle size={16} /> {contacting ? 'Opening…' : 'Ask a question'}
               </button>
             </div>
-            <Link to={`/book/${provider.id}${datesQuery && `?${datesQuery}`}`} className="btn accent block mt-sm">
-              Book {firstName}
-            </Link>
+            <div className="row gap-xs mt-sm full">
+              <AddToEventButton provider={provider} variant="button" />
+              <Link to={`/book/${provider.id}${datesQuery && `?${datesQuery}`}`} className="btn accent grow">
+                Book {firstName}
+              </Link>
+            </div>
           </>
         )}
         {!provider && !isMine && (
@@ -312,6 +321,26 @@ export default function Profile() {
             <AttributeList fields={config.providerFields.filter((f) => f.key !== 'specialties')} attrs={provider.attributes} />
           </div>
         </div>
+      )}
+
+      {provider && tagged?.length > 0 && (
+        <section className="tagged mt">
+          <div className="section-head">
+            <div className="grow">
+              <h3>Tagged in</h3>
+              <div className="muted tiny">Posts by other vendors that credit {firstName}</div>
+            </div>
+          </div>
+          <div className="h-scroll">
+            {tagged.map((a) => (
+              <Link key={a.id} to={`/gallery/${a.by.id}?post=${a.id}`} className="tagged-tile" title={a.title}>
+                <img src={a.cover} alt="" loading="lazy" />
+                <b className="ellipsis">{a.title}</b>
+                <span className="muted tiny ellipsis">by {a.by.name}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {provider && (
@@ -451,12 +480,21 @@ export default function Profile() {
       {provider && (
         <FollowersSheet open={followers} onClose={() => setFollowers(false)} providerId={provider.id} count={provider.followers} />
       )}
-      <ShareSheet
-        open={share}
-        onClose={() => setShare(false)}
-        link={link}
-        payload={{ text: `Check out ${handle ? `@${handle}` : person.name}: ${window.location.origin}${link}` }}
-      />
+      {provider ? (
+        share && (
+          <SendToSheet
+            item={{ kind: 'provider', id: provider.id, link, title: provider.name, subtitle: [provider.verticalInfo?.name, provider.city?.split(',')[0]].filter(Boolean).join(' · '), image: provider.avatar }}
+            onClose={() => setShare(false)}
+          />
+        )
+      ) : (
+        <ShareSheet
+          open={share}
+          onClose={() => setShare(false)}
+          link={link}
+          payload={{ text: `Check out ${handle ? `@${handle}` : person.name}: ${window.location.origin}${link}` }}
+        />
+      )}
       <ModerationSheet
         open={menu}
         onClose={() => setMenu(false)}

@@ -3,6 +3,7 @@ import { LayoutGrid, Plus } from 'lucide-react'
 import ProfileLink from '../components/ProfileLink.jsx'
 import SearchLauncher from '../components/SearchLauncher.jsx'
 import PlanCard from '../components/planner/PlanCard.jsx'
+import EventsShelf from '../components/events/EventsShelf.jsx'
 import { StatusPill } from '../components/Booking.jsx'
 import { ErrorState } from '../components/States.jsx'
 import { CardsSkeleton, ProviderCard, ProviderRow, RowsSkeleton, SectionHead } from '../components/home/Cards.jsx'
@@ -104,6 +105,8 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      <EventsShelf />
 
       <section>
         <SectionHead title="Browse services" sub="Everything for your event, in one place" />

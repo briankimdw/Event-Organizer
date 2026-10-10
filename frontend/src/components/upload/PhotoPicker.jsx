@@ -5,7 +5,8 @@ import { MAX_FILE_BYTES, MAX_PHOTOS, formatBytes } from '../../lib/images.js'
 
 // Step 1 of posting: pick photos, put them in order, choose the cover.
 // mode: 'photos' (1 = single, 2+ = album) or 'before_after'. photos: usePhotoItems().
-export default function PhotoPicker({ mode, photos }) {
+// copy: the vertical's postConfig() (headline and ideas for the empty state).
+export default function PhotoPicker({ mode, photos, copy = null }) {
   const { items, rejected, notice, add, dismissRejected } = photos
   const pickAny = useRef()
   const pickSlot = useRef()
@@ -46,7 +47,7 @@ export default function PhotoPicker({ mode, photos }) {
       )}
 
       {items.length === 0 ? (
-        <DropZone mode={mode} onPick={openPicker} />
+        <DropZone mode={mode} onPick={openPicker} copy={copy} />
       ) : mode === 'before_after' ? (
         <BeforeAfterSlots photos={photos} onPick={openSlot} />
       ) : (
@@ -56,19 +57,28 @@ export default function PhotoPicker({ mode, photos }) {
   )
 }
 
-function DropZone({ mode, onPick }) {
+function DropZone({ mode, onPick, copy }) {
   const ba = mode === 'before_after'
+  const ideas = !ba && copy?.prompts?.length ? copy.prompts : null
   return (
-    <button type="button" className="pp-drop" onClick={onPick}>
-      <span className="pp-drop-icon">{ba ? <ArrowLeftRight size={26} /> : <ImagePlus size={26} />}</span>
-      <b className="pp-drop-title">{ba ? 'Add a before & after' : 'Add photos'}</b>
-      <span className="muted small pp-drop-text">
-        {ba ? 'Pick 2 photos: the before, then the after. You can swap them next.' : `One photo, or up to ${MAX_PHOTOS} from the same event.`}
-      </span>
-      <span className="btn accent pp-drop-btn">{ba ? 'Choose 2 photos' : 'Choose photos'}</span>
-      <span className="muted tiny pp-drop-hint">or drag them here</span>
-      <span className="muted tiny pp-drop-formats">JPEG, PNG or WebP · up to {formatBytes(MAX_FILE_BYTES)} each</span>
-    </button>
+    <>
+      <button type="button" className="pp-drop" onClick={onPick}>
+        <span className="pp-drop-icon">{ba ? <ArrowLeftRight size={26} /> : <ImagePlus size={26} />}</span>
+        <b className="pp-drop-title">{ba ? 'Add a before & after' : copy?.headline || 'Add photos'}</b>
+        <span className="muted small pp-drop-text">
+          {ba ? 'Pick 2 photos: the before, then the after. You can swap them next.' : `One photo, or up to ${MAX_PHOTOS} from the same event.`}
+        </span>
+        <span className="btn accent pp-drop-btn">{ba ? 'Choose 2 photos' : 'Choose photos'}</span>
+        <span className="muted tiny pp-drop-hint">or drag them here</span>
+        <span className="muted tiny pp-drop-formats">JPEG, PNG or WebP · up to {formatBytes(MAX_FILE_BYTES)} each</span>
+      </button>
+      {ideas && (
+        <div className="pp-ideas">
+          <span className="muted tiny">Ideas</span>
+          <div className="chips">{ideas.map((t) => <span key={t} className="chip">{t}</span>)}</div>
+        </div>
+      )}
+    </>
   )
 }
 

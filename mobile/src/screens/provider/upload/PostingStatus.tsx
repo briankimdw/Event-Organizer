@@ -30,7 +30,7 @@ export function Posting({ items, perPhoto, kindLabel }: { items: PhotoItem[]; pe
   return (
     <View style={s.wrap} accessibilityLiveRegion="polite">
       <View style={s.cover}>{!!cover?.thumbUrl && <Photo uri={cover.thumbUrl} style={s.fill} />}</View>
-      <Text variant="h3" center>Posting your {kindLabel}…</Text>
+      <Text variant="h3" center>Sharing your {kindLabel}…</Text>
       <Text variant="small" muted center>
         {done === items.length ? 'Finishing up…' : items.length > 1 ? `Uploading photo ${Math.min(done + 1, items.length)} of ${items.length}` : 'Uploading'} · {pct}%
       </Text>

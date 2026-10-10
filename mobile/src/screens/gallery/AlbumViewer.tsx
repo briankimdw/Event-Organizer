@@ -11,16 +11,18 @@ import { useRouter } from 'expo-router'
 import { Bookmark, Heart, Info, MapPin, Send, Sparkles, X, Camera, Aperture, CircleDot, Calendar, Gauge, Ruler, Timer, Zap } from 'lucide-react-native'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
-  FlatList, Pressable, Share, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ViewToken,
+  FlatList, Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ViewToken,
 } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Avatar, Button, Chip, ChipRow, IdVerified, Photo, ProBadge, Sheet, Text } from '@/components'
+import { ShareSheet } from '@/components/share/ShareSheet'
 import { useStore } from '@/state/store'
 import { makeStyles } from '@/theme'
 import type { Album } from '../profile/AlbumGrid'
+import { CreditChips } from '../provider/upload/Credits'
 
 type ViewerPhoto = { id: string; seed?: string; src: string; exif?: Record<string, any> | null }
 const photoKey = (p: ViewerPhoto) => p.id ?? p.seed
@@ -86,9 +88,8 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
     if (e.nativeEvent.contentOffset.y < -90) close() // pulled down past the first album (iOS bounce)
   }
 
-  const share = () => {
-    Share.share({ message: `${album.title ? `${album.title} by ` : ''}${owner.name} on Event Organizer: eventorganizer://gallery/${album.providerId ?? owner.providerId}?post=${album.id}` }).catch(() => {})
-  }
+  const [sharing, setSharing] = useState(false)
+  const share = () => setSharing(true)
 
   const renderAlbum = useCallback(
     ({ item: a }: { item: Album }) => (
@@ -155,9 +156,9 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
             )}
             <View style={s.titleRow}>
               <View style={s.grow}>
-                {!!album.title && <Text variant="h3" style={s.white} numberOfLines={1}>{album.title}</Text>}
-                <Text variant="tiny" style={s.dim} numberOfLines={1}>
-                  Album {index + 1} of {albums.length}{album.location ? ` · ${album.location}` : ''}{album.date ? ` · ${album.date}` : ''}
+                {!!album.title && <Text variant="h3" style={s.white} numberOfLines={2}>{album.title}</Text>}
+                <Text variant="tiny" style={s.dim} numberOfLines={2}>
+                  Post {index + 1} of {albums.length}{album.occasion ? ` · ${album.occasion.name}` : ''}{album.location ? ` · ${album.location}` : ''}{album.date ? ` · ${album.date}` : ''}
                 </Text>
               </View>
               <View style={s.icons}>
@@ -186,6 +187,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
               {owner.idVerified && <IdVerified />}
               {owner.pro && <ProBadge />}
             </Pressable>
+            {album.credits?.length > 0 && <CreditChips credits={album.credits} dark onOpen={(id) => router.push(`/u/${id}`)} />}
             {!!exif && <Text variant="tiny" style={s.exif}>{exif}</Text>}
             {book && (
               <View style={s.book}>
@@ -215,6 +217,12 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
             <Text variant="small" muted>{[album.location, album.date].filter(Boolean).join(' · ')}</Text>
           </View>
         )}
+        {album.credits?.length > 0 && (
+          <>
+            <Text variant="h4" style={s.section}>Credits</Text>
+            <CreditChips credits={album.credits} onOpen={(id) => { setInfo(false); router.push(`/u/${id}`) }} />
+          </>
+        )}
         {exifRows.length > 0 && (
           <>
             <Text variant="h4" style={s.section}>Gear & settings{album.photos.length > 1 ? ` · photo ${photoIndex + 1}` : ''}</Text>
@@ -231,18 +239,27 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
             </View>
           </>
         )}
-        {(!!album.genre || album.autoTags?.length > 0) && (
+        {(!!album.genre || !!album.occasion || album.autoTags?.length > 0) && (
           <>
             <Text variant="h4" style={s.section}>Tags</Text>
             <ChipRow>
               {!!album.genre && (
                 <Chip label={album.genre} solid onPress={() => { setInfo(false); router.push({ pathname: '/search', params: { cat: album.genre } }) }} />
               )}
+              {!!album.occasion && (
+                <Chip label={album.occasion.name} onPress={() => { setInfo(false); router.push(`/occasions/${album.occasion!.slug}` as any) }} />
+              )}
               {(album.autoTags || []).map((t: string) => <Chip key={t} label={t} icon={Sparkles} />)}
             </ChipRow>
           </>
         )}
       </Sheet>
+      {sharing && (
+        <ShareSheet
+          item={{ kind: 'post', id: album.id, providerId: album.providerId ?? owner.providerId, title: album.title, subtitle: owner.name, image: album.cover ?? photo?.src }}
+          onClose={() => setSharing(false)}
+        />
+      )}
     </View>
   )
 }

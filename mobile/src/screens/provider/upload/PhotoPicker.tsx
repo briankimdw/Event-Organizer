@@ -7,7 +7,7 @@ import { AlertCircle, ArrowLeftRight, ChevronLeft, ChevronRight, ImagePlus, Plus
 import { useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native'
 
-import { Button, Photo, Text } from '@/components'
+import { Button, Chip, ChipRow, Photo, Text } from '@/components'
 import { MAX_FILE_BYTES, MAX_PHOTOS, formatBytes, type PickedPhoto } from '@/shims/images'
 import { useStore } from '@/state/store'
 import { makeStyles, useTheme } from '@/theme'
@@ -29,7 +29,8 @@ async function pickFromLibrary(limit: number): Promise<PickedPhoto[] | null> {
   return result.assets as PickedPhoto[]
 }
 
-export default function PhotoPicker({ mode, photos }: { mode: PickMode; photos: PhotoItems }) {
+// copy: the vertical's postConfig() (headline and ideas for the empty state).
+export default function PhotoPicker({ mode, photos, copy }: { mode: PickMode; photos: PhotoItems; copy?: { headline: string; prompts: string[] } | null }) {
   const s = useStyles()
   const { c } = useTheme()
   const { toast } = useStore()
@@ -68,7 +69,7 @@ export default function PhotoPicker({ mode, photos }: { mode: PickMode; photos: 
       {items.length === 0 ? (
         <View style={s.drop}>
           <View style={s.dropIcon}>{mode === 'before_after' ? <ArrowLeftRight size={26} color={c.accent} /> : <ImagePlus size={26} color={c.accent} />}</View>
-          <Text variant="h3" center>{mode === 'before_after' ? 'Add a before & after' : 'Add photos'}</Text>
+          <Text variant="h3" center>{mode === 'before_after' ? 'Add a before & after' : copy?.headline || 'Add photos'}</Text>
           <Text variant="small" muted center>
             {mode === 'before_after' ? 'Pick 2 photos: the before, then the after. You can swap them next.' : `One photo, or up to ${MAX_PHOTOS} from the same event.`}
           </Text>
@@ -79,6 +80,12 @@ export default function PhotoPicker({ mode, photos }: { mode: PickMode; photos: 
         <BeforeAfterSlots photos={photos} onPick={(i) => open(i)} />
       ) : (
         <PhotoGrid photos={photos} onAdd={() => open()} />
+      )}
+      {items.length === 0 && mode !== 'before_after' && !!copy?.prompts?.length && (
+        <View style={s.ideas}>
+          <Text variant="tiny" muted>Ideas</Text>
+          <ChipRow>{copy.prompts.map((t) => <Chip key={t} label={t} />)}</ChipRow>
+        </View>
       )}
     </View>
   )
@@ -234,6 +241,7 @@ function BeforeAfterSlots({ photos, onPick }: { photos: PhotoItems; onPick: (i: 
 const useStyles = makeStyles((t) => ({
   grow: { flex: 1, minWidth: 0 },
   center: { alignSelf: 'center' },
+  ideas: { gap: 6, marginTop: 14 },
   mtSm: { marginTop: t.space.sm },
   white: { color: '#fff' },
   fill: { width: '100%', height: '100%' },

@@ -2,7 +2,7 @@
 // (direct, group, booking, inquiry), newest first, with unread dots. Live: reloads
 // when a message arrives anywhere (subscribeToInbox) and whenever the tab regains focus.
 import { useFocusEffect, useRouter } from 'expo-router'
-import { Briefcase, MessageCircle, Search, SquarePen, Users } from 'lucide-react-native'
+import { Briefcase, CalendarDays, MessageCircle, Search, SquarePen, Users } from 'lucide-react-native'
 import { useCallback, useEffect, useState } from 'react'
 import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -128,6 +128,7 @@ function ConversationRow({ c, onPress }: { c: Conversation; onPress: () => void 
           {c.kind === 'booking' && <Tag icon={Briefcase} label="Booking" />}
           {c.kind === 'inquiry' && <Tag label="Inquiry" />}
           {c.kind === 'group' && <Tag icon={Users} label="Group" />}
+          {c.kind === 'event' && <Tag icon={CalendarDays} label="Event" />}
         </View>
         <Text variant="small" numberOfLines={1} muted={!c.unread} weight={c.unread ? '600' : undefined}>{preview(c)}</Text>
       </View>

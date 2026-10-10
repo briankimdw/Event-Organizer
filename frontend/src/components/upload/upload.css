@@ -1,0 +1,66 @@
+/* Posting: listing picker, ideas, credits, "posting is for vendors". (Base composer styles: styles.css .up-/.pf-/.pp-/.ps-) */
+
+.pf-label .pf-optional { font-weight: 500; }
+.up-details .block, .cr-row .block, .lp-row .block { display: block; }
+
+/* "Posting to" (only with 2+ listings) */
+.up-listing { padding: 12px 16px 0; }
+.lp-pill { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px 7px 7px; border: 1px solid var(--line); border-radius: 999px; background: #fff; text-align: left; font-size: 12.5px; color: var(--muted); }
+.lp-pill b { color: var(--ink); font-weight: 600; }
+.lp-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-icon { width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; color: var(--tint, var(--ink)); background: color-mix(in srgb, var(--tint, #888) 14%, #fff); }
+.lp-icon.lg { width: 38px; height: 38px; }
+.lp-list { display: flex; flex-direction: column; }
+.lp-row { border-top: 1px solid var(--line); }
+.lp-row:first-child { border-top: 0; }
+
+/* Ideas under the empty drop zone */
+.pp-ideas { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.pp-ideas .chip { background: var(--soft); color: var(--ink); }
+
+/* Credits (composer) */
+.cr-help { margin-top: -4px; line-height: 1.35; }
+.cr-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.cr-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 4px 6px 4px 4px; border-radius: 999px; background: var(--soft); color: var(--ink); }
+.cr-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--line); }
+.cr-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; padding-right: 2px; }
+.cr-text b { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-text small { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-remove { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); flex-shrink: 0; }
+.cr-remove:hover { background: var(--line); color: var(--ink); }
+.cr-add { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px dashed #cfcfcf; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.cr-add:hover { border-color: var(--ink); }
+
+/* Vendor picker sheet */
+.cr-search { margin-bottom: 6px; }
+.cr-search .icon-btn { padding: 4px; }
+.cr-results { display: flex; flex-direction: column; min-height: 120px; max-height: min(46vh, 380px); overflow-y: auto; margin: 0 -2px; padding: 0 2px; }
+.cr-row { border-top: 1px solid var(--line); }
+.cr-row:first-child { border-top: 0; }
+.cr-row:disabled { opacity: .45; }
+.cr-tick { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); color: var(--ink); flex-shrink: 0; }
+.cr-tick.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.cr-empty { padding: 18px 0; text-align: center; }
+
+/* Credits in the viewer */
+.cr-viewer { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.cr-viewer::-webkit-scrollbar { display: none; }
+.cr-viewer:not(.dark) { flex-wrap: wrap; }
+.cr-viewer .cr-chip { flex-shrink: 0; padding-right: 12px; }
+.cr-viewer.dark .cr-chip { background: rgba(255, 255, 255, .14); color: #fff; backdrop-filter: blur(6px); }
+.cr-viewer.dark .cr-text small { color: rgba(255, 255, 255, .7); }
+.cr-viewer.dark .cr-avatar { background: rgba(255, 255, 255, .2); }
+.cr-chip.link:hover { filter: brightness(.96); }
+.reel-credits { margin-top: 2px; }
+.reel-credits-label { font-size: 11px; color: rgba(255, 255, 255, .7); margin-bottom: 4px; }
+
+/* Signed in without a listing */
+.uv { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding-top: 28px; padding-bottom: 28px; }
+.uv-icon { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.uv-title { font-size: 21px; margin-top: 4px; }
+.uv-text { max-width: 320px; line-height: 1.45; }
+.uv-examples { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 360px; margin: 4px 0; }
+.uv-example { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 12px; text-align: left; }
+.uv-example .small { line-height: 1.25; }
+.uv-actions { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 360px; margin-top: 6px; }
+.uv-foot { margin-top: 4px; }

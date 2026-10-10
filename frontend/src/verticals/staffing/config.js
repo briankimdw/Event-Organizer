@@ -24,4 +24,12 @@ export default {
   cardKeys: ['roles'],
   packageKeys: ['role', 'staff', 'min_hours'],
   filters: [{ key: 'roles', label: 'Roles', type: 'tags', attr: 'roles', options: ROLES }],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'event',
+    headline: 'Show your team at work',
+    prompts: ['Servers mid-service', 'Valet at the door', 'The crew before doors open'],
+    title: 'e.g. Gala for 300 guests',
+  },
 }

@@ -22,4 +22,12 @@ export default {
   cardKeys: ['styles'],
   packageKeys: ['pieces'],
   quantity: { per_item: { label: 'Pieces', default: 1, max: 200 } },
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'arrangement',
+    headline: 'Show an arrangement',
+    prompts: ['A bridal bouquet', 'Centerpieces on the tables', 'A ceremony arch'],
+    title: 'e.g. Garden roses and peonies',
+  },
 }

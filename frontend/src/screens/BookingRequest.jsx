@@ -115,6 +115,7 @@ function RequestForm({ p }) {
         addonIds: addons,
         location: loc.trim(),
         notes: note.trim(),
+        eventId: params.get('event') || null, // from an event's board (/events/:id)
       })
       toast(rows.length > 1 ? `${rows.length} requests sent. ${first} has 48h to respond.` : `Request sent. ${first} has 48h to respond.`)
       navigate(rows.length === 1 ? `/bookings/${rows[0].id}` : '/bookings', { replace: true })

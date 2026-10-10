@@ -25,4 +25,12 @@ export default {
   cardKeys: ['setting', 'capacity_seated'],
   packageKeys: ['max_quantity', 'hours_included'],
   filters: [guestsFilter, { key: 'setting', label: 'Setting', type: 'select', attr: 'setting', options: SETTINGS }],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'space',
+    headline: 'Show your space',
+    prompts: ['The room set for dinner', 'The ceremony spot', 'Your space at golden hour'],
+    title: 'e.g. Garden terrace set for 120',
+  },
 }

@@ -11,19 +11,20 @@ import {
   CalendarCheck, CalendarX, Camera, CircleDot, Heart, Images, MapPin, MessageCircle, Package as PackageIcon, Plus, Send, Star, UserX,
 } from 'lucide-react-native'
 import { useMemo, useState } from 'react'
-import { Pressable, Share, View } from 'react-native'
+import { Pressable, ScrollView, Share, View } from 'react-native'
 
 import { freeDays, getPerson, getProvider } from '@shared/api/catalog.js'
 import { messageError, startDirectMessage, startInquiry } from '@shared/api/messages.js'
-import { listAlbums, toViewerAlbum } from '@shared/api/portfolio.js'
+import { listAlbums, listTaggedAlbums, toViewerAlbum } from '@shared/api/portfolio.js'
 import { fmtChip, fmtMonth, fromKey, parseDates, toKey } from '@shared/lib/dates.js'
 import { verticalConfig } from '@shared/verticals/index.js'
 import { VERTICALS } from '@shared/verticals/catalog.js'
 import {
-  AvailabilityStrip, Button, Chip, ChipRow, EmptyState, ErrorState, IconButton, IdVerified, Loading, Photo, ProBadge, Screen, Segmented, Stars, Text,
+  AvailabilityStrip, Button, Chip, ChipRow, EmptyState, SectionHeader, ErrorState, IconButton, IdVerified, Loading, Photo, ProBadge, Screen, Segmented, Stars, Text,
   VerticalIcon, ViewableAvatar, stripDates,
 } from '@/components'
 import { MapPreview } from '@/components/map'
+import { ShareSheet } from '@/components/share/ShareSheet'
 import useQuery from '@/hooks/useQuery'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
@@ -34,6 +35,7 @@ import { AttributeList } from './AttributeList'
 import { FollowersSheet } from './FollowersSheet'
 import { PackageList } from './PackageList'
 import { ReviewList } from './ReviewList'
+import { AddToEventButton } from '@/screens/events/AddToEvent'
 
 const TABS = ['portfolio', 'packages', 'gear', 'reviews'] as const
 type Tab = (typeof TABS)[number]
@@ -61,6 +63,7 @@ export default function Profile() {
   const { following, toggleFollow, shortlist, toggleShortlist, toast } = useStore()
   const [tab, setTab] = useState<Tab | null>(startTab && TABS.includes(startTab) ? startTab : null) // null = first tab for this profile
   const [contacting, setContacting] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const [followersOpen, setFollowersOpen] = useState(false)
 
   const { data: person, loading, error, reload } = useQuery<Person | null>(() => loadPerson(id), [id])
@@ -86,6 +89,9 @@ export default function Profile() {
       : null,
     [provider?.id],
   )
+
+  // Other vendors' posts that credit this one; [] (section hidden) until album_credits exists.
+  const tagged = useQuery<(Album & { by: { id: string; name: string } })[]>(provider ? () => listTaggedAlbums(provider.id) : null, [provider?.id])
 
   // Dates carried over from a date search, plus the strip's two weeks: one availability lookup.
   const dates: string[] = parseDates(datesParam)
@@ -133,7 +139,9 @@ export default function Profile() {
     }
   }
   const share = () => {
-    const path = `/u/${provider ? provider.slug : person.username || person.id}`
+    // Vendors: the in-app "Send to" sheet (cards in chat). People: the system share sheet.
+    if (provider) return setSharing(true)
+    const path = `/u/${person.username || person.id}`
     Share.share({ message: `Check out ${handle ? `@${handle}` : person.name} on Event Organizer: eventorganizer:/${path}` }).catch(() => {})
   }
 
@@ -234,12 +242,15 @@ export default function Profile() {
               <Button title={following.has(provider.id) ? 'Following' : 'Follow'} variant={following.has(provider.id) ? 'ghost' : 'primary'} grow onPress={() => toggleFollow(provider.id)} />
               <Button title={contacting ? 'Opening…' : 'Ask a question'} icon={MessageCircle} variant="ghost" grow disabled={contacting} onPress={contact} />
             </View>
-            <Button
-              title={`Book ${firstName}`}
-              variant="accent"
-              block
-              onPress={() => router.push({ pathname: '/book/[providerId]', params: { providerId: provider.id, ...datesQuery } })}
-            />
+            <View style={s.row}>
+              <AddToEventButton provider={provider} variant="button" />
+              <Button
+                title={`Book ${firstName}`}
+                variant="accent"
+                grow
+                onPress={() => router.push({ pathname: '/book/[providerId]', params: { providerId: provider.id, ...datesQuery } })}
+              />
+            </View>
           </View>
         )}
         {!provider && !isMine && (
@@ -278,9 +289,9 @@ export default function Profile() {
       {provider && (
         <View style={s.padX}>
           <View style={s.infoCard}>
-            <View style={s.between}>
-              <Text variant="small"><Text variant="small" weight="700">Availability</Text> · next 2 weeks</Text>
-              <Text variant="tiny" muted numberOfLines={1} style={s.shrink}>{provider.serviceArea}</Text>
+            <View style={[s.between, { alignItems: 'flex-start' }]}>
+              <Text variant="small" numberOfLines={1} style={{ flexShrink: 0 }}><Text variant="small" weight="700">Availability</Text> · next 2 weeks</Text>
+              <Text variant="tiny" muted numberOfLines={2} style={[s.shrink, { textAlign: 'right' }]}>{provider.serviceArea}</Text>
             </View>
             <View style={s.mtSm}>
               <AvailabilityStrip free={free.data} pending={!free.data} />
@@ -291,6 +302,27 @@ export default function Profile() {
 
       {provider && aboutFields.length > 0 && (
         <AboutCard firstName={firstName} fields={aboutFields} attrs={provider.attributes} />
+      )}
+
+      {provider && !!tagged.data?.length && (
+        <View style={s.tagged}>
+          <SectionHeader title="Tagged in" sub={`Posts by other vendors that credit ${firstName}`} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.taggedRail}>
+            {tagged.data.map((a) => (
+              <Pressable
+                key={a.id}
+                onPress={() => router.push({ pathname: '/gallery/[personId]', params: { personId: a.by.id, post: a.id } })}
+                style={({ pressed }) => [s.taggedTile, pressed && { opacity: 0.8 }]}
+                accessibilityRole="button"
+                accessibilityLabel={`${a.title || 'Post'} by ${a.by.name}`}
+              >
+                <Photo uri={a.cover} style={s.taggedImg} />
+                <Text variant="small" weight="600" numberOfLines={1}>{a.title}</Text>
+                <Text variant="tiny" muted numberOfLines={1}>by {a.by.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
       {provider && tabs.length > 0 && (
@@ -395,6 +427,12 @@ export default function Profile() {
       {provider && (
         <FollowersSheet open={followersOpen} onClose={() => setFollowersOpen(false)} providerId={provider.id} count={provider.followers} />
       )}
+      {provider && sharing && (
+        <ShareSheet
+          item={{ kind: 'provider', id: provider.id, link: `/u/${provider.slug || provider.id}`, title: provider.name, subtitle: [provider.verticalInfo?.name, provider.city?.split(',')[0]].filter(Boolean).join(' · '), image: provider.avatar }}
+          onClose={() => setSharing(false)}
+        />
+      )}
     </Screen>
   )
 }
@@ -432,6 +470,10 @@ const useStyles = makeStyles((t) => ({
   shrink: { flexShrink: 1 },
   mtSm: { marginTop: t.space.sm },
   tabs: { paddingHorizontal: t.space.lg, marginTop: t.space.sm },
+  tagged: { marginTop: t.space.sm, marginBottom: t.space.sm },
+  taggedRail: { paddingHorizontal: t.space.lg, gap: 10 },
+  taggedTile: { width: 132, gap: 1 },
+  taggedImg: { width: 132, height: 99, borderRadius: t.radius.md, marginBottom: 5 },
   tabBody: { marginTop: t.space.sm },
   pad: { padding: t.space.lg },
   grow: { flex: 1 },

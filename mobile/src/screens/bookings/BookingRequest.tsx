@@ -33,7 +33,7 @@ const STRIP_DAYS = 28
 const MAX_DATES = 14 // the database accepts at most 14 dates per request
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-type Params = { providerId: string; pkg?: string; dates?: string }
+type Params = { providerId: string; pkg?: string; dates?: string; event?: string }
 type Qty = { type: string; label: string; min: number; max: number; default: number }
 type Addon = { id: string; name: string; price: number | null }
 type Pkg = Package & { id: string; name: string; priceType: string; price: number | null; hours: number | null; depositPct: number | null; attributes: Record<string, unknown> }
@@ -130,6 +130,7 @@ function RequestForm({ p }: { p: Provider }) {
         addonIds: addons,
         location: loc.trim(),
         notes: note.trim(),
+        eventId: params.event || null, // from an event's board (/events/[id])
       } as any)
       toast(rows.length > 1 ? `${rows.length} requests sent. ${first} has 48h to respond.` : `Request sent. ${first} has 48h to respond.`)
       if (rows.length === 1) router.replace({ pathname: '/bookings/[id]', params: { id: rows[0].id } })

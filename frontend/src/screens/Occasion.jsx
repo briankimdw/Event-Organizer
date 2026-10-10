@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowUp, Check, ChevronLeft, ChevronRight, Search as SearchIcon, Sparkles } from 'lucide-react'
+import { ArrowUp, Check, ChevronLeft, ChevronRight, Search as SearchIcon, Sparkles, Users } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import { EmptyState, ErrorState } from '../components/States.jsx'
 import { RatingInline, RowsSkeleton, SectionHead } from '../components/home/Cards.jsx'
@@ -93,6 +93,9 @@ function OccasionPage({ occasion: o }) {
             <div style={{ width: `${(done / items.length) * 100}%` }} />
           </div>
         </div>
+        <Link to={`/events/new?type=${o.slug}`} className="btn block mt">
+          <Users size={16} /> Start planning with friends
+        </Link>
       </div>
 
       <div className="occ-ai">

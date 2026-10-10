@@ -23,6 +23,7 @@ import { getProvider, listProviders, withMatches } from '../api/catalog.js'
 import { listMyBookings, listProviderBookings } from '../api/bookings.js'
 import { listCollections } from '../api/social.js'
 import { getTasteProfile } from '../api/discover.js'
+import EventsShelf from '../components/events/EventsShelf.jsx'
 
 // Bookings that still need something from someone.
 const ACTIVE = ['requested', 'countered', 'accepted', 'confirmed', 'in_progress', 'delivered', 'disputed']
@@ -261,6 +262,8 @@ function ClientView({ bookings }) {
           </div>
         </>
       )}
+
+      <EventsShelf showEmpty title="Events" />
 
       <h4 className="section-title pad-x">Shortlisted</h4>
       {shortlisted.length ? (

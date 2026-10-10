@@ -23,4 +23,12 @@ export default {
   ],
   cardKeys: ['acts', 'genres'],
   packageKeys: ['sets', 'musicians'],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'set',
+    headline: 'Show a set or your setup',
+    prompts: ['Your booth at a wedding', 'A packed dance floor', 'The band on stage'],
+    title: 'e.g. Friday night wedding set',
+  },
 }

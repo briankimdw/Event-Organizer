@@ -37,7 +37,9 @@ export const photoUrl = (path) => (!path ? null : /^https?:/.test(path) ? path :
 // Avatar for a profile: an uploaded file, an external URL, or a generated initials badge.
 export const avatarUrl = (path, name = '') => {
   if (path) return /^https?:/.test(path) ? path : publicUrl('avatars', path)
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
+  // Initials from words that start with a letter or digit ("Petal & Stem" -> "PS"), so
+  // symbols like & or < never end up inside the SVG markup.
+  const initials = name.split(/\s+/).filter((w) => /^[\p{L}\p{N}]/u.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
   let h = 0
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="hsl(${h},35%,42%)"/><text x="50%" y="50%" dy=".35em" text-anchor="middle" font-family="system-ui,sans-serif" font-size="38" fill="#fff">${initials}</text></svg>`

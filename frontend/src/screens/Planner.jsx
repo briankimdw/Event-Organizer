@@ -11,6 +11,8 @@ import Recommendations from '../components/planner/Recommendations.jsx'
 import PlanningState from '../components/planner/PlanningState.jsx'
 import PlanError from '../components/planner/PlanError.jsx'
 import MyEvents from '../components/planner/MyEvents.jsx'
+import SharePlanButton from '../components/planner/SharePlanButton.jsx'
+import PlanSavedActions from '../components/events/PlanSavedActions.jsx'
 import { followUpFor } from '../components/planner/brief.js'
 import { useAuth } from '../auth.jsx'
 import { useStore } from '../store.jsx'
@@ -265,7 +267,7 @@ function PlannerChat() {
                     providersState={providers}
                     onEdit={editField}
                     onAnswer={setReplyTo}
-                    save={{ onSave: save, saving, saved: !!saved, dirty }}
+                    save={{ onSave: save, saving, saved: !!saved, dirty, eventId: saved?.id }}
                   />
                 )
               }
@@ -354,7 +356,13 @@ function PlanResult({ plan, mock, busy, providers, providersState, onEdit, onAns
       {brief && (
         <div className="plan-save">
           {save.saved && !save.dirty ? (
-            <div className="plan-saved"><BookmarkCheck size={16} /> Saved to My events</div>
+            <div className="plan-saved">
+              <BookmarkCheck size={16} /> <span className="grow">Saved to My events</span>
+              <SharePlanButton eventId={save.eventId} title={titleFor(brief)} subtitle="Event plan" />
+            </div>
+          ) : null}
+          {save.saved && !save.dirty ? (
+            <PlanSavedActions eventId={save.eventId} />
           ) : (
             <button type="button" className="btn block" onClick={save.onSave} disabled={save.saving || busy}>
               <BookmarkPlus size={16} />

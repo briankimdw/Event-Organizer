@@ -29,6 +29,8 @@ import Planner from './screens/Planner.jsx'
 import NewListing from './screens/NewListing.jsx'
 import ServiceHome from './screens/ServiceHome.jsx'
 import Occasion from './screens/Occasion.jsx'
+import Events, { NewEvent } from './screens/Events.jsx'
+import EventDetail from './screens/EventDetail.jsx'
 import { useAuth } from './auth.jsx'
 
 const TAB_ROUTES = ['/', '/discover', '/bookings', '/inbox', '/me']
@@ -76,6 +78,9 @@ export default function App() {
             <Route path="/new-listing" element={<NewListing />} />
             <Route path="/services/:vertical" element={<ServiceHome />} />
             <Route path="/occasions/:slug" element={<Occasion />} />
+            <Route path="/events" element={<Events />} />
+            <Route path="/events/new" element={<NewEvent />} />
+            <Route path="/events/:id" element={<EventDetail />} />
           </Routes>
         </div>
         {showTabs && <TabBar />}

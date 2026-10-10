@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, Star } from 'lucide-react'
+import { ChevronRight, Send, Star } from 'lucide-react'
+import ShareSheet from '../share/ShareSheet.jsx'
+import { AddToEventButton } from '../events/EventParts.jsx'
 import { IdVerified, ProBadge } from '../Badges.jsx'
 import ProfileLink, { PersonAvatar } from '../ProfileLink.jsx'
 import { CoverFallback } from '../verticals/VerticalIcon.jsx'
@@ -44,8 +47,13 @@ export function ProviderCard({ p, showVertical = false, wide = false }) {
   const price = priceFrom(p)
   const badge =
     p.tasteMatch != null ? `${p.tasteMatch}% match` : p.freeDates?.length ? `Free ${p.freeDates.map(dayName).join(' & ')}` : null
+  const [sharing, setSharing] = useState(false)
   return (
-    <Link to={`/u/${p.id}`} className={`hd-card ${wide ? 'wide' : ''}`} aria-label={`${p.name}${price ? `, ${price}` : ''}`}>
+    <>
+    {/* The card is a wrapper: the link covers photo + text, and the share / add-to-event buttons
+        are its siblings laid over the photo (a <button> inside an <a> is invalid markup). */}
+    <div className={`hd-card ${wide ? 'wide' : ''}`}>
+    <Link to={`/u/${p.id}`} className="hd-card-link" aria-label={`${p.name}${price ? `, ${price}` : ''}`}>
       <div className="hd-card-img">
         {p.cover ? <img src={p.cover} alt="" loading="lazy" draggable={false} /> : <CoverFallback vertical={p.vertical} />}
         {badge && <span className={`hd-badge ${p.tasteMatch != null ? 'accent' : ''}`}>{badge}</span>}
@@ -66,6 +74,29 @@ export function ProviderCard({ p, showVertical = false, wide = false }) {
         {price && <div className="tiny mt-xs"><b>{price}</b></div>}
       </div>
     </Link>
+    <div className="hd-card-actions">
+      <button
+        type="button"
+        className="card-share-btn"
+        aria-label={`Share ${p.name}`}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setSharing(true)
+        }}
+      >
+        <Send size={15} />
+      </button>
+      <AddToEventButton provider={p} variant="card" />
+    </div>
+    </div>
+    {sharing && (
+      <ShareSheet
+        item={{ kind: 'provider', id: p.id, title: p.name, subtitle: [subtitleOf(p, { withVertical: true }), p.city?.split(',')[0]].filter(Boolean).join(' · '), image: p.cover || p.avatar }}
+        onClose={() => setSharing(false)}
+      />
+    )}
+    </>
   )
 }
 
@@ -83,7 +114,7 @@ export function ProviderRow({ p, showVertical = false }) {
         <div className="muted tiny ellipsis">{subtitleOf(p, { withVertical: showVertical })}</div>
         <div className="tiny row gap-xs mt-xs">
           <RatingInline p={p} count />
-          {price && <span className="muted">· {price}</span>}
+          {price && <span className="muted ellipsis">· {price}</span>}
         </div>
       </div>
       {p.tasteMatch != null && (

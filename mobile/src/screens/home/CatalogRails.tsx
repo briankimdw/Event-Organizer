@@ -21,7 +21,7 @@ export function VerticalRail({ counts }: { counts?: Map<string, number> | null }
   return (
     <>
       <SectionHeader title="Browse services" sub="Everything for your event, in one place" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rail}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.rail, s.railTight]}>
         {COLUMNS.map((col) => (
           <View key={col[0].slug} style={s.column}>
             {col.map((v) => {
@@ -73,9 +73,12 @@ export function OccasionRail() {
 
 const useStyles = makeStyles((t) => ({
   rail: { paddingHorizontal: t.space.lg, gap: 12 },
+  railTight: { gap: 4 },
   column: { gap: 12 },
-  item: { width: 72, alignItems: 'center', gap: 6 },
-  label: { lineHeight: 14 },
+  // 80 wide fits the longest one-word name ("Transportation") without breaking it mid-word;
+  // the label always reserves two lines so both rows of icons stay aligned column to column.
+  item: { width: 80, alignItems: 'center', gap: 6 },
+  label: { lineHeight: 14, minHeight: 28 },
   occasion: { width: 132, gap: 4, padding: 12, borderRadius: t.radius.lg },
   pressed: { opacity: 0.7 },
 }))

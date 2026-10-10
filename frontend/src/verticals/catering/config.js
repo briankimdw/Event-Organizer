@@ -25,4 +25,12 @@ export default {
   packageKeys: ['min_quantity', 'max_quantity', 'service_style'],
   filters: [guestsFilter, dietaryFilter],
   quantity: { per_person: { label: 'Guests', default: 50 } },
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'dish',
+    headline: 'Share a dish or a setup',
+    prompts: ['A plated course', 'Your buffet setup', 'The team at work'],
+    title: 'e.g. Spring tasting menu',
+  },
 }

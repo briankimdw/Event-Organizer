@@ -30,7 +30,7 @@ export function Chip({ label, onPress, toggle, on, solid, icon: Icon, iconRight:
   const content = (
     <>
       {Icon && <Icon size={13} color={filled ? fg : iconTint ?? fg} />}
-      <Text variant="small" style={{ color: fg, fontSize: 12.5 }} weight={filled ? '600' : '500'} numberOfLines={1}>
+      <Text variant="small" style={{ color: fg, fontSize: 12.5, flexShrink: 1 }} weight={filled ? '600' : '500'} numberOfLines={1}>
         {label}
       </Text>
       {IconRight && <IconRight size={12} color={fg} />}
@@ -65,7 +65,7 @@ export function ChipRow({ children, scroll, style }: { children: ReactNode; scro
 const useStyles = makeStyles((t) => ({
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 11,
-    borderRadius: t.radius.pill, backgroundColor: t.c.soft, alignSelf: 'flex-start',
+    borderRadius: t.radius.pill, backgroundColor: t.c.soft, alignSelf: 'flex-start', maxWidth: '100%',
   },
   toggle: { backgroundColor: t.c.bg, borderWidth: 1, borderColor: t.c.line },
   filled: { backgroundColor: t.c.ink, borderColor: t.c.ink },

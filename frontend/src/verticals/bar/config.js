@@ -28,4 +28,12 @@ export default {
   packageKeys: ['hours_included', 'max_quantity'],
   filters: [guestsFilter, { key: 'bar_types', label: 'Bar', type: 'tags', attr: 'bar_types', options: BAR_TYPES }],
   quantity: { per_person: { label: 'Guests', default: 50 } },
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'drink',
+    headline: 'Show your bar and drinks',
+    prompts: ['A signature cocktail', 'Your bar setup', 'The team behind the bar'],
+    title: 'e.g. Rooftop cocktail bar',
+  },
 }

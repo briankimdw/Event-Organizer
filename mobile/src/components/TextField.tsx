@@ -60,5 +60,6 @@ const useStyles = makeStyles((t) => ({
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: t.c.soft, borderWidth: 1, borderColor: t.c.line,
     borderRadius: t.radius.md, paddingHorizontal: 12, minHeight: 44,
   },
-  input: { flex: 1, fontSize: 15, color: t.c.ink, paddingVertical: 10 },
+  // minWidth 0: on web an <input> has an intrinsic ~20ch width that would push half-width fields off-screen.
+  input: { flex: 1, minWidth: 0, fontSize: 15, color: t.c.ink, paddingVertical: 10 },
 }))

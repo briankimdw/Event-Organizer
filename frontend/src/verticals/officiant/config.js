@@ -17,4 +17,12 @@ export default {
   ],
   cardKeys: ['ceremony_types'],
   packageKeys: ['ceremony_minutes'],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'ceremony',
+    headline: 'Share a ceremony',
+    prompts: ['The ceremony moment', 'Your ceremony setup', 'You with the couple'],
+    title: 'e.g. Beach ceremony at sunset',
+  },
 }

@@ -15,4 +15,12 @@ export default {
   ],
   cardKeys: [],
   packageKeys: ['vehicle', 'passengers'],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'ride',
+    headline: 'Show your fleet',
+    prompts: ['A car dressed for a wedding', 'Inside the party bus', 'The fleet lined up'],
+    title: 'e.g. Vintage Rolls for the couple',
+  },
 }

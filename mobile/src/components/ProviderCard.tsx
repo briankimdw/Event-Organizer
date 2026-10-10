@@ -15,6 +15,7 @@ import { IdVerified, ProBadge, RatingInline } from './Badges'
 import { Photo } from './Photo'
 import { PriceLabel, fromPriceText } from './PriceLabel'
 import { Text } from './Text'
+import { AddToEventButton } from '@/screens/events/AddToEvent'
 
 type Props = {
   provider: Provider
@@ -32,7 +33,8 @@ export function ProviderCard({ provider: p, variant = 'row', onPress, footer, me
 
   const name = (
     <View style={s.nameRow}>
-      <Text variant={variant === 'result' ? 'body' : 'small'} weight="600" numberOfLines={1} style={s.shrink}>{p.name}</Text>
+      {/* Results have room for a second line: "The Glasshouse DTLA" next to a price must not become "Th…". */}
+      <Text variant={variant === 'result' ? 'body' : 'small'} weight="600" numberOfLines={variant === 'result' ? 2 : 1} style={s.shrink}>{p.name}</Text>
       {p.idVerified && <IdVerified />}
       {p.pro && <ProBadge />}
     </View>
@@ -40,20 +42,23 @@ export function ProviderCard({ provider: p, variant = 'row', onPress, footer, me
 
   if (variant === 'tile') {
     return (
-      <Pressable onPress={open} style={({ pressed }) => [s.tile, pressed && s.pressed]} accessibilityRole="button" accessibilityLabel={p.name}>
-        <View>
-          <Photo uri={p.cover} vertical={p.vertical} style={s.tileImg} />
-          {p.tasteMatch != null && <MatchBadge pct={p.tasteMatch} />}
-        </View>
-        <View style={s.tileBody}>
-          {name}
-          <Text variant="tiny" muted numberOfLines={1}>{p.specialties.slice(0, 2).join(' · ')}</Text>
-          <View style={s.metaRow}>
-            <RatingInline rating={p.rating} />
-            {!!from && <Text variant="tiny" muted numberOfLines={1}>· {from}</Text>}
+      <View>
+        <Pressable onPress={open} style={({ pressed }) => [s.tile, pressed && s.pressed]} accessibilityRole="button" accessibilityLabel={p.name}>
+          <View>
+            <Photo uri={p.cover} vertical={p.vertical} style={s.tileImg} />
+            {p.tasteMatch != null && <MatchBadge pct={p.tasteMatch} />}
           </View>
-        </View>
-      </Pressable>
+          <View style={s.tileBody}>
+            {name}
+            <Text variant="tiny" muted numberOfLines={1}>{p.specialties.slice(0, 2).join(' · ')}</Text>
+            <View style={s.metaRow}>
+              <RatingInline rating={p.rating} />
+              {!!from && <Text variant="tiny" muted numberOfLines={1}>· {from}</Text>}
+            </View>
+          </View>
+        </Pressable>
+        <AddToEventButton provider={p} />
+      </View>
     )
   }
 
@@ -62,19 +67,30 @@ export function ProviderCard({ provider: p, variant = 'row', onPress, footer, me
     return (
       <View style={s.result}>
         <Pressable onPress={open} style={({ pressed }) => pressed && s.pressed} accessibilityRole="button" accessibilityLabel={p.name}>
-          <View style={s.strip}>
-            <Photo uri={thumbs[0]} style={s.stripBig} />
-            <Photo uri={thumbs[1]} style={s.stripSmall} />
-            <Photo uri={thumbs[2]} style={s.stripSmall} />
-            {p.tasteMatch != null && <MatchBadge pct={p.tasteMatch} />}
-          </View>
+          {/* Like the web: no work yet (DJs, planners...) = no empty grey strip, just the details. */}
+          {thumbs.length > 0 && (
+            <View style={s.strip}>
+              <Photo uri={thumbs[0]} style={s.stripBig} />
+              <Photo uri={thumbs[1]} style={s.stripSmall} />
+              <Photo uri={thumbs[2]} style={s.stripSmall} />
+              {p.tasteMatch != null && <MatchBadge pct={p.tasteMatch} />}
+            </View>
+          )}
           <View style={s.resultInfo}>
             <Avatar uri={p.avatar} name={p.name} size={40} />
             <View style={s.grow}>
-              <View style={s.between}>
-                <View style={[s.grow, s.shrink]}>{name}</View>
-                <PriceLabel provider={p} />
+              {/* Name (up to 2 lines) | price on the first line; the badges get their own line so
+                  a long name + PRO + "from $3,500 / day" never overlap on a 320pt phone. */}
+              <View style={[s.between, s.top]}>
+                <Text variant="body" weight="600" numberOfLines={2} style={[s.grow, s.shrink]}>{p.name}</Text>
+                <PriceLabel provider={p} numberOfLines={1} style={s.noShrink} />
               </View>
+              {(p.idVerified || p.pro) && (
+                <View style={s.badgeRow}>
+                  {p.idVerified && <IdVerified />}
+                  {p.pro && <ProBadge />}
+                </View>
+              )}
               <Text variant="small" muted numberOfLines={1}>{p.specialties.join(' · ')}</Text>
               <View style={s.metaRow}>
                 <RatingInline rating={p.rating} count={p.rating != null ? p.reviewCount : undefined} />
@@ -124,6 +140,9 @@ const useStyles = makeStyles((t) => ({
   pressed: { opacity: 0.8 },
   grow: { flex: 1, minWidth: 0 },
   shrink: { flexShrink: 1 },
+  noShrink: { flexShrink: 0, lineHeight: 20 },
+  top: { alignItems: 'flex-start' },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2, marginBottom: 2 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'nowrap' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' },

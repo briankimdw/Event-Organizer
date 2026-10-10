@@ -23,4 +23,12 @@ export default {
   packageKeys: ['courses', 'max_quantity'],
   filters: [guestsFilter, dietaryFilter],
   quantity: { per_person: { label: 'Guests', default: 8 } },
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'dish',
+    headline: 'Share a dish',
+    prompts: ['A plated course', 'A menu, course by course', 'Your kitchen at work'],
+    title: 'e.g. Five-course dinner at home',
+  },
 }

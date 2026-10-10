@@ -48,8 +48,8 @@ export function ComingSoonCard({ soon }: { soon: Vertical[] }) {
         {names.join(', ')}{more > 0 ? ` and ${more} more` : ''} are joining. Know a great {first.noun}? Invite them, and you’ll be able to book them here.
       </Text>
       <View style={s.row}>
-        <Button title="Invite a vendor" icon={Send} size="sm" grow onPress={() => invite(first)} />
-        <Button title="List your services" icon={Store} size="sm" variant="ghost" grow onPress={() => router.push('/new-listing')} />
+        <Button title="Invite a vendor" icon={Send} size="sm" grow style={s.half} onPress={() => invite(first)} />
+        <Button title="List your services" icon={Store} size="sm" variant="ghost" grow style={s.half} onPress={() => router.push('/new-listing')} />
       </View>
     </View>
   )
@@ -86,7 +86,9 @@ const useStyles = makeStyles((t) => ({
   iconRing: { marginRight: -8, borderRadius: 999, borderWidth: 2, borderColor: t.c.bg, backgroundColor: t.c.bg },
   mtSm: { marginTop: t.space.sm },
   body: { marginTop: 4, lineHeight: 19 },
-  row: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  // Side by side when both labels fit (>= 2 x 140), otherwise one full-width button per line.
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+  half: { flexBasis: 140 },
   teaser: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: t.radius.xl, backgroundColor: t.scheme === 'dark' ? '#1c1c1f' : '#111', borderWidth: t.scheme === 'dark' ? 1 : 0, borderColor: t.c.line },
   pressed: { transform: [{ scale: 0.985 }] },
   stack: { width: 76, height: 60 },

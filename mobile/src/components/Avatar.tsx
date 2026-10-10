@@ -10,7 +10,8 @@ import { Text } from './Text'
 const SIZES = { sm: 28, md: 36, lg: 72, xl: 84 } as const
 
 const initialsOf = (name = '') =>
-  name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
+  // Words that start with a letter or digit only: "Petal & Stem" -> "PS", not "P&".
+  name.split(/\s+/).filter((w) => /^[A-Za-z0-9À-￿]/.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
 
 // Same hash as format.js avatarUrl(), so a person's color matches the web.
 const hueOf = (name = '') => {

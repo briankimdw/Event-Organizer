@@ -17,4 +17,13 @@ export default {
   ],
   cardKeys: ['styles'],
   packageKeys: ['theme'],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'design',
+    headline: 'Show a room you styled',
+    prompts: ['A balloon installation', 'Your backdrop', 'A tablescape'],
+    title: 'e.g. Boho baby shower',
+    beforeAfter: true,
+  },
 }

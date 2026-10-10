@@ -9,7 +9,7 @@
 //
 //   verticalMeta(slug, dbRow?)  catalog entry merged with fallbacks (never undefined)
 //   verticalConfig(slug)        { priceTypes, defaultPriceType, packageFields, providerFields,
-//                                 cardKeys, packageKeys, filters, quantity }
+//                                 cardKeys, packageKeys, filters, quantity, post }
 //   priceSuffix(type, pkg?)     ' / person', ' each', ' / day', '/hr', ''
 //   quantityFor(pkg, slug)      null, or { label, min, max, default } for per-guest / per-item packages
 //   optionsOf(field), optionLabel(field, value)  options as [{ value, label }]
@@ -21,7 +21,10 @@
 //   lowerFirst(text)            'Catering' -> 'catering' but 'DJs & live music' unchanged (mid-sentence names)
 //   sessionNoun(slug)           'shoot' for photo/video, 'session' for wellness, else 'event'
 //   deliversMedia(slug)         true for photo/video (delivery gallery); others are just marked done
-import { VERTICALS, getVertical, verticalOfService } from './catalog.js'
+//   postConfig(slug)            the post composer's wording per vertical: { noun, headline, prompts, title,
+//                               caption, showCamera, beforeAfter } (config.js `post`, generic fallback)
+//   occasionsFor(slug)          OCCASIONS, the ones that need this vertical first
+import { OCCASIONS, VERTICALS, getVertical, verticalOfService } from './catalog.js'
 import photography from './photography/config.js'
 import videography from './videography/config.js'
 import venue from './venue/config.js'
@@ -147,10 +150,37 @@ export function verticalConfig(slug) {
     packageKeys: c.packageKeys || [],
     filters: c.filters || [],
     quantity: c.quantity || {},
+    post: { ...POST_DEFAULTS, ...(c.post || {}) },
   }
   configCache.set(slug, config)
   return config
 }
+
+// ---------------------------------------------------------------------------
+// Posting (portfolio posts)
+// ---------------------------------------------------------------------------
+
+// What the post composer says when a vertical's config has no `post` block.
+// showCamera: offer EXIF camera settings ("shot on"); beforeAfter: offer before / after posts.
+const POST_DEFAULTS = {
+  noun: 'photo',
+  headline: 'Show your work',
+  prompts: ['A recent event', 'Your setup', 'Behind the scenes'],
+  title: 'e.g. Smith wedding',
+  caption: 'The story behind it: the event, the people, the details…',
+  showCamera: false,
+  beforeAfter: false,
+}
+
+/** The post composer's wording and options for a vertical. */
+export const postConfig = (slug) => verticalConfig(slug).post
+
+/** The title of a post saved without one: 'Buffet · Wedding', 'Buffet', else the vertical's name. */
+export const autoPostTitle = ({ service = null, occasion = null, slug = null } = {}) =>
+  [service, occasion].filter(Boolean).join(' · ') || verticalMeta(slug).name || 'New post'
+
+/** Every occasion, the ones that list this vertical in `needs` first (catalog order otherwise). */
+export const occasionsFor = (slug) => [...OCCASIONS.filter((o) => o.needs.includes(slug)), ...OCCASIONS.filter((o) => !o.needs.includes(slug))]
 
 // Generic quantity labels when a vertical's config doesn't name them.
 // (daily packages are charged once per booked day: the dates picked are the days.)
@@ -190,6 +220,9 @@ export const optionLabel = (field, value) => optionsOf(field).find((o) => o.valu
 
 const isEmpty = (v) => v == null || v === '' || v === false || (Array.isArray(v) && v.length === 0) || (typeof v === 'number' && Number.isNaN(v))
 const fmtNumber = (n) => Number(n).toLocaleString('en-US')
+// Unit words used by the configs: people -> person, hours -> hour, guests -> guest... (min, staff stay).
+const SINGULAR = { people: 'person', staff: 'staff', min: 'min' }
+export const singular = (w) => SINGULAR[w] ?? (/ies$/.test(w) ? w.replace(/ies$/, 'y') : /[^s]s$/.test(w) ? w.slice(0, -1) : w)
 
 /** One field's value as text ('Up to 200 guests', 'Buffet, Plated', 'Setup included'), or null. */
 export function formatField(field, value, { short = true } = {}) {
@@ -199,8 +232,10 @@ export function formatField(field, value, { short = true } = {}) {
   if (field.type === 'select') return optionLabel(field, value)
   if (field.type === 'number') {
     const v = fmtNumber(value)
-    if (short && field.short) return field.short.replace('{v}', v)
-    return field.unit ? `${v} ${field.unit}` : v
+    const one = Number(value) === 1
+    // "1 people" -> "1 person", "{v} tiers" -> "1 tier" (the word right after the number).
+    if (short && field.short) return field.short.replace(/\{v\}( (\w+))?/, (m, sp, word) => (word ? `${v} ${one ? singular(word) : word}` : v))
+    return field.unit ? `${v} ${one ? singular(field.unit) : field.unit}` : v
   }
   return String(value)
 }

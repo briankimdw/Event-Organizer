@@ -15,4 +15,14 @@ export default {
   ],
   cardKeys: [],
   packageKeys: ['edited_photos', 'turnaround_days'],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'photo',
+    headline: 'Share your photos',
+    prompts: ['A favorite frame', 'A wedding, start to finish', 'Portraits from a session'],
+    title: 'e.g. Nguyen–Park wedding',
+    showCamera: true,
+    beforeAfter: true,
+  },
 }

@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertCircle, Calendar, ChevronRight, Info, MessageCircle, SendHorizontal } from 'lucide-react'
+import { AlertCircle, Calendar, CalendarHeart, ChevronRight, Info, MessageCircle, SendHorizontal } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Sheet from '../components/Sheet.jsx'
 import PeoplePicker from '../components/PeoplePicker.jsx'
 import { StatusPill } from '../components/Booking.jsx'
 import { ModerationSheet } from '../components/PostSheets.jsx'
 import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
+import ShareCard from '../components/share/ShareCard.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
@@ -16,6 +17,7 @@ import {
   addGroupMembers, getConversation, leaveGroup, listMessages, markRead, messageError, openChat, renameGroup, sendMessage,
 } from '../api/messages.js'
 import { getBooking } from '../api/bookings.js'
+import { eventIdForConversation } from '../api/events.js'
 
 const loadThread = async (id) => {
   const [conversation, messages] = await Promise.all([getConversation(id), listMessages(id)])
@@ -55,6 +57,7 @@ export default function Chat() {
   const c = data?.conversation
   const messages = data?.messages || []
   const { data: booking } = useQuery(c?.bookingId ? () => getBooking(c.bookingId) : null, [c?.bookingId])
+  const { data: eventId } = useQuery(c?.kind === 'event' ? () => eventIdForConversation(c.id) : null, [c?.id, c?.kind]) // event chats link to their board
   const [draft, setDraft] = useState('')
   const [menu, setMenu] = useState(null)
   const [info, setInfo] = useState(false)
@@ -161,7 +164,7 @@ export default function Chat() {
     )
   }
 
-  const isGroup = c.isGroup
+  const isGroup = c.isGroup || c.kind === 'event'
   const other = c.members[0]
   const byProfile = new Map(c.members.map((m) => [m.profileId, m]))
   const authorOf = (m) => byProfile.get(m.from) || { id: m.from, profileId: m.from, name: 'Former member', avatar: avatarUrl(null, '?') }
@@ -186,9 +189,16 @@ export default function Chat() {
         }
         subtitle={typers.length ? 'typing…' : isGroup ? `${c.members.length + 1} people` : other?.username ? `@${other.username}` : null}
         right={
-          <button className="icon-btn" aria-label="Conversation details" onClick={() => setInfo(true)}>
-            <Info size={20} />
-          </button>
+          <>
+            {eventId && (
+              <Link to={`/events/${eventId}`} className="icon-btn" aria-label="Event board" title="Event board">
+                <CalendarHeart size={20} />
+              </Link>
+            )}
+            <button className="icon-btn" aria-label="Conversation details" onClick={() => setInfo(true)}>
+              <Info size={20} />
+            </button>
+          </>
         }
       />
 
@@ -232,7 +242,7 @@ export default function Chat() {
           const joinsPrev = !newDay && prev && prev.from === m.from && new Date(m.at) - new Date(prev.at) < GROUP_GAP_MS
           const joinsNext = next && next.from === m.from && dayLabel(next.at) === dayLabel(m.at) && new Date(next.at) - new Date(m.at) < GROUP_GAP_MS
           const author = m.mine ? null : authorOf(m)
-          const shared = m.sharedAlbum
+          const shared = m.shared
           return (
             <div key={m.id} className="msg-wrap">
               {newDay && <div className="day-sep"><span>{dayLabel(m.at)}</span></div>}
@@ -244,13 +254,7 @@ export default function Chat() {
                 )}
                 <div className="msg-col">
                   {!m.mine && isGroup && !joinsPrev && <ProfileLink id={author.id} className="msg-author muted tiny">{author.name}</ProfileLink>}
-                  {shared && (
-                    <Link to={`/gallery/${shared.providerId}?post=${shared.id}`} className="shared-post">
-                      {shared.cover && <img src={shared.cover} alt="" loading="lazy" />}
-                      <div className="tiny pad-xs"><b>{shared.title || 'Album'}</b></div>
-                    </Link>
-                  )}
-                  {!shared && m.sharedAlbumId && <div className="bubble muted">Shared a post that’s no longer available</div>}
+                  {shared && <ShareCard shared={shared} mine={m.mine} />}
                   {m.text && (
                     <div
                       className="bubble"

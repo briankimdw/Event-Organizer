@@ -5,7 +5,7 @@
 // AsyncStorage under the web's key via readCovered / writeCovered) and the top vendors to compare.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { ArrowUp, Check, ChevronRight, SearchX, Sparkles } from 'lucide-react-native'
+import { ArrowUp, Check, ChevronRight, SearchX, Sparkles, Users } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
 import { Pressable, ScrollView, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -103,6 +103,7 @@ function OccasionPage({ o }: { o: Occasion }) {
               <View style={[s.fill, { width: `${items.length ? (done / items.length) * 100 : 0}%`, backgroundColor: o.tint }]} />
             </View>
           </View>
+          <Button title="Start planning with friends" icon={Users} block onPress={() => router.push({ pathname: '/events/new', params: { type: o.slug } })} style={{ marginTop: 14 }} />
         </CatalogHero>
 
         <View style={s.padX}>

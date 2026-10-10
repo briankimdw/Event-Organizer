@@ -1,11 +1,12 @@
 // The post's detail fields (native port of the web's components/upload/PostFields.jsx
-// and CameraSettings.jsx): title, category, caption, location, date, a disclosure
-// section, and the camera settings with show / hide switches.
+// and CameraSettings.jsx): category, occasion, title (optional), caption, location, date,
+// a disclosure section, and the camera settings with show / hide switches.
 import { ChevronDown } from 'lucide-react-native'
 import { useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 
-import { Chip, ChipRow, Text, TextField } from '@/components'
+import { postConfig } from '@shared/verticals/index.js'
+import { Chip, ChipRow, Text, TextField, iconByName } from '@/components'
 import { makeStyles, useTheme } from '@/theme'
 import { FieldHint, ToggleRow } from '../../account/ui'
 import type { PhotoItem } from './usePhotoItems'
@@ -21,10 +22,10 @@ export const prettyDay = (key: string) =>
   key && /^\d{4}-\d{2}-\d{2}$/.test(key) ? new Date(`${key}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 
 // Required fields first. Returns { field: message } for anything that needs fixing.
+// The title is optional (a post without one is named after its category and occasion).
 export function validatePost({ title, categoryId, shotOn }: { title: string; categoryId: string | null; shotOn: string }) {
   const errors: Record<string, string | undefined> = {}
-  if (!title.trim()) errors.title = 'Give your post a title.'
-  else if (title.trim().length > LIMITS.title) errors.title = `Keep the title under ${LIMITS.title} characters.`
+  if (title.trim().length > LIMITS.title) errors.title = `Keep the title under ${LIMITS.title} characters.`
   if (!categoryId) errors.category = 'Pick what kind of work this is.'
   if (shotOn && !/^\d{4}-\d{2}-\d{2}$/.test(shotOn)) errors.shotOn = 'Use the format YYYY-MM-DD, e.g. 2026-06-14.'
   else if (shotOn && Number.isNaN(+new Date(`${shotOn}T12:00:00`))) errors.shotOn = 'That isn’t a real date.'
@@ -35,23 +36,28 @@ export function validatePost({ title, categoryId, shotOn }: { title: string; cat
 
 const counter = (value: string, max: number) => (value.length > max * 0.8 ? `${value.length}/${max}` : undefined)
 
-export function TitleField({ value, onChange, error, placeholder = 'e.g. Nguyen–Park wedding' }: { value: string; onChange: (v: string) => void; error?: string; placeholder?: string }) {
+// fallback: the title used when this is left empty (shown as a hint).
+export function TitleField({ value, onChange, error, placeholder = 'e.g. Nguyen–Park wedding', fallback }: {
+  value: string; onChange: (v: string) => void; error?: string; placeholder?: string; fallback?: string | null
+}) {
   const c = counter(value, LIMITS.title)
   return (
     <View>
-      <TextField label="Title" labelRight={c ? <Text variant="tiny" color={value.length > LIMITS.title ? 'danger' : 'muted'}>{c}</Text> : undefined}
+      <TextField label="Title · optional" labelRight={c ? <Text variant="tiny" color={value.length > LIMITS.title ? 'danger' : 'muted'}>{c}</Text> : undefined}
         maxLength={LIMITS.title} value={value} onChangeText={onChange} placeholder={placeholder} returnKeyType="done" />
-      {!!error && <FieldHint error>{error}</FieldHint>}
+      {error ? <FieldHint error>{error}</FieldHint> : !value.trim() && fallback ? <FieldHint>{`Left blank, it’s called “${fallback}”.`}</FieldHint> : null}
     </View>
   )
 }
 
-export function CategoryField({ value, onChange, services, error }: { value: string | null; onChange: (v: string | null) => void; services: { id: string; name: string }[] | null; error?: string }) {
+export function CategoryField({ value, onChange, services, error, label = 'Category' }: {
+  value: string | null; onChange: (v: string | null) => void; services: { id: string; name: string }[] | null; error?: string; label?: string
+}) {
   const s = useStyles()
   return (
-    <View accessibilityLabel="Category">
-      <Text variant="small" muted style={s.label}>Category</Text>
-      {services === null ? <Text variant="tiny" muted>Loading…</Text> : (
+    <View accessibilityLabel={label}>
+      <Text variant="small" muted style={s.label}>{label}</Text>
+      {services === null ? <Text variant="tiny" muted>Loading…</Text> : services.length === 0 ? <Text variant="tiny" muted>No categories for this service yet.</Text> : (
         <ChipRow>
           {services.map((x) => <Chip key={x.id} label={x.name} toggle on={value === x.id} onPress={() => onChange(value === x.id ? null : x.id)} />)}
         </ChipRow>
@@ -61,12 +67,29 @@ export function CategoryField({ value, onChange, services, error }: { value: str
   )
 }
 
-export function CaptionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export type OccasionOption = { slug: string; name: string; icon: string }
+
+// The event this was for (optional): one of OCCASIONS. occasions: from occasionsFor(vertical).
+export function OccasionField({ value, onChange, occasions }: { value: string | null; onChange: (v: string | null) => void; occasions: OccasionOption[] }) {
+  const s = useStyles()
+  return (
+    <View accessibilityLabel="Occasion">
+      <Text variant="small" muted style={s.label}>Occasion · optional</Text>
+      <ChipRow>
+        {occasions.map((o) => (
+          <Chip key={o.slug} label={o.name} icon={iconByName(o.icon)} toggle on={value === o.slug} onPress={() => onChange(value === o.slug ? null : o.slug)} />
+        ))}
+      </ChipRow>
+    </View>
+  )
+}
+
+export function CaptionField({ value, onChange, placeholder = postConfig(null as any).caption }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   const s = useStyles()
   const c = counter(value, LIMITS.caption)
   return (
     <TextField label="Caption" labelRight={c ? <Text variant="tiny" muted>{c}</Text> : undefined} multiline maxLength={LIMITS.caption}
-      value={value} onChangeText={onChange} placeholder="The story behind it: the event, the people, the details…" style={s.textarea} />
+      value={value} onChangeText={onChange} placeholder={placeholder} style={s.textarea} />
   )
 }
 

@@ -21,6 +21,7 @@ import { OccasionRail, VerticalRail } from './CatalogRails'
 import { HomeHeader, SearchLauncher } from './HomeHeader'
 import { PlannerEntry } from './PlannerEntry'
 import { ProviderList, ProviderShelf } from './ProviderShelves'
+import { EventsShelf } from '@/screens/events/parts'
 
 type Shelf = { key: string; title: string; sub?: string; to?: string | null; layout: 'cards' | 'rows'; items: Provider[]; empty?: string }
 
@@ -80,6 +81,7 @@ export default function Home() {
 
       <NeedsAction />
 
+      <EventsShelf />
       <VerticalRail counts={all.data ? (feed.counts as Map<string, number>) : null} />
 
       <View style={s.pad}>

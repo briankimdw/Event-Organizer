@@ -23,4 +23,12 @@ export default {
   packageKeys: ['servings', 'tiers'],
   filters: [dietaryFilter],
   quantity: { per_item: { label: 'Items', default: 1, max: 500 }, per_person: { label: 'Servings', default: 50 } },
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'cake',
+    headline: 'Show a cake or dessert table',
+    prompts: ['A wedding cake', 'Your dessert table', 'Close-up of the details'],
+    title: 'e.g. Three-tier lemon cake',
+  },
 }

@@ -3,7 +3,7 @@
 //   <Button title="Ask a question" variant="ghost" icon={MessageCircle} size="sm" />
 //   <IconButton icon={Heart} label="Save" onPress={...} />
 import type { LucideIcon } from 'lucide-react-native'
-import { ActivityIndicator, Pressable, View, type StyleProp, type ViewStyle } from 'react-native'
+import { ActivityIndicator, Pressable, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native'
 
 import { makeStyles, useTheme } from '@/theme'
 import { Text } from './Text'
@@ -34,6 +34,10 @@ export function Button({
     primary: c.onInk, accent: c.onAccent, ghost: c.ink, outline: c.ink, danger: c.danger, link: c.ink,
   }[variant]
   const iconSize = size === 'sm' ? 14 : 16
+  // Two buttons side by side on a narrow phone (320pt): tighter padding and text, so
+  // "Ask a question" fits on one line instead of ending in "…".
+  const { width } = useWindowDimensions()
+  const tight = !!grow && width < 360
   return (
     <Pressable
       onPress={onPress}
@@ -42,12 +46,12 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
       style={({ pressed }) => [
-        s.base, s[size], s[variant], block && s.block, grow && s.grow,
+        s.base, s[size], s[variant], block && s.block, grow && s.grow, tight && s.tight,
         (disabled || loading) && s.disabled, pressed && s.pressed, style,
       ]}
     >
       {loading ? <ActivityIndicator size="small" color={fg} /> : Icon ? <Icon size={iconSize} color={fg} /> : null}
-      <Text variant={size === 'sm' ? 'small' : 'body'} weight="600" style={{ color: fg }} numberOfLines={1}>
+      <Text variant={size === 'sm' ? 'small' : 'body'} weight="600" style={[{ color: fg, flexShrink: 1 }, tight && size === 'md' && { fontSize: 13.5 }]} numberOfLines={1}>
         {title}
       </Text>
       {IconRight ? <IconRight size={iconSize} color={fg} /> : null}
@@ -81,6 +85,7 @@ const useStyles = makeStyles((t) => ({
   link: { backgroundColor: 'transparent', paddingHorizontal: 0, minHeight: 0 },
   block: { alignSelf: 'stretch' },
   grow: { flex: 1, alignSelf: 'auto' },
+  tight: { paddingHorizontal: 8, gap: 5 },
   disabled: { opacity: 0.4 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
 }))

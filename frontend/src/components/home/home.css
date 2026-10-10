@@ -18,7 +18,7 @@
 
 /* ---- Vertical rail: two rows of tinted icons that scroll sideways ---- */
 .hd-rail {
-  display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 76px;
+  display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 84px;
   gap: 12px 4px; overflow-x: auto; padding: 2px 36px 4px 12px; scrollbar-width: none;
   scroll-snap-type: x mandatory; scroll-padding-left: 12px;
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
@@ -30,7 +30,7 @@
   font-size: 11.5px; font-weight: 600; text-align: center; line-height: 1.2; padding: 2px; border-radius: 14px;
   transition: transform .12s ease;
 }
-.hd-rail-item span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.4em; }
+.hd-rail-item span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.4em; max-width: 100%; overflow-wrap: break-word; }
 .hd-rail-item:active { transform: scale(.95); }
 
 /* ---- Occasion cards ---- */
@@ -47,7 +47,13 @@
 .hd-occasion:active { transform: scale(.97); }
 
 /* ---- Big photo cards (Airbnb) ---- */
-.hd-card { width: 252px; display: block; transition: transform .12s ease; }
+.hd-card { width: 252px; display: block; position: relative; transition: transform .12s ease; }
+.hd-card-link { display: block; }
+/* Buttons over the photo, as siblings of the card's link: a box the size of the photo that only
+   catches taps on the buttons themselves. */
+.hd-card-actions { position: absolute; left: 0; right: 0; top: 0; height: 176px; pointer-events: none; }
+.hd-card.wide .hd-card-actions { height: 210px; }
+.hd-card-actions > *, .hd-card-actions button { pointer-events: auto; }
 .hd-card.wide { width: 100%; }
 .hd-card:active { transform: scale(.985); }
 .hd-card-img { position: relative; height: 176px; border-radius: 16px; overflow: hidden; background: var(--soft); }

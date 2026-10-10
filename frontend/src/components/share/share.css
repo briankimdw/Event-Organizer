@@ -1,0 +1,79 @@
+/* Share sheet ("Send to") and the cards shared things show as in chat. */
+
+/* ---- sheet ---------------------------------------------------------------- */
+.sh { display: flex; flex-direction: column; gap: 10px; }
+.sh-item { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.sh-item img, .sh-item-ph { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: var(--soft); }
+.sh-item-ph { display: grid; place-items: center; color: var(--muted); }
+.sh-item b { display: block; font-size: 14px; }
+.sh-search { margin: 0; }
+.sh-empty, .sh-signin { padding: 12px 2px; }
+.sh-signin a { color: var(--accent); font-weight: 600; }
+
+.sh-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 6px; padding: 4px 0 6px; }
+.sh-target { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 2px; border-radius: 12px; }
+.sh-target:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sh-av { position: relative; width: 60px; height: 60px; flex-shrink: 0; }
+.sh-av > img { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; background: var(--soft); display: block; transition: transform .15s ease; }
+.sh-target.on .sh-av > img { transform: scale(.92); }
+.sh-av.stack > img { position: absolute; width: 42px; height: 42px; border: 2px solid var(--bg); }
+.sh-av.stack > img:first-child { top: 0; left: 0; }
+.sh-av.stack > img:nth-child(2) { right: 0; bottom: 0; }
+.sh-group-badge { position: absolute; left: -2px; bottom: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; border: 2px solid var(--bg); }
+.sh-check { position: absolute; right: -2px; bottom: -2px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--bg); background: var(--accent); color: #fff; display: none; place-items: center; }
+.sh-target.on .sh-check { display: grid; }
+.sh-name { font-size: 12px; line-height: 1.25; text-align: center; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.sh-target.on .sh-name { font-weight: 600; }
+
+.sh-foot { position: sticky; bottom: -28px; margin: 4px -20px -28px; padding: 10px 20px 20px; background: var(--bg); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.sh-note { width: 100%; border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; font: inherit; font-size: 14px; background: var(--soft); outline: none; }
+.sh-note:focus { border-color: var(--ink); background: var(--bg); }
+
+.sh-actions { display: flex; gap: 18px; justify-content: flex-start; padding-top: 2px; }
+.sh-actions button { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; min-width: 64px; }
+.sh-act-icon { width: 48px; height: 48px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; }
+.sh-actions button:hover .sh-act-icon { background: var(--line); }
+
+/* ---- cards in chat --------------------------------------------------------- */
+.share-card { display: block; width: 228px; max-width: 100%; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--bg); color: var(--ink); text-decoration: none; transition: transform .12s ease, box-shadow .12s ease; }
+a.share-card:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, .08); }
+a.share-card:active { transform: scale(.98); }
+.share-card.gone { display: flex; align-items: center; gap: 8px; padding: 10px 12px; color: var(--muted); background: var(--soft); }
+
+.share-card .sc-head { padding: 8px 10px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.share-card .sc-photo { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: var(--soft); }
+.share-card .sc-photo.ph { display: grid; place-items: center; color: var(--muted); aspect-ratio: 4 / 3; }
+.share-card .sc-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.share-card .sc-body:empty { display: none; }
+.share-card .sc-caption { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.share-card.vendor .sc-cover { height: 84px; background: linear-gradient(135deg, var(--accent-soft), var(--soft)); }
+.share-card.vendor .sc-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.share-card .sc-vendor { display: flex; gap: 10px; align-items: flex-end; padding: 0 12px 4px; margin-top: -22px; min-width: 0; }
+.share-card .sc-vendor .grow { padding-top: 26px; }
+.share-card .sc-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 3px solid var(--bg); background: var(--soft); flex-shrink: 0; }
+.share-card .sc-stats { display: flex; gap: 8px; align-items: center; margin-top: 3px; flex-wrap: wrap; }
+.share-card .sc-stats > span { display: inline-flex; align-items: center; gap: 3px; }
+.share-card .sc-star { color: var(--star); fill: var(--star); }
+.share-card .sc-price { font-weight: 600; }
+.share-card .sc-cta { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-top: 1px solid var(--line); font-weight: 600; margin-top: 8px; }
+
+.share-card.event { background: linear-gradient(180deg, var(--accent-soft), var(--bg) 70%); }
+.share-card .sc-event-cover { display: block; width: 100%; height: 110px; object-fit: cover; }
+.share-card .sc-event-top { display: flex; gap: 10px; align-items: center; padding: 12px 12px 4px; min-width: 0; }
+.share-card .sc-cal { width: 46px; height: 50px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent); }
+.share-card .sc-cal span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.share-card .sc-cal b { font-size: 20px; line-height: 1; color: var(--ink); }
+.share-card .sc-kicker { color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
+.share-card .sc-event-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; font-size: 15px; line-height: 1.25; }
+.share-card .sc-event-lines { display: flex; flex-direction: column; gap: 3px; padding: 4px 12px 0; color: var(--muted); }
+.share-card .sc-event-lines > div { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.share-card .sc-event-lines svg { flex-shrink: 0; }
+
+/* Share buttons placed on other screens */
+.share-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Round share button on photo cards (Home vendor cards). */
+.card-share-btn { position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .92); color: #111; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); }
+.card-share-btn:hover { background: #fff; }
+.card-share-btn:active { transform: scale(.94); }

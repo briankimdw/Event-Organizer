@@ -503,16 +503,16 @@ function ResultCard({ p, free, dates, datesQuery, showVertical }) {
             </div>
             {showVertical && <div className="mt-xs"><VerticalTag vertical={p.vertical} /></div>}
             {sub && <div className="muted small ellipsis">{sub}</div>}
-            <div className="small row gap-xs mt-xs">
+            <div className="small row gap-xs mt-xs result-meta">
               {p.rating != null ? (
                 <>
                   <Star size={12} className="star-on" fill="currentColor" /> <b>{p.rating.toFixed(1)}</b>
-                  <span className="muted">({p.reviewCount}){p.city && ` · ${p.city}`}</span>
+                  <span className="muted ellipsis">({p.reviewCount}){p.city && ` · ${p.city}`}</span>
                 </>
               ) : (
                 <>
                   <span className="new-tag">New</span>
-                  {p.city && <span className="muted">· {p.city}</span>}
+                  {p.city && <span className="muted ellipsis">· {p.city}</span>}
                 </>
               )}
               {p.distanceKm != null && <span className="muted result-distance">· {fmtKm(p.distanceKm)}</span>}

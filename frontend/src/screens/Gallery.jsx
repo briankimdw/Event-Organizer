@@ -5,11 +5,13 @@ import Sheet from '../components/Sheet.jsx'
 import ExifPanel from '../components/Exif.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
 import { BeforeAfter } from '../components/Media.jsx'
-import { SaveSheet, ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
+import { SaveSheet, ModerationSheet } from '../components/PostSheets.jsx'
+import ShareSheet from '../components/share/ShareSheet.jsx'
 import { money, startingPrice } from '../components/Booking.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import ManagePostSheets from '../components/upload/ManagePost.jsx'
+import { CreditChips } from '../components/upload/Credits.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
@@ -489,7 +491,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
             <div className="grow">
               <div className="reel-title">{album.title}</div>
               <div className="reel-meta">
-                Album {index + 1} of {albums.length}{album.location && ` · ${album.location}`}{album.date && ` · ${album.date}`}
+                Post {index + 1} of {albums.length}{album.occasion && ` · ${album.occasion.name}`}{album.location && ` · ${album.location}`}{album.date && ` · ${album.date}`}
               </div>
             </div>
             <div className="reel-icons">
@@ -525,6 +527,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
               ? <ProfileLink id={owner.profileId} className="reel-who" preview={owner.avatar ? { src: owner.avatar, name: owner.name, username: owner.username } : null}>{who}</ProfileLink>
               : <Link to={owner.profileTo || '/me'} className="reel-who profile-link">{who}</Link>
           })()}
+          {album.credits?.length > 0 && <div className="reel-credits"><CreditChips credits={album.credits} dark /></div>}
           {shortExif(photo.exif) && <div className="reel-exif">{shortExif(photo.exif)}</div>}
           {book && (
             <div className="reel-book">
@@ -549,17 +552,24 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
           {(album.location || album.date) && <span><MapPin size={13} /> {[album.location, album.date].filter(Boolean).join(' · ')}</span>}
           {album.realPhoto && <span className="ok"><Camera size={13} /> Real Photo · verified with the RAW file</span>}
         </div>
+        {album.credits?.length > 0 && (
+          <>
+            <h4 className="section-title">Credits</h4>
+            <CreditChips credits={album.credits} onNavigate={() => setInfo(false)} />
+          </>
+        )}
         {hasExif(photo.exif) && (
           <>
             <h4 className="section-title">Gear & settings{album.photos.length > 1 ? ` · photo ${photoIndex + 1}` : ''}</h4>
             <ExifPanel exif={photo.exif} />
           </>
         )}
-        {(album.genre || album.tags?.length > 0 || album.autoTags?.length > 0) && (
+        {(album.genre || album.occasion || album.tags?.length > 0 || album.autoTags?.length > 0) && (
           <>
             <h4 className="section-title">Tags</h4>
             <div className="chips">
               {album.genre && <Link to={`/search?cat=${encodeURIComponent(album.genre)}`} className="chip solid chip-link" aria-label={`Find more ${album.genre}`}>{album.genre}</Link>}
+              {album.occasion && <Link to={`/occasions/${album.occasion.slug}`} className="chip chip-link" aria-label={`Plan a ${album.occasion.name}`}>{album.occasion.name}</Link>}
               {(album.tags || []).map((t) => <span key={t} className="chip">#{t}</span>)}
               {(album.autoTags || []).map((t) => (
                 <span key={t} className="chip auto" title="Suggested automatically from the photos"><Sparkles size={11} /> {t}</span>
@@ -597,12 +607,12 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
       )}
 
       <SaveSheet open={!!saveFor} onClose={() => setSaveFor(null)} photoId={saveFor} />
-      <ShareSheet
-        open={sharing}
-        onClose={() => setSharing(false)}
-        link={`/gallery/${album.providerId ?? owner.providerId}?post=${album.id}`}
-        payload={{ sharedAlbumId: album.id }}
-      />
+      {sharing && (
+        <ShareSheet
+          item={{ kind: 'post', id: album.id, providerId: album.providerId ?? owner.providerId, title: album.title, subtitle: owner.name, image: album.cover ?? photo?.src }}
+          onClose={() => setSharing(false)}
+        />
+      )}
       <ModerationSheet
         open={reporting}
         onClose={() => setReporting(false)}

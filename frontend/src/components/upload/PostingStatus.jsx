@@ -33,7 +33,7 @@ export function Posting({ items, perPhoto, kindLabel }) {
   return (
     <div className="ps" aria-live="polite">
       <div className="ps-cover">{cover?.thumbUrl && <img src={cover.thumbUrl} alt="" />}</div>
-      <h3 className="ps-title">Posting your {kindLabel}…</h3>
+      <h3 className="ps-title">Sharing your {kindLabel}…</h3>
       <div className="muted small">
         {done === items.length ? 'Finishing up…' : items.length > 1 ? `Uploading photo ${Math.min(done + 1, items.length)} of ${items.length}` : 'Uploading'} · {pct}%
       </div>

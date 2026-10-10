@@ -20,4 +20,12 @@ export default {
   packageKeys: ['item', 'available'],
   // maxKey: the package attribute that caps the quantity (the stock on hand).
   quantity: { per_item: { label: 'Items', default: 10, maxKey: 'available', max: 5000 } },
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'setup',
+    headline: 'Show your rentals set up',
+    prompts: ['A tent at night', 'Tables and chairs, set', 'Linens and place settings'],
+    title: 'e.g. Sailcloth tent for 150',
+  },
 }

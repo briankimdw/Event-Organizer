@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Briefcase, MessageCircle, PenSquare, Search, Users } from 'lucide-react'
+import { Briefcase, CalendarDays, MessageCircle, PenSquare, Search, Users } from 'lucide-react'
 import { PersonAvatar } from '../components/ProfileLink.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useAuth } from '../auth.jsx'
@@ -76,10 +76,11 @@ export default function Inbox() {
                     </div>
                     <div className="grow ellipsis">
                       <div className="row gap-xs">
-                        <b>{c.title}</b>
+                        <b className="ellipsis">{c.title}</b>
                         {c.kind === 'booking' && <span className="tag"><Briefcase size={10} /> Booking</span>}
                         {c.kind === 'inquiry' && <span className="tag">Inquiry</span>}
                         {c.kind === 'group' && <span className="tag"><Users size={10} /> Group</span>}
+                        {c.kind === 'event' && <span className="tag"><CalendarDays size={10} /> Event</span>}
                       </div>
                       <div className={`small ellipsis convo-preview ${c.unread ? 'unread' : 'muted'}`}>{preview(c)}</div>
                     </div>

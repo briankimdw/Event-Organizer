@@ -163,7 +163,7 @@ const changed = () => invalidate('providers') // availability / ratings may have
 // quantity: guests / items / days for per_person, per_item and daily packages; leave it
 // null otherwise (it's only sent when set, so this works before the all-verticals migration).
 // Returns the new bookings (one per day).
-export async function requestBooking({ packageId, dates, startTime, hours = null, quantity = null, addonIds = [], location = null, notes = null }) {
+export async function requestBooking({ packageId, dates, startTime, hours = null, quantity = null, addonIds = [], location = null, notes = null, eventId = null }) {
   const args = {
     p_package_id: packageId,
     p_dates: dates.map((d) => (typeof d === 'string' ? d : toKey(d))),
@@ -174,6 +174,7 @@ export async function requestBooking({ packageId, dates, startTime, hours = null
     p_notes: notes || null,
   }
   if (quantity != null) args.p_quantity = Math.max(1, Math.round(quantity))
+  if (eventId) args.p_event_id = eventId // booked from an event's board: the booking belongs to it
   const rows = must(await supabase.rpc('request_booking', args))
   changed()
   return rows

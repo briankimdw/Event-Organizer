@@ -18,4 +18,12 @@ export default {
   cardKeys: ['modalities'],
   packageKeys: ['session_minutes'],
   quantity: { per_person: { label: 'People', default: 2, max: 100 } },
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'session',
+    headline: 'Show a session or your space',
+    prompts: ['A session setup', 'A group class', 'Your equipment'],
+    title: 'e.g. Sunrise yoga for a bridal party',
+  },
 }

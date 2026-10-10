@@ -108,7 +108,8 @@ export function subtitleOf(provider, { withVertical = false } = {}) {
 }
 
 // "caterers" / "a caterer" style words for copy.
-export const pluralLower = (v) => v.plural.toLowerCase()
+// Lower-cases words but keeps acronyms: "DJs & musicians" stays, "Private chefs" -> "private chefs".
+export const pluralLower = (v) => v.plural.replace(/([A-Z])(?=[a-z])/g, (c) => c.toLowerCase())
 export const withArticle = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`
 
 // Text for "Know a great caterer? Invite them" shares.

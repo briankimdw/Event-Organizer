@@ -17,4 +17,13 @@ export default {
   cardKeys: ['techniques'],
   packageKeys: [],
   quantity: { per_person: { label: 'People', default: 1, max: 30 } },
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'look',
+    headline: 'Show a look',
+    prompts: ['A bridal look', 'Before and after', 'Hair, up close'],
+    title: 'e.g. Soft glam bridal look',
+    beforeAfter: true,
+  },
 }

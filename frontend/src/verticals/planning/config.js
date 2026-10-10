@@ -19,4 +19,12 @@ export default {
   ],
   cardKeys: ['specialties'],
   packageKeys: ['months_of_planning', 'day_of_hours'],
+  // The post composer: what a post shows, the drop zone headline, ideas, the title example,
+  // and whether camera settings (EXIF) and before / after posts make sense.
+  post: {
+    noun: 'event',
+    headline: 'Show an event you planned',
+    prompts: ['The finished room', 'A moment you planned', 'The details'],
+    title: 'e.g. Vineyard wedding weekend',
+  },
 }

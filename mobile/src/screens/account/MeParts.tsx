@@ -16,6 +16,7 @@ import { Avatar, Button, EmptyState, ErrorState, IdVerified, Loading, Photo, She
 import useQuery, { type QueryState } from '@/hooks/useQuery'
 import { supabase } from '@/lib/supabase'
 import { StatusPill } from '@/screens/bookings/parts'
+import { EventsShelf } from '@/screens/events/parts'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
 import { makeStyles, useTheme } from '@/theme'
@@ -250,6 +251,7 @@ export function ClientView({ bookings }: { bookings: QueryState<any[]> }) {
         </>
       )}
 
+      <EventsShelf showEmpty title="Events" />
       <Text variant="h4" style={s.section}>Shortlisted</Text>
       {shortlisted.length ? (
         <PeopleRow people={shortlisted} />

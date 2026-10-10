@@ -47,6 +47,9 @@ img { display: block; }
   body { background: var(--bg); }
   .stage { padding: 0; display: block; height: 100%; }
   .phone { width: 100%; height: 100dvh; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
+  /* Real phones (viewport-fit=cover): keep content clear of the notch and the home indicator. */
+  .viewport { top: env(safe-area-inset-top, 0px); }
+  .viewport.with-tabs { padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* ---------- Utilities ---------- */
@@ -63,7 +66,7 @@ img { display: block; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .tiny { font-size: 11.5px; }
-.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .right-text { text-align: right; }
 .left-text { text-align: left; }
 .center-col { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
@@ -87,14 +90,17 @@ img { display: block; }
 .sticky-sub { position: sticky; top: 58px; z-index: 4; background: var(--bg); padding-bottom: 8px; }
 
 .topbar {
-  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 4px;
+  /* Sides grow to fit their buttons and stay equal, so the title is always truly centred;
+     a long title takes what's left and ellipsizes. */
+  position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+  align-items: center; gap: 4px;
   padding: 10px 8px; background: rgba(255, 255, 255, .94); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
 }
-.topbar-side { width: 72px; display: flex; }
+.topbar-side { min-width: 72px; display: flex; align-items: center; }
 .topbar-side.right { justify-content: flex-end; }
-.topbar-title { flex: 1; text-align: center; font-weight: 700; min-width: 0; }
+.topbar-title { text-align: center; font-weight: 700; min-width: 0; }
 .topbar-title > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topbar-title small { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.topbar-title small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; font-size: 11.5px; color: var(--muted); }
 
 .icon-btn { display: inline-grid; place-items: center; padding: 6px; border-radius: 999px; }
 .icon-btn.liked { color: var(--accent); }
@@ -119,6 +125,18 @@ img { display: block; }
 .btn.accent { background: var(--accent); color: #fff; }
 .btn.danger, .btn.ghost.danger { color: var(--danger); }
 .btn.danger-solid { background: var(--danger); color: #fff; }
+/* Tap targets and wrapping: a label that has to wrap stays centred under/next to its icon,
+   and side-by-side buttons (Follow | Ask a question) keep one line, tightening on small phones. */
+.btn { min-height: 44px; line-height: 1.25; text-align: center; }
+.btn.sm { min-height: 34px; }
+.btn > svg { flex-shrink: 0; }
+/* Equal widths when both fit; never narrower than the one-line label; when they can't share
+   a line the second button moves to its own full-width line instead of overflowing. */
+.row:has(> .btn.grow), .row:has(> [style*="contents"] > .btn.grow) { flex-wrap: wrap; }
+.row > .btn.grow, .row > [style*="contents"] > .btn.grow { white-space: nowrap; min-width: max-content; }
+@media (max-width: 359px) {
+  .row > .btn.grow { padding-left: 10px; padding-right: 10px; font-size: 13.5px; gap: 5px; }
+}
 
 .input {
   width: 100%; border: 1px solid var(--line); background: var(--soft); border-radius: 12px; padding: 11px 12px; outline: none; resize: none;
@@ -139,7 +157,7 @@ img { display: block; }
 .toggle-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
 
 .segmented { display: flex; background: var(--soft); border-radius: 12px; padding: 3px; }
-.segmented button { flex: 1; padding: 8px 6px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--muted); display: inline-flex; justify-content: center; align-items: center; }
+.segmented button { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; gap: 4px; padding: 8px 6px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--muted); display: inline-flex; justify-content: center; align-items: center; }
 .segmented button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
 .segmented.compact button { flex: none; padding: 6px 10px; }
 
@@ -169,6 +187,10 @@ img { display: block; }
 .link-callout { flex-direction: row; align-items: center; gap: 10px; color: var(--ink); }
 .link-callout > svg:first-child { color: var(--danger); }
 .info-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+/* "Availability · next 2 weeks"  |  "Boyle Heights + 60 km radius": both top-aligned, the right one right-aligned */
+.info-card > .row.between { align-items: flex-start; gap: 10px; }
+.info-card > .row.between > :last-child { text-align: right; }
+.info-card > .row.between > :first-child:not(:last-child) { white-space: nowrap; flex-shrink: 0; }
 .summary { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .summary .total { font-weight: 700; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
 .quote { margin-top: 8px; padding: 8px 10px; background: var(--soft); border-radius: 10px; }
@@ -377,6 +399,10 @@ input[type=date].filter { width: 130px; }
 .grid2.pad { padding: 16px; gap: 12px; }
 .package-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
 .package-card .btn { align-self: flex-start; }
+/* Long package name next to "$3,500 / day": the price keeps one line, aligned to the name's first line */
+.package-card > .row.between { align-items: flex-start; gap: 10px; }
+.package-card > .row.between > b { white-space: nowrap; flex-shrink: 0; line-height: 1.35; }
+.package-card h4 { line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
 .pkg-facts { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12.5px; margin: 4px 0; }
 .pkg-facts span { display: inline-flex; align-items: center; gap: 4px; }
 .gear-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
@@ -430,7 +456,7 @@ input[type=date].filter { width: 130px; }
 .convo-avatar { position: relative; width: 48px; height: 48px; flex-shrink: 0; }
 .convo-avatar .avatar { width: 48px; height: 48px; }
 .convo-avatar .avatar.stacked { position: absolute; width: 30px; height: 30px; right: -4px; bottom: -4px; border: 2px solid #fff; }
-.tag { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: var(--soft); color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.tag { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: var(--soft); color: var(--muted); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 .chat { display: flex; flex-direction: column; min-height: 100%; }
 .pinned-booking { display: flex; align-items: center; gap: 10px; margin: 10px 12px 0; padding: 10px 12px; border-radius: 12px; background: var(--soft); }
 .messages { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -637,7 +663,14 @@ input[type=date].filter { width: 130px; }
 .result-photos .match-badge { left: 10px; top: 10px; }
 .result-info { display: flex; align-items: flex-start; gap: 10px; padding: 12px; }
 .result-info .avatar { width: 40px; height: 40px; }
-.result-price { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.result-price { font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0; line-height: 20px; }
+.result-info .row.between { align-items: flex-start; }
+/* block, not flex: the ID / PRO badges flow right after the last word instead of dropping to their own line */
+.result-info .person-name { display: block; min-width: 0; line-height: 20px; }
+.result-info .person-name .badge { vertical-align: -1px; }
+.result-meta { flex-wrap: nowrap; min-width: 0; }
+.result-meta > * { flex-shrink: 0; }
+.result-meta > .ellipsis { flex-shrink: 1; }
 .filter-row { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; overflow-x: auto; padding-top: 10px; padding-bottom: 8px; scrollbar-width: none; }
 .filter-row::-webkit-scrollbar { display: none; }
 .filter-btn { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 13px; font-weight: 600; }
@@ -707,14 +740,20 @@ input[type=date].filter { width: 130px; }
 .reel-dots { display: flex; justify-content: center; gap: 5px; margin-bottom: 8px; }
 .reel-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.35); transition: background .2s, transform .2s; }
 .reel-dots span.on { background: #fff; transform: scale(1.2); }
-.reel-title { font-size: 16px; font-weight: 600; }
-.reel-meta { font-size: 12px; color: rgba(255,255,255,.65); margin-bottom: 6px; }
+.reel-title { font-size: 16px; font-weight: 600; line-height: 1.3; }
+.reel-meta { font-size: 12px; color: rgba(255,255,255,.65); margin-bottom: 6px; line-height: 1.35; }
+/* Long titles / "Post 1 of 3 · place · date" stay compact next to the four icons */
+.reel-title, .reel-meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .album-tile { position: relative; display: block; }
+/* Profile "Tagged in": other vendors' posts that credit this one */
+.tagged-tile { width: 132px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tagged-tile img { width: 132px; height: 99px; border-radius: 12px; object-fit: cover; background: var(--soft); margin-bottom: 5px; }
+.tagged-tile b { font-size: 13px; display: block; }
 .album-count { position: absolute; top: 6px; right: 6px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 600; }
 
 /* Save / info live in the bottom panel, beside the album title, never on the photo */
 .reel-title-row { display: flex; align-items: flex-start; gap: 8px; }
-.reel-icons { display: flex; gap: 2px; margin-top: -4px; margin-right: -8px; }
+.reel-icons { display: flex; gap: 2px; margin-top: -4px; margin-right: -8px; flex-shrink: 0; }
 .reel-icons .icon-btn { width: 40px; height: 40px; color: #fff; }
 /* Photos sit between the top bar and the bottom panel, so the panel never covers them.
    --panel-h is measured from the real panel height. */
@@ -747,7 +786,8 @@ input[type=date].filter { width: 130px; }
 .welcome { padding-top: 40px; }
 .input-prefix { display: flex; align-items: center; border: 1px solid var(--line); background: var(--soft); border-radius: 12px; padding: 0 12px; color: var(--muted); }
 .input-prefix:focus-within { border-color: #cfcfcf; background: #fff; }
-.input-prefix input { flex: 1; border: 0; outline: 0; background: none; padding: 11px 0 11px 2px; color: var(--ink); }
+.input-prefix input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; padding: 11px 0 11px 2px; color: var(--ink); }
+.input-prefix > svg { flex-shrink: 0; margin-right: 8px; }
 .field-hint { color: var(--danger); font-size: 12px; }
 .signed-out { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 8px; }
 .signed-out-art { display: flex; justify-content: center; margin-bottom: 8px; }
@@ -810,6 +850,8 @@ input[type=date].filter { width: 130px; }
 /* ---- me & inbox screens ---- */
 .tab-icon { position: relative; display: inline-flex; }
 .tab-badge { position: absolute; top: -5px; right: -9px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+/* Long names ellipsize; the Group / Event / Inquiry tag stays whole */
+.convo .row > .tag { flex-shrink: 0; }
 .convo-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .unread-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
 .convo.unread .tiny { color: var(--ink); font-weight: 600; }
@@ -871,6 +913,8 @@ input[type=date].filter { width: 130px; }
 .new-message .nm-group { display: flex; align-items: center; gap: 10px; padding-top: 4px; padding-bottom: 8px; }
 .nm-title { flex: 1; border: 0; outline: 0; font-size: 15px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .people-picker { padding: 0 16px 16px; }
+/* In a sheet the body already has side padding: don't indent the search field twice. */
+.sheet .people-picker { padding-left: 0; padding-right: 0; }
 .pp-field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; background: var(--soft); border-radius: 12px; }
 .pp-token { display: inline-flex; align-items: center; gap: 4px; background: var(--ink); color: #fff; border-radius: 999px; padding: 4px 8px 4px 10px; font-size: 12.5px; }
 .pp-input { flex: 1; min-width: 140px; display: flex; align-items: center; gap: 6px; color: var(--muted); }
@@ -1027,7 +1071,7 @@ input[type=date].filter { width: 130px; }
 }
 .pp-hero-warn { position: absolute; left: 10px; bottom: 10px; padding: 4px 10px; border-radius: 999px; background: rgba(146, 64, 14, .88); color: #fff; font-size: 11px; font-weight: 600; }
 .pp-tools { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
-.pp-tool { height: 34px; min-width: 34px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 10px; background: var(--soft); font-size: 13px; font-weight: 600; }
+.pp-tool { height: 34px; min-width: 34px; padding: 0 10px; white-space: nowrap; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 10px; background: var(--soft); font-size: 13px; font-weight: 600; }
 .pp-tool:disabled { opacity: .35; }
 .pp-tool.wide:disabled { opacity: 1; color: var(--accent); background: var(--accent-soft); }
 .pp-tool.danger { color: var(--danger); background: none; }
@@ -1478,8 +1522,11 @@ button.collection { width: 100%; padding: 0; align-items: stretch; }
 .v-switch-item.empty.on { opacity: 1; }
 
 /* Tinted icon badge + noun tag */
-.cover-fallback { display: grid; place-items: center; width: 100%; height: 100%; color: var(--tint);
+/* Zero-specificity size: a sizing class on the same element (.provider-row-img...) always wins. */
+:where(.cover-fallback) { width: 100%; height: 100%; }
+.cover-fallback { display: grid; place-items: center; color: var(--tint); flex-shrink: 0; overflow: hidden;
   background: linear-gradient(135deg, color-mix(in srgb, var(--tint) 24%, #fff), color-mix(in srgb, var(--tint) 7%, #fff)); }
+.provider-row-img.cover-fallback svg { width: 26px; height: 26px; }
 .occ-vendor .cover-fallback { width: 112px; height: 84px; border-radius: 12px; }
 .v-badge { display: inline-grid; place-items: center; border-radius: 50%; flex-shrink: 0; color: var(--tint); background: color-mix(in srgb, var(--tint) 13%, #fff); }
 .v-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--tint); background: color-mix(in srgb, var(--tint) 11%, #fff); white-space: nowrap; }
@@ -1525,3 +1572,9 @@ button.collection { width: 100%; padding: 0; align-items: stretch; }
 .v-empty .row { justify-content: center; }
 .v-empty .v-badge { margin-bottom: 4px; }
 .listing-details { margin-bottom: 10px; }
+
+/* ---------- Safe areas on real phones (kept last so they override the base rules) ---------- */
+@media (max-width: 500px) {
+  .tabbar { height: calc(68px + env(safe-area-inset-bottom, 0px)); padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .sheet-body { padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+}

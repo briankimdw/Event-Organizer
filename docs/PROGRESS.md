@@ -2,7 +2,7 @@
 
 Where the project stands, what was decided, and what's next. Update this file at the end of each work session.
 
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-11
 
 ---
 
@@ -17,6 +17,40 @@ Where the project stands, what was decided, and what's next. Update this file at
 | Payments (Stripe) | Not started |
 | Mobile app (Expo / React Native) | **`mobile/`**: Expo SDK 57 + expo-router, every screen ported. It imports `frontend/src/{api,lib,verticals}` directly through Metro (see `mobile/README.md`). Type-checks and bundles; not yet tried on a real phone. |
 | Service verticals | **18 verticals and 10 occasions** in `frontend/src/verticals/catalog.js` (the shared source of truth). Plan: `docs/EVENT_PLATFORM_PLAN.md`; how to add one: `docs/VERTICALS.md`. The DB changes are written but **not applied yet** (see below). |
+
+---
+
+## 2026-10-11: posting for every vertical, sharing, events with friends, UI pass
+
+- **Posting:** works for every vertical.
+  - Categories come from the listing's own services.
+  - Wording and ideas per vertical are set in `verticals/*/config.js` (`post`).
+  - Camera settings show only for photo and video.
+  - **Occasion tag** on posts.
+  - **Credits:** tag the other vendors who worked an event (`album_credits`).
+  - Vendors with several listings pick which listing they're posting for.
+  - Clients get "Posting is for vendors" with a link to set up a listing.
+- **Sharing:**
+  - A "Send to" sheet on posts, vendor profiles, home cards and saved plans (`components/share/ShareSheet`, `api/messages.js` `shareToChats`).
+  - Shares arrive in the chat as post, vendor and event cards.
+  - Event cards use a safe snapshot taken when the message is sent (no budget or member details).
+- **Events with friends:** `/events`, `/events/new` and `/events/:id`.
+  - Every event gets its own group chat, kept in sync with the event's members.
+  - Invites, plus a "Who we're hiring" board per vertical with 👍 votes and statuses.
+  - "Add to event" on vendor profiles and cards.
+  - Bookings made from an event are linked to it.
+- **UI audit (web + mobile):**
+  - Labels that wrapped, rows that ran off the screen, and a top bar that wasn't centered.
+  - Safe areas around the notch and home bar.
+  - Tap targets at least 44px.
+  - Singular/plural counts ("1 person").
+  - "Tagged in" on vendor profiles.
+- **To apply (not yet on the hosted project):** paste `supabase/demo/sharing_events_credits_setup.sql` into the SQL editor.
+  - It contains `share_cards`, `event_groups` and `post_credits`.
+  - Tested in PGlite: it runs twice cleanly, and 40/40 share and event tests pass.
+  - Until it's applied, the app hides these features.
+  - It also fixes a rule that blocked "Save as event" from reading back the event it had just created.
+- **Unverified:** no signed-in run against the real DB. Realtime cards, the native share sheet and the keyboard are untested on a phone.
 
 ---
 

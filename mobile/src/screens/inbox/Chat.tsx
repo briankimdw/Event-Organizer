@@ -5,22 +5,24 @@
 // KeyboardView keeps the composer above the keyboard on iOS and Android.
 // Long-press someone else's message to report it or block them.
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { AlertCircle, Calendar, ChevronLeft, ChevronRight, Info, MessageCircle, SendHorizontal } from 'lucide-react-native'
+import { AlertCircle, Calendar, CalendarHeart, ChevronLeft, ChevronRight, Info, MessageCircle, SendHorizontal } from 'lucide-react-native'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Pressable, TextInput, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { getBooking } from '@shared/api/bookings.js'
+import { eventForConversation } from '@shared/api/events.js'
 import {
   getConversation, listMessages, markRead, messageError, openChat, sendMessage,
 } from '@shared/api/messages.js'
 import { avatarUrl } from '@shared/lib/format.js'
-import { Avatar, Button, EmptyState, ErrorState, KeyboardView, Loading, Photo, Screen, SignInPrompt, Text } from '@/components'
+import { Avatar, Button, EmptyState, ErrorState, KeyboardView, Loading, Photo, Screen, SignInPrompt, Text, VerticalIcon } from '@/components'
 import useQuery from '@/hooks/useQuery'
 import { StatusPill } from '@/screens/bookings/parts'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
 import { makeStyles, useTheme } from '@/theme'
+import { ShareCard, type SharedThing } from '@/components/share/ShareCard'
 import ChatInfo, { type ChatConversation } from './ChatInfo'
 import ModerationSheet, { type ModerationTarget } from './ModerationSheet'
 
@@ -73,6 +75,9 @@ export default function Chat() {
   const c = data?.conversation ?? null
   const messages = data?.messages || []
   const { data: booking } = useQuery<any>(c?.bookingId ? () => getBooking(c.bookingId) : null, [c?.bookingId])
+  // Event chats link to their board and wear the occasion's icon in the header.
+  const { data: chatEvent } = useQuery<{ id: string; tint: string; icon: string } | null>(c?.kind === 'event' ? () => eventForConversation(c.id) : null, [c?.id, c?.kind])
+  const eventId = chatEvent?.id ?? null
   const [draft, setDraft] = useState('')
   const [menu, setMenu] = useState<ModerationTarget | null>(null)
   const [info, setInfo] = useState(false)
@@ -134,7 +139,7 @@ export default function Chat() {
   }
   const discard = (m: Message) => setData((d) => d && { ...d, messages: d.messages.filter((x) => x.id !== m.id) })
 
-  const isGroup = !!c?.isGroup
+  const isGroup = !!c?.isGroup || c?.kind === 'event'
   const others = (c?.members || []) as ChatConversation['members']
   const other = others[0]
   const byProfile = useMemo(() => new Map(others.map((m) => [m.profileId, m])), [others])
@@ -198,12 +203,19 @@ export default function Chat() {
           accessibilityRole="button"
           accessibilityLabel={isGroup ? `${c.title}, group details` : `${c.title}, view profile`}
         >
-          {other && <Avatar uri={other.avatar} name={other.name} size={32} />}
+          {c.kind === 'event' ? (
+            <VerticalIcon name={chatEvent?.icon ?? 'PartyPopper'} tint={chatEvent?.tint ?? col.muted} size={16} bubble bubbleSize={32} />
+          ) : other && <Avatar uri={other.avatar} name={other.name} size={32} />}
           <View style={s.grow}>
             <Text variant="h4" numberOfLines={1}>{c.title}</Text>
             {!!subtitle && <Text variant="tiny" muted numberOfLines={1} color={typers.length ? 'accent' : undefined}>{subtitle}</Text>}
           </View>
         </Pressable>
+        {!!eventId && (
+          <Pressable onPress={() => router.push({ pathname: '/events/[id]', params: { id: eventId } })} hitSlop={10} style={s.iconBtn} accessibilityRole="button" accessibilityLabel="Event board">
+            <CalendarHeart size={22} color={col.ink} />
+          </Pressable>
+        )}
         <Pressable onPress={() => setInfo(true)} hitSlop={10} style={s.iconBtn} accessibilityRole="button" accessibilityLabel="Conversation details">
           <Info size={22} color={col.ink} />
         </Pressable>
@@ -263,7 +275,6 @@ export default function Chat() {
                   isGroup={isGroup}
                   author={r.m.mine ? null : authorOf(r.m)}
                   onProfile={openProfile}
-                  onShared={(a) => router.push({ pathname: '/gallery/[personId]', params: { personId: a.providerId, post: a.id } })}
                   onLongPress={(m, a) => setMenu({ what: 'message', username: a.username, target: { type: 'message', id: m.id }, blockProfileId: a.profileId })}
                   onRetry={retry}
                   onDiscard={discard}
@@ -328,12 +339,11 @@ export default function Chat() {
 type Author = { id: string; profileId: string; name: string; username?: string | null; avatar: string }
 type MsgRow = Extract<Row, { kind: 'msg' }>
 
-function MessageRow({ row, isGroup, author, onProfile, onShared, onLongPress, onRetry, onDiscard }: {
+function MessageRow({ row, isGroup, author, onProfile, onLongPress, onRetry, onDiscard }: {
   row: MsgRow
   isGroup: boolean
   author: Author | null
   onProfile: (id: string) => void
-  onShared: (a: { id: string; providerId: string }) => void
   onLongPress: (m: Message, a: Author) => void
   onRetry: (m: Message) => void
   onDiscard: (m: Message) => void
@@ -341,7 +351,7 @@ function MessageRow({ row, isGroup, author, onProfile, onShared, onLongPress, on
   const s = useStyles()
   const { c } = useTheme()
   const { m, newDay, joinsPrev, joinsNext, receipt } = row
-  const shared = m.sharedAlbum
+  const shared = m.shared
   return (
     <View>
       {newDay && (
@@ -363,15 +373,7 @@ function MessageRow({ row, isGroup, author, onProfile, onShared, onLongPress, on
           {!m.mine && isGroup && !joinsPrev && author && (
             <Text variant="tiny" muted style={s.author} onPress={() => onProfile(author.id)}>{author.name}</Text>
           )}
-          {shared && (
-            <Pressable onPress={() => onShared(shared)} style={s.shared} accessibilityRole="button" accessibilityLabel={`Shared post: ${shared.title || 'Album'}`}>
-              {!!shared.cover && <Photo uri={shared.cover} style={s.sharedImg} />}
-              <Text variant="tiny" weight="600" style={s.sharedTitle} numberOfLines={1}>{shared.title || 'Album'}</Text>
-            </Pressable>
-          )}
-          {!shared && !!m.sharedAlbumId && (
-            <View style={[s.bubble, s.theirs]}><Text muted>Shared a post that’s no longer available</Text></View>
-          )}
+          {!!shared && <ShareCard shared={shared as SharedThing} />}
           {!!m.text && (
             <Pressable
               onLongPress={() => !m.mine && author && onLongPress(m, author)}
@@ -431,9 +433,6 @@ const useStyles = makeStyles((t) => ({
   failedBubble: { opacity: 0.6, borderWidth: 1, borderColor: t.c.danger },
   failedRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   time: { marginHorizontal: 6 },
-  shared: { width: 200, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: t.c.line, backgroundColor: t.c.card },
-  sharedImg: { width: '100%', height: 150 },
-  sharedTitle: { padding: 8 },
   typingRow: { marginTop: 10 },
   typingBubble: { backgroundColor: t.c.soft, paddingVertical: 6 },
   composer: {
