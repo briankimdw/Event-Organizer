@@ -74,10 +74,10 @@ def test_follow_up_cheaper_and_july():
 
 
 # ---- budget split ---------------------------------------------------------------
-def test_budget_split_sums_to_total_and_only_photography_is_bookable():
+def test_budget_split_sums_to_total_and_every_vertical_is_bookable():
     rows = split_budget(2_500_000, "wedding", ["photography", "venue", "catering", "florals"])
     assert sum(r["cents"] for r in rows) == 2_500_000
-    assert [r["category"] for r in rows if r["bookable"]] == ["photography"]
+    assert all(r["bookable"] for r in rows)  # every vertical has a finder now (was: photography only)
 
 
 def test_photo_only_event_gets_whole_budget():

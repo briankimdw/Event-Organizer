@@ -227,7 +227,7 @@ export default function SignIn() {
         {step === 'form' && (
           <>
             <div className="wordmark">photomatch</div>
-            <h1 className="signin-title">{mode === 'login' ? 'Welcome back' : 'Find and book photographers you’ll love'}</h1>
+            <h1 className="signin-title">{mode === 'login' ? 'Welcome back' : 'Find and book vendors you’ll love'}</h1>
 
             <button className="btn-google mt-sm" onClick={google} disabled={googleEnabled === false}>
               <GoogleLogo /> Continue with Google

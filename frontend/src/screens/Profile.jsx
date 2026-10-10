@@ -15,6 +15,9 @@ import { PolicyTable, priceLabel } from '../components/Booking.jsx'
 import { ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import { MapPreview } from '../components/map/LazyMap.jsx'
+import AttributeList from '../components/verticals/AttributeList.jsx'
+import { VerticalTag } from '../components/verticals/VerticalIcon.jsx'
+import { attributeLines, verticalConfig } from '../verticals/index.js'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
@@ -79,7 +82,7 @@ export default function Profile() {
   const { user } = useAuth()
   const { following, toggleFollow, shortlist, toggleShortlist, toast } = useStore()
   const startTab = params.get('tab')
-  const [tab, setTab] = useState(TABS.includes(startTab) ? startTab : 'portfolio')
+  const [tab, setTab] = useState(TABS.includes(startTab) ? startTab : null) // null = the first tab for this profile
   const [share, setShare] = useState(false)
   const [followers, setFollowers] = useState(false)
   const tabsRef = useRef()
@@ -88,9 +91,24 @@ export default function Profile() {
 
   const { data: person, loading, error, reload } = useQuery(() => loadPerson(id), [id])
   const provider = person?.kind === 'provider' ? person : null
+  // Visual verticals (photography, venues, florals...) lead with their portfolio; others
+  // (DJs, planners, officiants, staff) with packages and reviews.
+  const visual = provider ? provider.verticalInfo?.visual !== false : true
+  const tabs = !provider
+    ? []
+    : [
+        ...(visual ? ['portfolio'] : []),
+        'packages',
+        ...(['photography', 'videography'].includes(provider.vertical) || provider.gear.bodies.length || provider.gear.lenses.length ? ['gear'] : []),
+        'reviews',
+        ...(!visual && provider.albumCount > 0 ? ['portfolio'] : []),
+      ]
+  const activeTab = tabs.includes(tab) ? tab : tabs[0]
+  const config = verticalConfig(provider?.vertical)
   // Specialties that are also service categories link to that category's search.
   const { data: categories } = useQuery(provider?.specialties?.length ? () => getCategories() : null, [provider?.id])
-  const categoryFor = (name) => categories?.find((c) => c.name.toLowerCase() === name.toLowerCase())?.slug
+  const myServices = categories?.find((v) => v.slug === provider?.vertical)?.services || []
+  const categoryFor = (name) => myServices.find((c) => c.name.toLowerCase() === name.toLowerCase())?.slug
 
   // Switch tab and scroll down to it (the star rating opens Reviews).
   const showTab = (next) => {
@@ -99,13 +117,13 @@ export default function Profile() {
   }
   // Opened on a tab (e.g. /u/:id?tab=reviews from a rating elsewhere): start scrolled to it.
   useEffect(() => {
-    if (provider && TABS.includes(startTab) && startTab !== 'portfolio') {
+    if (provider && TABS.includes(startTab) && startTab !== tabs[0]) {
       requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ block: 'start' }))
     }
   }, [!!provider]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: albums, loading: albumsLoading, error: albumsError, reload: reloadAlbums } = useQuery(
-    provider ? () => listAlbums(provider.id).then((rows) => rows.filter((a) => a.photos?.length).map(toViewerAlbum)) : null,
+    provider && (visual || provider.albumCount > 0) ? () => listAlbums(provider.id).then((rows) => rows.filter((a) => a.photos?.length).map(toViewerAlbum)) : null,
     [provider?.id],
   )
 
@@ -174,15 +192,18 @@ export default function Profile() {
         <h2>
           {person.name} {provider?.idVerified && <IdVerified label explain name={person.name} />} {provider?.pro && <ProBadge explain name={person.name} />}
         </h2>
-        {person.city && (provider?.location ? (
-          <Link to={`/search?view=map&focus=${provider.id}`} className="muted small inline-icon tap-text" aria-label={`${person.city}: see ${firstName} on the map`}>
-            <MapPin size={13} /> {person.city}
-          </Link>
-        ) : (
-          <div className="muted small inline-icon">
-            <MapPin size={13} /> {person.city}
-          </div>
-        ))}
+        <div className="row gap-xs wrap profile-where">
+          {provider && <Link to={`/search?v=${provider.vertical}`} aria-label={`More ${provider.verticalInfo.plural}`}><VerticalTag vertical={provider.vertical} /></Link>}
+          {person.city && (provider?.location ? (
+            <Link to={`/search?view=map&v=${provider.vertical}&focus=${provider.id}`} className="muted small inline-icon tap-text" aria-label={`${person.city}: see ${firstName} on the map`}>
+              <MapPin size={13} /> {person.city}
+            </Link>
+          ) : (
+            <div className="muted small inline-icon">
+              <MapPin size={13} /> {person.city}
+            </div>
+          ))}
+        </div>
         {provider && (
           <div className="row gap-xs small mt-xs">
             {provider.rating != null ? (
@@ -216,7 +237,7 @@ export default function Profile() {
             {provider.specialties.map((s) => {
               const slug = categoryFor(s)
               // Service categories filter by category; anything else (e.g. "Nightlife") is a text search.
-              const to = slug ? `/search?cat=${encodeURIComponent(slug)}` : `/search?q=${encodeURIComponent(s)}`
+              const to = slug ? `/search?v=${provider.vertical}&cat=${encodeURIComponent(slug)}` : `/search?v=${provider.vertical}&q=${encodeURIComponent(s)}`
               return <Link key={s} to={to} className="chip chip-link">{s}</Link>
             })}
           </div>
@@ -244,7 +265,11 @@ export default function Profile() {
         {provider && isMine && (
           <div className="row gap-xs mt full">
             <Link to="/upload" className="btn grow"><Plus size={16} /> Post photos</Link>
-            <Link to="/my-work" className="btn ghost grow"><Images size={16} /> My work</Link>
+            {provider.albumCount > 0 ? (
+              <Link to="/my-work" className="btn ghost grow"><Images size={16} /> My work</Link>
+            ) : (
+              <Link to="/me" className="btn ghost grow"><Package size={16} /> Packages</Link>
+            )}
           </div>
         )}
       </div>
@@ -280,22 +305,26 @@ export default function Profile() {
         </div>
       )}
 
+      {provider && attributeLines(config.providerFields.filter((f) => f.key !== 'specialties'), provider.attributes).length > 0 && (
+        <div className="pad-x">
+          <div className="info-card mt-sm">
+            <div className="small"><b>About {firstName}</b></div>
+            <AttributeList fields={config.providerFields.filter((f) => f.key !== 'specialties')} attrs={provider.attributes} />
+          </div>
+        </div>
+      )}
+
       {provider && (
         <div className="pad-x mt profile-tabs" ref={tabsRef}>
           <Segmented
-            options={[
-              { value: 'portfolio', label: 'Portfolio' },
-              { value: 'packages', label: 'Packages' },
-              { value: 'gear', label: 'Gear' },
-              { value: 'reviews', label: 'Reviews' },
-            ]}
-            value={tab}
+            options={tabs.map((t) => ({ value: t, label: TAB_LABELS[t] }))}
+            value={activeTab}
             onChange={setTab}
           />
         </div>
       )}
 
-      {provider && tab === 'portfolio' && (
+      {provider && activeTab === 'portfolio' && (
         <>
           {albumsLoading && <Loading inline />}
           {albumsError && <ErrorState error={albumsError} onRetry={reloadAlbums} />}
@@ -327,7 +356,7 @@ export default function Profile() {
         </>
       )}
 
-      {provider && tab === 'packages' && (
+      {provider && activeTab === 'packages' && (
         <div className="pad">
           {provider.packages.length === 0 && (
             <EmptyState compact icon={Package} title="No packages listed yet" text={isMine ? null : 'Ask a question to get a quote.'} />
@@ -341,16 +370,9 @@ export default function Profile() {
                 <h4>{pkg.name}</h4>
                 <b>{priceLabel(pkg)}</b>
               </div>
-              {(pkg.hours || pkg.editedPhotos || pkg.turnaroundDays) && (
-                <div className="pkg-facts">
-                  {pkg.hours && <span><Clock size={13} /> {pkg.hours}h</span>}
-                  {pkg.editedPhotos && <span><Images size={13} /> {pkg.editedPhotos} edited</span>}
-                  {pkg.turnaroundDays && <span><Sparkles size={13} /> {pkg.turnaroundDays}-day turnaround</span>}
-                </div>
-              )}
+              <PackageFacts pkg={pkg} config={config} />
               {pkg.description && <div className="small">{pkg.description}</div>}
-              {pkg.editingLevel && <div className="muted small">Editing: {pkg.editingLevel}</div>}
-              {pkg.deliverables?.length > 0 && <div className="muted small">Includes: {pkg.deliverables.join(', ')}</div>}
+              <AttributeList fields={config.packageFields.filter((f) => !config.packageKeys.includes(f.key))} attrs={pkg.attributes} />
               {pkg.depositPct != null && <div className="muted small">{pkg.depositPct}% deposit to confirm</div>}
               {!isMine && (
                 <span className="btn sm mt-sm pkg-select" aria-hidden="true">Select <ChevronRight size={14} /></span>
@@ -384,7 +406,7 @@ export default function Profile() {
         </div>
       )}
 
-      {provider && tab === 'gear' && (
+      {provider && activeTab === 'gear' && (
         <div className="pad">
           {!provider.gear.bodies.length && !provider.gear.lenses.length && (
             <EmptyState compact icon={Camera} title="No gear listed yet" />
@@ -408,7 +430,7 @@ export default function Profile() {
         </div>
       )}
 
-      {provider && tab === 'reviews' && (
+      {provider && activeTab === 'reviews' && (
         <div className="pad">
           {provider.rating != null ? (
             <div className="rating-summary">
@@ -448,4 +470,18 @@ export default function Profile() {
 }
 
 const TABS = ['portfolio', 'packages', 'gear', 'reviews']
+const TAB_LABELS = { portfolio: 'Portfolio', packages: 'Packages', gear: 'Gear', reviews: 'Reviews' }
+
+// A package's key facts as icon chips: hours, then the vertical's headline fields
+// (edited photos and turnaround for photography, guests for catering...).
+function PackageFacts({ pkg, config }) {
+  const lines = attributeLines(config.packageFields, pkg.attributes, config.packageKeys)
+  if (!pkg.hours && !lines.length) return null
+  return (
+    <div className="pkg-facts">
+      {pkg.hours && <span><Clock size={13} /> {pkg.hours}h</span>}
+      {lines.map((l) => <span key={l}><Sparkles size={13} /> {l}</span>)}
+    </div>
+  )
+}
 const ALBUM_STATUS = { processing: 'Processing', under_review: 'In review', hidden: 'Hidden' }

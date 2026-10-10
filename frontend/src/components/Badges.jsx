@@ -41,7 +41,7 @@ const EXPLAIN = {
     icon: ShieldCheck,
     lead: (who) => `${who} has confirmed their identity with a government ID, so the person you book is who they say they are.`,
     points: [
-      'Photographers verify their identity before they can accept paid bookings.',
+      'Vendors verify their identity before they can accept paid bookings.',
       'We only keep whether the check passed, never the ID images.',
       'It’s about who they are, not how good the photos are. Look at the portfolio and reviews for that.',
     ],
@@ -50,11 +50,11 @@ const EXPLAIN = {
     title: 'Verified Pro',
     label: 'Verified Pro. What does this mean?',
     icon: BadgeCheck,
-    lead: (who) => `${who} is a Verified Pro: a photographer membership for people running their business on photomatch.`,
+    lead: (who) => `${who} is a Verified Pro: a membership for vendors running their business on photomatch.`,
     points: [
       'Pro is separate from ID verification.',
       'It isn’t a rating. Ratings only come from clients after completed bookings.',
-      'In search, you can filter to show only Verified Pro photographers.',
+      'In search, you can filter to show only Verified Pro vendors.',
     ],
   },
 }
@@ -63,7 +63,7 @@ function ExplainBadge({ kind, className, name, children }) {
   const [open, setOpen] = useState(false)
   const info = EXPLAIN[kind]
   const Icon = info.icon
-  const who = name ? name.split(' ')[0] : 'This photographer'
+  const who = name ? name.split(' ')[0] : 'This vendor'
   return (
     <>
       <button

@@ -1,8 +1,12 @@
 // Create the fake test users from docs/test-users.json in your Supabase project.
 //
 //   cd frontend
-//   node scripts/seed-test-users.mjs                 # accounts + profiles + photographer listings
+//   node scripts/seed-test-users.mjs                 # accounts + profiles + photographer and vendor listings
 //   node scripts/seed-test-users.mjs --with-photos   # ...plus sample albums for each photographer
+//
+// Vendors (caterers, venues, DJs...) get a listing in their `vertical` (a slug from
+// src/verticals/catalog.js). Their packages, location, capacity and reviews come
+// from supabase/demo/demo_data.sql, which you run afterwards.
 //
 // Needs the SERVER-ONLY service role key, read from SUPABASE_SERVICE_ROLE_KEY in the
 // environment or from services/ml/.env. It is never printed. Safe to run more than
@@ -82,21 +86,30 @@ async function ensureUser(person) {
   return { user, isNew }
 }
 
-// ---- photographer listings --------------------------------------------------
+// ---- provider listings (photographers + vendors) ----------------------------
 let refs
 async function loadRefs() {
-  const cats = must(await db.from('service_categories').select('id, slug'))
+  const cats = must(await db.from('service_categories').select('id, slug, kind'))
   const policy = must(await db.from('cancellation_policies').select('id').is('provider_id', null).eq('name', 'Moderate').maybeSingle())
-  refs = { cat: Object.fromEntries(cats.map((c) => [c.slug, c.id])), policyId: policy?.id ?? null }
+  refs = {
+    cat: Object.fromEntries(cats.map((c) => [c.slug, c.id])),
+    verticals: new Set(cats.filter((c) => c.kind === 'vertical').map((c) => c.slug)),
+    policyId: policy?.id ?? null,
+  }
 }
 
 async function ensureProvider(person, userId) {
-  const existing = must(await db.from('providers').select('id').eq('profile_id', userId).maybeSingle())
+  const vertical = person.vertical || 'photography'
+  if (!refs.verticals.has(vertical)) {
+    throw new Error(`Unknown vertical "${vertical}" for ${person.username}: run supabase/seed.sql (or demo/all_verticals_setup.sql) first.`)
+  }
+  const existing = must(await db.from('providers').select('id')
+    .eq('profile_id', userId).eq('vertical_id', refs.cat[vertical]).maybeSingle())
   if (existing) return { id: existing.id, isNew: false }
   const provider = must(await db.from('providers').insert({
     profile_id: userId,
-    vertical_id: refs.cat.photography,
-    display_name: person.name,
+    vertical_id: refs.cat[vertical],
+    display_name: person.business || person.name,
     slug: person.slug,
     city: person.city,
     bio: person.bio,
@@ -178,6 +191,14 @@ for (const person of data.photographers) {
   console.log(line)
 }
 
+for (const person of data.vendors || []) {
+  const { user, isNew } = await ensureUser(person)
+  stats[isNew ? 'created' : 'existing']++
+  const provider = await ensureProvider(person, user.id)
+  if (provider.isNew) stats.providers++
+  console.log(`${isNew ? '+' : '='} ${person.name.padEnd(14)} ${person.vertical}: ${person.business}${provider.isNew ? ' (listing created)' : ''}`)
+}
+
 for (const person of data.clients) {
   const { isNew } = await ensureUser(person)
   stats[isNew ? 'created' : 'existing']++
@@ -185,9 +206,10 @@ for (const person of data.clients) {
 }
 
 console.log(
-  `\nDone: ${stats.created} users created, ${stats.existing} already existed, ${stats.providers} photographer listings created` +
+  `\nDone: ${stats.created} users created, ${stats.existing} already existed, ${stats.providers} provider listings created` +
     (withPhotos ? `, ${stats.albums} albums / ${stats.photos} photos added.` : '.'),
 )
+console.log('Next: paste supabase/demo/demo_data.sql into the Supabase SQL editor for packages, locations and reviews.')
 if (withPhotos && stats.photos) {
   console.log('Next: analyse the new photos with SigLIP:  cd ../services/ml && .venv/Scripts/python -m app.worker --once')
 }

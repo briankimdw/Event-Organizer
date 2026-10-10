@@ -10,6 +10,7 @@ Modules:
     claude.py     Claude structured extraction (used when an API key is configured)
     brief.py      shared clean-up of a brief (dates list, title, questions)
     geocode.py    place name -> lat/lng (known LA places, then Nominatim)
-    search.py     find and score real providers in Supabase
+    finders/      find and score real vendors in Supabase, one finder per vertical
+    search.py     old import path for the photography finder (shim)
     service.py    ties it together for POST /plan
 """

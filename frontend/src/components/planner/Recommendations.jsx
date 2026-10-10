@@ -4,26 +4,37 @@ import { IdVerified, ProBadge } from '../Badges.jsx'
 import { useStore } from '../../store.jsx'
 import { fmtKm } from '../../api/locations.js'
 import { cents, shortDates } from './brief.js'
+import EmptyVertical from '../verticals/EmptyVertical.jsx'
+import { VerticalBadge } from '../verticals/VerticalIcon.jsx'
+import { attributeLines, nounFor, verticalConfig, verticalMeta } from '../../verticals/index.js'
 
-// One section per bookable category (photography today), each with the
-// planner's ranked options. Provider display data comes from `providers`
-// (a Map of provider id -> provider object); options we can't match are skipped.
+// One section per category the plan needs (rec.category is a vertical slug:
+// photography, catering, venue...), each with the planner's ranked options.
+// Provider display data comes from `providers` (a Map of provider id -> provider
+// object); options we can't match are skipped. A vertical with no vendors at all
+// yet gets a friendly "No caterers near you yet" with an invite, not an error.
 export default function Recommendations({ recommendations, providers, brief }) {
   if (!recommendations?.length) return null
   return recommendations.map((rec) => {
-    const options = rec.options.filter((o) => providers.has(o.provider_id))
+    const options = (rec.options || []).filter((o) => providers.has(o.provider_id))
+    const vertical = rec.category
+    const meta = verticalMeta(vertical)
+    const anyInVertical = [...providers.values()].some((p) => p.vertical === vertical)
+    const search = new URLSearchParams({ ...(meta.known ? { v: vertical } : {}), ...(brief?.dates?.length ? { dates: brief.dates.join(',') } : {}) }).toString().replace(/%2C/g, ',')
     return (
       <section key={rec.category} className="plan-recs">
         <div className="plan-recs-head">
-          <h3>{rec.label || 'Recommendations'}</h3>
+          <h3 className="row gap-xs"><VerticalBadge vertical={vertical} size={26} /> {rec.label || meta.name}</h3>
           {rec.budget_cents != null && <span className="muted small">up to {cents(rec.budget_cents)}</span>}
         </div>
-        {options.length === 0 ? (
+        {options.length === 0 && !anyInVertical && meta.known ? (
+          <div className="plan-card"><EmptyVertical vertical={vertical} compact /></div>
+        ) : options.length === 0 ? (
           <div className="plan-card plan-none">
-            <b>No one fits every detail yet</b>
+            <b>No {nounFor(vertical, 2)} fit every detail yet</b>
             <div className="muted small">Try other dates or a bigger budget, or browse everyone who’s free.</div>
-            <Link className="btn sm ghost mt-sm" to={`/search${brief?.dates?.length ? `?dates=${brief.dates.join(',')}` : ''}`}>
-              <Search size={14} /> Browse photographers
+            <Link className="btn sm ghost mt-sm" to={`/search${search ? `?${search}` : ''}`}>
+              <Search size={14} /> Browse {nounFor(vertical, 2)}
             </Link>
           </div>
         ) : (
@@ -91,7 +102,7 @@ function OptionCard({ option: o, p, brief, budgetCents, top }) {
         <div className="plan-pkg">
           <div className="grow">
             <div className="small"><b>{packageName || 'Package'}</b></div>
-            {pkg?.hours && <div className="muted tiny">{pkg.hours} hours{pkg.editedPhotos ? ` · ${pkg.editedPhotos} edited photos` : ''}</div>}
+            {pkg && <PackageLine pkg={pkg} vertical={p.vertical} />}
           </div>
           <div className="right-text">
             <b>{o.price_cents != null ? cents(o.price_cents) : 'Quote'}</b>
@@ -130,10 +141,17 @@ function OptionCard({ option: o, p, brief, budgetCents, top }) {
 
         <div className="plan-actions">
           <Link className="btn accent sm grow" to={bookUrl}>Request booking</Link>
-          <Link className="btn ghost sm" to={`/gallery/${p.id}`}><Images size={14} /> Work</Link>
+          {p.covers.length > 0 && <Link className="btn ghost sm" to={`/gallery/${p.id}`}><Images size={14} /> Work</Link>}
           <Link className="btn ghost sm" to={`/u/${p.id}`}>Profile</Link>
         </div>
       </div>
     </article>
   )
+}
+
+// "4 hours · 300 edited photos" / "3h · Min 30 guests · Buffet".
+function PackageLine({ pkg, vertical }) {
+  const config = verticalConfig(vertical)
+  const parts = [pkg.hours && `${pkg.hours} hours`, ...attributeLines(config.packageFields, pkg.attributes, config.packageKeys)].filter(Boolean)
+  return parts.length ? <div className="muted tiny">{parts.join(' · ')}</div> : null
 }

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth } from './auth.jsx'
-import { getMyProvider } from './api/portfolio.js'
+import { getMyProviders } from './api/portfolio.js'
 import * as social from './api/social.js'
 import { addCorrections as saveCorrections, getTasteProfile, likePhoto, removeCorrection as deleteCorrection } from './api/discover.js'
 import { invalidate } from './api/catalog.js'
@@ -10,6 +10,12 @@ import { invalidate } from './api/catalog.js'
 // and their photographer listing (if any). Screen-specific data (bookings,
 // messages, profiles) is loaded by each screen through src/api/*.
 const StoreContext = createContext(null)
+
+// Which listing is selected, remembered on this device.
+const SELECTED_KEY = 'pm:selected-listing'
+const readSelected = () => {
+  try { return localStorage.getItem(SELECTED_KEY) } catch { return null }
+}
 
 const toggled = (set, id, on) => {
   const next = new Set(set)
@@ -21,7 +27,10 @@ export function StoreProvider({ children }) {
   const { user } = useAuth()
   const uid = user?.id ?? null
 
-  const [myProvider, setMyProvider] = useState(null) // providers row, or null
+  // A user may have several listings (one per vertical); one is selected at a time.
+  const [myProviders, setMyProviders] = useState([]) // providers rows (+ `vertical` slug)
+  const [selectedId, setSelectedId] = useState(readSelected)
+  const myProvider = myProviders.find((p) => p.id === selectedId) || myProviders[0] || null
   const [following, setFollowing] = useState(new Set()) // provider ids
   const [shortlist, setShortlist] = useState(new Set()) // provider ids
   const [liked, setLiked] = useState(new Set()) // photo ids
@@ -40,20 +49,27 @@ export function StoreProvider({ children }) {
     toastTimer.current = setTimeout(() => setToastMsg(null), 2600)
   }, [])
 
-  const refreshProvider = useCallback(async () => {
-    if (!uid) return setMyProvider(null)
+  // Reload my listings; `select` (a provider id) switches to that listing, e.g. one just created.
+  const refreshProvider = useCallback(async (select = null) => {
+    if (!uid) return setMyProviders([])
     try {
-      setMyProvider(await getMyProvider(uid))
+      setMyProviders(await getMyProviders(uid))
+      if (typeof select === 'string') selectProvider(select)
     } catch (e) {
       console.warn(e)
     }
-  }, [uid])
+  }, [uid]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectProvider = useCallback((id) => {
+    setSelectedId(id)
+    try { localStorage.setItem(SELECTED_KEY, id) } catch { /* private mode */ }
+  }, [])
 
   // Load everything for the signed-in user; clear it on sign-out.
   useEffect(() => {
     setDiscoverHistory([])
     if (!uid) {
-      setMyProvider(null)
+      setMyProviders([])
       setFollowing(new Set())
       setShortlist(new Set())
       setLiked(new Set())
@@ -64,16 +80,16 @@ export function StoreProvider({ children }) {
     }
     let live = true
     Promise.all([
-      getMyProvider(uid),
+      getMyProviders(uid),
       social.listFollowing(),
       social.listShortlist(),
       social.listLikedPhotoIds(),
       social.listSavedPhotoIds(),
       getTasteProfile(),
     ])
-      .then(([provider, follows, short, likes, saves, taste]) => {
+      .then(([providers, follows, short, likes, saves, taste]) => {
         if (!live) return
-        setMyProvider(provider)
+        setMyProviders(providers)
         setFollowing(new Set(follows))
         setShortlist(new Set(short))
         setLiked(new Set(likes))
@@ -143,8 +159,8 @@ export function StoreProvider({ children }) {
   }
 
   const value = {
-    // signed-in user's photographer listing
-    myProvider, refreshProvider,
+    // signed-in user's listings (one per vertical) and the selected one
+    myProvider, myProviders, refreshProvider, selectProvider,
     isProvider: !!myProvider,
     identityStatus: myProvider?.identity_verified ? 'verified' : 'unverified',
     // social

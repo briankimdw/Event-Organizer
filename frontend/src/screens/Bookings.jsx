@@ -11,13 +11,18 @@ import { listMyBookings } from '../api/bookings.js'
 import { availabilityByDay } from '../api/catalog.js'
 import useQuery from '../lib/useQuery.js'
 import { fmtChip, fromKey, isPast, toKey, today } from '../lib/dates.js'
+import { deliversMedia } from '../verticals/index.js'
 
 // What the client has to do next, per booking. Payments aren't live yet, so an
 // accepted booking can't be paid in the app: say so instead of faking it.
 const attentionFor = (b) => {
   if (b.status === 'countered') return { title: `New price offered: ${money(b.offer?.total ?? b.counterTotal)}`, cta: 'Review offer' }
   if (b.status === 'accepted') return { title: 'Accepted · deposit due', cta: 'Payments soon' }
-  if (b.status === 'delivered') return { title: 'Your photos are ready', cta: 'Review delivery', to: `/bookings/${b.id}/delivery` }
+  if (b.status === 'delivered') {
+    return deliversMedia(b.vertical)
+      ? { title: b.vertical === 'videography' ? 'Your video is ready' : 'Your photos are ready', cta: 'Review delivery', to: `/bookings/${b.id}/delivery` }
+      : { title: `${firstName(b.provider.name) || 'Your vendor'} marked this done`, cta: 'Confirm' }
+  }
   if (b.status === 'completed' && b.reviewWindowOpen && !b.myReview) return { title: 'How did it go?', cta: 'Leave a review', to: `/bookings/${b.id}/review` }
   return null
 }
@@ -84,7 +89,7 @@ export default function Bookings() {
       </header>
 
       <div className="pad-x mb-sm">
-        <SearchLauncher placeholder="Find a photographer to book" />
+        <SearchLauncher placeholder="Find someone to book" />
       </div>
 
       <div className="pad-x">
@@ -107,11 +112,11 @@ export default function Bookings() {
               {futureSelected.length > 0 && (
                 <>
                   <button className="btn accent block" onClick={findPhotographers}>
-                    <Search size={16} /> Find photographers for {futureSelected.length === 1 ? fmtChip(fromKey(futureSelected[0])) : `${futureSelected.length} dates`}
+                    <Search size={16} /> Find vendors for {futureSelected.length === 1 ? fmtChip(fromKey(futureSelected[0])) : `${futureSelected.length} dates`}
                   </button>
                   {freeCount != null && (
                     <div className="muted tiny bk-free-hint">
-                      {freeCount === 0 ? 'Nobody is free then yet. Try other dates.' : `${freeCount} photographer${freeCount === 1 ? '' : 's'} free`}
+                      {freeCount === 0 ? 'Nobody is free then yet. Try other dates.' : `${freeCount} vendor${freeCount === 1 ? '' : 's'} free`}
                     </div>
                   )}
                 </>
@@ -119,7 +124,7 @@ export default function Bookings() {
             </div>
           ) : (
             <div className="bk-cal-hint">
-              <span className="muted tiny">Tap the dates you need a photographer for</span>
+              <span className="muted tiny">Tap the dates you need someone for</span>
               {!activeThisMonth && nextBooked && (
                 <button className="link-btn tiny" onClick={() => setMonth(new Date(nextBooked.day.getFullYear(), nextBooked.day.getMonth(), 1))}>
                   Next booking: {nextBooked.day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} <ChevronRight size={12} />
@@ -133,7 +138,7 @@ export default function Bookings() {
       {authLoading ? (
         <Loading />
       ) : !user ? (
-        <SignInPrompt title="Sign in to see your bookings" text="Your requests, upcoming shoots and past bookings show up here." />
+        <SignInPrompt title="Sign in to see your bookings" text="Your requests, upcoming events and past bookings show up here." />
       ) : loading && !data ? (
         <Loading />
       ) : error ? (
@@ -168,8 +173,8 @@ export default function Bookings() {
                 compact
                 icon={CalendarX}
                 title="Nothing coming up"
-                text={bookings.length ? 'Requests and confirmed shoots will show here.' : 'Book a photographer and your shoots will show here.'}
-                action={<Link to="/" className="btn sm">Find a photographer</Link>}
+                text={bookings.length ? 'Requests and confirmed bookings will show here.' : 'Book a photographer, caterer, DJ or venue and it shows up here.'}
+                action={<Link to="/search" className="btn sm">Find vendors</Link>}
               />
             )}
             {upcoming.map((b, i) => {

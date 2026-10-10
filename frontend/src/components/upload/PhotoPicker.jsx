@@ -63,7 +63,7 @@ function DropZone({ mode, onPick }) {
       <span className="pp-drop-icon">{ba ? <ArrowLeftRight size={26} /> : <ImagePlus size={26} />}</span>
       <b className="pp-drop-title">{ba ? 'Add a before & after' : 'Add photos'}</b>
       <span className="muted small pp-drop-text">
-        {ba ? 'Pick 2 photos: the before, then the after. You can swap them next.' : `One photo, or up to ${MAX_PHOTOS} from the same shoot.`}
+        {ba ? 'Pick 2 photos: the before, then the after. You can swap them next.' : `One photo, or up to ${MAX_PHOTOS} from the same event.`}
       </span>
       <span className="btn accent pp-drop-btn">{ba ? 'Choose 2 photos' : 'Choose photos'}</span>
       <span className="muted tiny pp-drop-hint">or drag them here</span>

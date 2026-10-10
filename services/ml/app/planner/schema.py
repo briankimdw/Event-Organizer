@@ -5,7 +5,10 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-EventType = Literal["wedding", "graduation", "portrait", "event", "headshots", "real-estate", "product", "other"]
+# Keep in sync with vocab.EVENT_TYPES (photo shoots, then catalog.js occasions, then 'other').
+EventType = Literal["wedding", "graduation", "portrait", "event", "headshots", "real-estate", "product",
+                    "birthday", "engagement", "corporate", "baby-shower", "quinceanera", "dinner-party", "bachelor",
+                    "holiday-party", "other"]
 
 
 class LatLng(BaseModel):

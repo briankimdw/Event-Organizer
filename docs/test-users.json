@@ -195,6 +195,534 @@
       ]
     }
   ],
+  "vendors": [
+    {
+      "username": "ana.films",
+      "name": "Ana Torres",
+      "email": "anafilms.test@example.com",
+      "password": "rpou-7hkn-4B9s!",
+      "business": "Ana Torres Films",
+      "slug": "ana-torres-films",
+      "vertical": "videography",
+      "city": "Silver Lake, Los Angeles",
+      "services": [
+        "wedding-film",
+        "event-recap"
+      ],
+      "bio": "Cinematic wedding films with real audio: vows, toasts and the moments in between."
+    },
+    {
+      "username": "northbound.media",
+      "name": "Marcus Bell",
+      "email": "northboundmedia.test@example.com",
+      "password": "xzXK-KmKr-YLaG!",
+      "business": "Northbound Media",
+      "slug": "northbound-media",
+      "vertical": "videography",
+      "city": "Burbank, CA",
+      "services": [
+        "social-reels",
+        "music-video",
+        "drone",
+        "event-recap"
+      ],
+      "bio": "Fast-turnaround reels, music videos and FAA-licensed drone work."
+    },
+    {
+      "username": "glasshouse.dtla",
+      "name": "Elena Park",
+      "email": "glasshousedtla.test@example.com",
+      "password": "dtYM-wyve-tmXt!",
+      "business": "The Glasshouse DTLA",
+      "slug": "glasshouse-dtla",
+      "vertical": "venue",
+      "city": "Arts District, Los Angeles",
+      "services": [
+        "wedding-venue",
+        "party-space",
+        "studio-space"
+      ],
+      "bio": "A plant-filled glass loft in the Arts District. Ceremonies, receptions and launches up to 220 guests."
+    },
+    {
+      "username": "rancholasflores",
+      "name": "Carmen Ruiz",
+      "email": "rancholasflores.test@example.com",
+      "password": "7Ami-vYcN-sDkp!",
+      "business": "Rancho Las Flores",
+      "slug": "rancho-las-flores",
+      "vertical": "venue",
+      "city": "Agoura Hills, CA",
+      "services": [
+        "wedding-venue",
+        "garden-estate",
+        "party-space"
+      ],
+      "bio": "Oak-shaded garden estate with a vineyard lawn and a restored barn. Weddings and quinceañeras up to 300."
+    },
+    {
+      "username": "goldenspoon",
+      "name": "Luis Herrera",
+      "email": "goldenspoon.test@example.com",
+      "password": "dFCy-QHfK-wo6K!",
+      "business": "Golden Spoon Catering",
+      "slug": "golden-spoon-catering",
+      "vertical": "catering",
+      "city": "Boyle Heights, Los Angeles",
+      "services": [
+        "full-service-catering",
+        "buffet",
+        "plated-dinner"
+      ],
+      "bio": "Family-run Mexican and Californian catering. Buffets, plated dinners and full-service events for 40 to 400."
+    },
+    {
+      "username": "seoulfood.truck",
+      "name": "Grace Yoon",
+      "email": "seoulfoodtruck.test@example.com",
+      "password": "w9xw-FCbR-HALG!",
+      "business": "Seoul Food Truck",
+      "slug": "seoul-food-truck",
+      "vertical": "catering",
+      "city": "Koreatown, Los Angeles",
+      "services": [
+        "food-truck",
+        "drop-off-catering",
+        "brunch"
+      ],
+      "bio": "Korean BBQ tacos and rice bowls from the truck, or dropped off on platters."
+    },
+    {
+      "username": "chef.julien",
+      "name": "Julien Moreau",
+      "email": "chefjulien.test@example.com",
+      "password": "RNqc-Ykdu-5iLJ!",
+      "business": "Chef Julien",
+      "slug": "chef-julien",
+      "vertical": "private-chef",
+      "city": "West Hollywood, CA",
+      "services": [
+        "chef-dinner",
+        "tasting-menu"
+      ],
+      "bio": "French-trained private chef. Seasonal dinner parties and tasting menus in your home."
+    },
+    {
+      "username": "chef.priyanka",
+      "name": "Priyanka Rao",
+      "email": "chefpriyanka.test@example.com",
+      "password": "zrhR-g22n-VQE5!",
+      "business": "Spice Table by Priyanka",
+      "slug": "spice-table",
+      "vertical": "private-chef",
+      "city": "Culver City, CA",
+      "services": [
+        "chef-dinner",
+        "meal-prep",
+        "cooking-class"
+      ],
+      "bio": "Regional Indian feasts at your table, plus hands-on cooking classes for groups."
+    },
+    {
+      "username": "sugarbloom",
+      "name": "Maria Santos",
+      "email": "sugarbloom.test@example.com",
+      "password": "zKs5-GVnG-t4wW!",
+      "business": "Sugar & Bloom Cakes",
+      "slug": "sugar-and-bloom",
+      "vertical": "cakes",
+      "city": "Pasadena, CA",
+      "services": [
+        "wedding-cake",
+        "celebration-cake",
+        "dessert-table"
+      ],
+      "bio": "Buttercream wedding cakes with fresh-flower details, and dessert tables to match."
+    },
+    {
+      "username": "crumbclub",
+      "name": "Tyler Nguyen",
+      "email": "crumbclub.test@example.com",
+      "password": "rN6o-dnZF-MVoJ!",
+      "business": "Crumb Club Bakery",
+      "slug": "crumb-club",
+      "vertical": "cakes",
+      "city": "Echo Park, Los Angeles",
+      "services": [
+        "cupcakes-cookies",
+        "celebration-cake"
+      ],
+      "bio": "Cupcakes, decorated cookies and party cakes. Custom logos and colors welcome."
+    },
+    {
+      "username": "shakenstirred",
+      "name": "Jasmine Cole",
+      "email": "shakenstirred.test@example.com",
+      "password": "tnDK-vmYz-KenK!",
+      "business": "Shaken & Stirred Mobile Bar",
+      "slug": "shaken-and-stirred",
+      "vertical": "bar",
+      "city": "Belmont Shore, Long Beach",
+      "services": [
+        "mobile-bar",
+        "mixology",
+        "bartender"
+      ],
+      "bio": "A vintage horse-trailer bar with licensed bartenders and a seasonal cocktail menu."
+    },
+    {
+      "username": "beanthere.cart",
+      "name": "Omar Haddad",
+      "email": "beantherecart.test@example.com",
+      "password": "9vhQ-t2z6-UDDb!",
+      "business": "Bean There Coffee Cart",
+      "slug": "bean-there-coffee",
+      "vertical": "bar",
+      "city": "Highland Park, Los Angeles",
+      "services": [
+        "coffee-cart"
+      ],
+      "bio": "Espresso cart with oat milk lattes, cold brew and horchata, for weddings and offices."
+    },
+    {
+      "username": "djnova",
+      "name": "Andre Wallace",
+      "email": "djnova.test@example.com",
+      "password": "vB3B-AGzB-xyK9!",
+      "business": "DJ Nova",
+      "slug": "dj-nova",
+      "vertical": "music",
+      "city": "Inglewood, CA",
+      "services": [
+        "dj",
+        "mc"
+      ],
+      "bio": "Open-format DJ and bilingual MC. Hip-hop, R&B, cumbia and the classics your parents want."
+    },
+    {
+      "username": "velvetstrings",
+      "name": "Clara Jensen",
+      "email": "velvetstrings.test@example.com",
+      "password": "xcvy-UgZj-t8C3!",
+      "business": "Velvet Strings Quartet",
+      "slug": "velvet-strings",
+      "vertical": "music",
+      "city": "Los Feliz, Los Angeles",
+      "services": [
+        "string-quartet",
+        "solo-musician"
+      ],
+      "bio": "String quartet and solo violin for ceremonies and cocktail hours. Classical to Taylor Swift."
+    },
+    {
+      "username": "snaphappy.booth",
+      "name": "Kevin Lam",
+      "email": "snaphappybooth.test@example.com",
+      "password": "63tV-juRf-CBUv!",
+      "business": "Snap Happy Photo Booth",
+      "slug": "snap-happy-booth",
+      "vertical": "entertainment",
+      "city": "Alhambra, CA",
+      "services": [
+        "photo-booth"
+      ],
+      "bio": "Open-air photo booth and 360 video booth with props, instant prints and a live gallery."
+    },
+    {
+      "username": "marvelous.max",
+      "name": "Max Fischer",
+      "email": "marvelousmax.test@example.com",
+      "password": "kmX7-HjaF-HNUQ!",
+      "business": "Marvelous Max",
+      "slug": "marvelous-max",
+      "vertical": "entertainment",
+      "city": "Sherman Oaks, CA",
+      "services": [
+        "magician",
+        "kids-entertainer"
+      ],
+      "bio": "Close-up magic for grown-ups and a giggle-proof show for kids."
+    },
+    {
+      "username": "wildflower.co",
+      "name": "Sienna Brooks",
+      "email": "wildflowerco.test@example.com",
+      "password": "zYty-n5mK-PoUa!",
+      "business": "Wildflower & Co.",
+      "slug": "wildflower-and-co",
+      "vertical": "florals",
+      "city": "Venice, CA",
+      "services": [
+        "bridal-bouquet",
+        "centerpieces",
+        "ceremony-florals",
+        "floral-installation"
+      ],
+      "bio": "Loose, garden-style florals with seasonal, locally grown stems. Foam-free."
+    },
+    {
+      "username": "stemstudio",
+      "name": "Daniel Kim",
+      "email": "stemstudio.test@example.com",
+      "password": "FSQ5-VufV-9zLf!",
+      "business": "Stem Studio",
+      "slug": "stem-studio",
+      "vertical": "florals",
+      "city": "Downtown Los Angeles",
+      "services": [
+        "centerpieces",
+        "floral-installation"
+      ],
+      "bio": "Modern, sculptural florals and hanging installations for events and brands."
+    },
+    {
+      "username": "popparty",
+      "name": "Bianca Flores",
+      "email": "popparty.test@example.com",
+      "password": "Gc53-U6Ni-DYWU!",
+      "business": "Pop & Party Balloons",
+      "slug": "pop-and-party",
+      "vertical": "decor",
+      "city": "Downey, CA",
+      "services": [
+        "balloon-decor",
+        "backdrops",
+        "themed-decor"
+      ],
+      "bio": "Organic balloon garlands, backdrops and themed setups for birthdays, showers and quinces."
+    },
+    {
+      "username": "lumen.design",
+      "name": "Theo Grant",
+      "email": "lumendesign.test@example.com",
+      "password": "qC4U-k4To-Gf6k!",
+      "business": "Lumen Event Design",
+      "slug": "lumen-event-design",
+      "vertical": "decor",
+      "city": "Santa Monica, CA",
+      "services": [
+        "lighting-design",
+        "tablescapes",
+        "backdrops"
+      ],
+      "bio": "Lighting and tablescapes that change the mood of a room. Weddings and brand events."
+    },
+    {
+      "username": "glowbymina",
+      "name": "Mina Patel",
+      "email": "glowbymina.test@example.com",
+      "password": "JHo7-po9r-rTRy!",
+      "business": "Glow by Mina",
+      "slug": "glow-by-mina",
+      "vertical": "hair-makeup",
+      "city": "Beverly Hills, CA",
+      "services": [
+        "bridal-makeup",
+        "event-makeup",
+        "lashes-brows"
+      ],
+      "bio": "Soft, skin-first bridal glam that lasts through the last dance. On location."
+    },
+    {
+      "username": "studio.rizos",
+      "name": "Valeria Gomez",
+      "email": "studiorizos.test@example.com",
+      "password": "cZwR-EENn-3dkd!",
+      "business": "Studio Rizos",
+      "slug": "studio-rizos",
+      "vertical": "hair-makeup",
+      "city": "East Los Angeles, CA",
+      "services": [
+        "hair-styling",
+        "event-makeup",
+        "nails"
+      ],
+      "bio": "Curls, updos and glam for quinces, proms and weddings. Se habla español."
+    },
+    {
+      "username": "socalrentals",
+      "name": "Frank Medina",
+      "email": "socalrentals.test@example.com",
+      "password": "vqg2-W4gF-g3tZ!",
+      "business": "SoCal Party Rentals",
+      "slug": "socal-party-rentals",
+      "vertical": "rentals",
+      "city": "Commerce, CA",
+      "services": [
+        "tables-chairs",
+        "tents",
+        "linens",
+        "bounce-houses"
+      ],
+      "bio": "Chairs, tables, tents, linens and bounce houses, delivered and set up across LA County."
+    },
+    {
+      "username": "amplify.av",
+      "name": "Ravi Shah",
+      "email": "amplifyav.test@example.com",
+      "password": "2LJ6-Fw43-a4wi!",
+      "business": "Amplify AV",
+      "slug": "amplify-av",
+      "vertical": "rentals",
+      "city": "Van Nuys, CA",
+      "services": [
+        "av-equipment"
+      ],
+      "bio": "Speakers, mics, projectors and a tech who stays for the speeches."
+    },
+    {
+      "username": "everly.events",
+      "name": "Olivia Reed",
+      "email": "everlyevents.test@example.com",
+      "password": "wALg-ezuq-WD9a!",
+      "business": "Everly Events",
+      "slug": "everly-events",
+      "vertical": "planning",
+      "city": "Brentwood, Los Angeles",
+      "services": [
+        "full-planning",
+        "day-of-coordination",
+        "proposal-planning"
+      ],
+      "bio": "Calm, organized wedding planning and proposals people actually say yes to."
+    },
+    {
+      "username": "agenda.collective",
+      "name": "Nathan Brooks",
+      "email": "agendacollective.test@example.com",
+      "password": "qtTq-qC5h-6C9C!",
+      "business": "Agenda Collective",
+      "slug": "agenda-collective",
+      "vertical": "planning",
+      "city": "Century City, Los Angeles",
+      "services": [
+        "corporate-planning",
+        "day-of-coordination"
+      ],
+      "bio": "Offsites, launches and holiday parties for teams of 20 to 2,000."
+    },
+    {
+      "username": "rev.sam",
+      "name": "Samuel Okoye",
+      "email": "revsam.test@example.com",
+      "password": "RkYS-hX84-SAfj!",
+      "business": "Ceremonies by Sam",
+      "slug": "ceremonies-by-sam",
+      "vertical": "officiant",
+      "city": "Leimert Park, Los Angeles",
+      "services": [
+        "wedding-officiant",
+        "vow-renewal",
+        "elopement-officiant"
+      ],
+      "bio": "Warm, personal ceremonies for every kind of couple. Religious or not, your call."
+    },
+    {
+      "username": "lena.celebrant",
+      "name": "Lena Hart",
+      "email": "lenacelebrant.test@example.com",
+      "password": "CHsX-3qCq-mnXu!",
+      "business": "Lena Hart, Celebrant",
+      "slug": "lena-hart-celebrant",
+      "vertical": "officiant",
+      "city": "Topanga, CA",
+      "services": [
+        "wedding-officiant",
+        "elopement-officiant"
+      ],
+      "bio": "Bilingual celebrant for canyon elopements and beach weddings."
+    },
+    {
+      "username": "starline.limo",
+      "name": "Victor Alvarez",
+      "email": "starlinelimo.test@example.com",
+      "password": "BDBe-qgzz-9nTj!",
+      "business": "Starline Limousine",
+      "slug": "starline-limo",
+      "vertical": "transportation",
+      "city": "El Segundo, CA",
+      "services": [
+        "limo",
+        "party-bus"
+      ],
+      "bio": "Stretch limos and party buses with professional chauffeurs. LAX pickups too."
+    },
+    {
+      "username": "coastclassics",
+      "name": "Gloria Benton",
+      "email": "coastclassics.test@example.com",
+      "password": "gRxs-RQq6-zaKy!",
+      "business": "Coast Classic Cars",
+      "slug": "coast-classic-cars",
+      "vertical": "transportation",
+      "city": "Torrance, CA",
+      "services": [
+        "classic-car",
+        "guest-shuttle"
+      ],
+      "bio": "Restored classics for the getaway, and shuttles that get every guest home."
+    },
+    {
+      "username": "servicepros",
+      "name": "Denise Carter",
+      "email": "servicepros.test@example.com",
+      "password": "8wpF-P4tm-ghxA!",
+      "business": "Service Pros LA",
+      "slug": "service-pros-la",
+      "vertical": "staffing",
+      "city": "Hawthorne, CA",
+      "services": [
+        "servers",
+        "cleanup-crew"
+      ],
+      "bio": "Trained servers and cleanup crews in black-tie or casual attire."
+    },
+    {
+      "username": "parkright.valet",
+      "name": "Hector Ramos",
+      "email": "parkrightvalet.test@example.com",
+      "password": "SCGv-uyp2-P3Nh!",
+      "business": "ParkRight Valet & Security",
+      "slug": "parkright-valet",
+      "vertical": "staffing",
+      "city": "Glendale, CA",
+      "services": [
+        "valet",
+        "security"
+      ],
+      "bio": "Insured valet teams and licensed guards for private events."
+    },
+    {
+      "username": "kneadedbliss",
+      "name": "Aisha Morgan",
+      "email": "kneadedbliss.test@example.com",
+      "password": "kJmQ-Vwqu-Q555!",
+      "business": "Kneaded Bliss Massage",
+      "slug": "kneaded-bliss",
+      "vertical": "wellness",
+      "city": "Studio City, CA",
+      "services": [
+        "massage",
+        "spa-day"
+      ],
+      "bio": "Licensed massage therapist. In-home massage and bridal party spa days."
+    },
+    {
+      "username": "sunriseflow",
+      "name": "Kira Sato",
+      "email": "sunriseflow.test@example.com",
+      "password": "mUb7-46FN-wDN6!",
+      "business": "Sunrise Flow Yoga",
+      "slug": "sunrise-flow-yoga",
+      "vertical": "wellness",
+      "city": "Manhattan Beach, CA",
+      "services": [
+        "yoga",
+        "personal-training"
+      ],
+      "bio": "Private yoga on the beach or at home, and strength training that fits your week."
+    }
+  ],
   "clients": [
     {
       "username": "jordanlee",

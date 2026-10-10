@@ -4,7 +4,7 @@ import TopBar from '../components/TopBar.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
-import { getAlbum, getMyProvider, toViewerAlbum } from '../api/portfolio.js'
+import { getAlbum, getMyProviders, toViewerAlbum } from '../api/portfolio.js'
 
 // What each album status means for the photographer. There's no automated
 // AI check yet: an album is only "in review" if the team has put it there.
@@ -39,13 +39,13 @@ const STATUS = {
   },
 }
 
-// One of my albums, or null if it doesn't exist or belongs to someone else.
+// One of my albums (from any of my listings), or null if it doesn't exist or belongs to someone else.
 async function loadMyAlbum(albumId, userId) {
   const [row, mine] = await Promise.all([
     getAlbum(albumId).catch((e) => (e?.code === '22P02' ? null : Promise.reject(e))), // 22P02: not a uuid
-    getMyProvider(userId),
+    getMyProviders(userId),
   ])
-  return row && mine && row.provider_id === mine.id ? toViewerAlbum(row) : null
+  return row && mine.some((p) => p.id === row.provider_id) ? toViewerAlbum(row) : null
 }
 
 // /ai-review/:id — the review status of one of my albums (id = album id).

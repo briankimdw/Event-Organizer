@@ -1,32 +1,17 @@
 import { Link } from 'react-router-dom'
-import {
-  Building2, Camera, ChevronRight, Plus, GraduationCap, Heart, Layers, Package, PartyPopper,
-  Star, Users, UserSquare, Presentation,
-} from 'lucide-react'
-import { IdVerified, ProBadge } from '../components/Badges.jsx'
+import { LayoutGrid, Plus } from 'lucide-react'
 import ProfileLink from '../components/ProfileLink.jsx'
 import SearchLauncher from '../components/SearchLauncher.jsx'
 import PlanCard from '../components/planner/PlanCard.jsx'
-import { StatusPill, money, startingPrice } from '../components/Booking.jsx'
-import { ErrorState, Loading } from '../components/States.jsx'
+import { StatusPill } from '../components/Booking.jsx'
+import { ErrorState } from '../components/States.jsx'
+import { CardsSkeleton, ProviderCard, ProviderRow, RowsSkeleton, SectionHead } from '../components/home/Cards.jsx'
+import { ComingSoonCard, OccasionRow, VerticalRail } from '../components/home/Browse.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
-import { addDays, fmtChip, toKey, today } from '../lib/dates.js'
-import { getCategories, listProviders, searchProviders, withMatches } from '../api/catalog.js'
+import { fmtChip, today } from '../lib/dates.js'
 import { listMyBookings } from '../api/bookings.js'
-
-// Icons for the service categories (by slug); anything new gets a camera.
-const CATEGORY_ICONS = {
-  wedding: Heart,
-  graduation: GraduationCap,
-  portrait: Camera,
-  event: PartyPopper,
-  headshots: UserSquare,
-  'real-estate': Building2,
-  product: Package,
-  coaching: Presentation,
-  meetups: Users,
-}
+import { buildHomeFeed, comingWeekend, listBrowseProviders, listExplorePhotos, weekendAvailability } from '../api/home.js'
 
 // Booking states where the client has something to do.
 const NEEDS_ACTION = {
@@ -35,45 +20,31 @@ const NEEDS_ACTION = {
   delivered: 'Your photos are ready',
 }
 
-// The coming weekend: this Sat + Sun (just Sunday if today is Sunday).
-function comingWeekend() {
-  const t = today()
-  if (t.getDay() === 0) return [t]
-  const sat = addDays(t, 6 - t.getDay())
-  return [sat, addDays(sat, 1)]
+const greeting = () => {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 }
 
-const byRating = (a, b) => (b.rating ?? -1) - (a.rating ?? -1) || b.reviewCount - a.reviewCount
-
+// Home = plan & browse: search, the AI planner, every service as a tinted icon,
+// occasions, then intent shelves ("free this weekend", "top rated") from real data.
 export default function Home() {
   const { user, profile } = useAuth()
   const uid = user?.id ?? null
   const firstName = (profile?.display_name || '').split(' ')[0]
 
   const weekendDays = comingWeekend()
-  const weekendKeys = weekendDays.map(toKey)
-
-  const cats = useQuery(() => getCategories(), [])
-  const all = useQuery(() => listProviders().then(withMatches), [uid])
-  const weekend = useQuery(() => searchProviders({ dates: weekendKeys }), [weekendKeys.join(',')])
+  const all = useQuery(() => listBrowseProviders(), [uid])
+  const weekend = useQuery(() => weekendAvailability(), [])
+  const photos = useQuery(() => listExplorePhotos(), [])
   const bookings = useQuery(uid ? () => listMyBookings() : null, [uid])
 
-  const providers = all.data || []
-  const matchOf = new Map(providers.map((p) => [p.id, p.tasteMatch]))
-  const hasMatches = providers.some((p) => p.tasteMatch != null)
-  const matched = hasMatches
-    ? providers.filter((p) => p.tasteMatch != null).sort((a, b) => b.tasteMatch - a.tasteMatch).slice(0, 5)
-    : [...providers].sort(byRating).slice(0, 5)
-  // Bottom list: top rated when the carousel is taste matches, otherwise the newest listings.
-  const bottom = hasMatches
-    ? { title: 'Top rated', list: [...providers].filter((p) => p.rating != null).sort(byRating).slice(0, 4) }
-    : { title: 'New on photomatch', list: [...providers].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 4) }
-  const freeThisWeekend = (weekend.data || [])
-    .filter((p) => p.freeDates.length > 0)
-    .map((p) => ({ ...p, tasteMatch: matchOf.get(p.id) ?? null }))
-    .slice(0, 4)
-  // Two real photos for the Discover banner, from different photographers.
-  const bannerShots = providers.map((p) => p.cover).filter(Boolean).slice(0, 2)
+  const feed = buildHomeFeed({
+    providers: all.data || [],
+    weekend: weekend.data || new Map(),
+    weekendLabel: weekendDays.map(fmtChip).join(' – '),
+  })
+  const loading = all.loading && !all.data
+  const mixed = feed.live.length > 1
 
   const myBookings = bookings.data || []
   const actionItems = myBookings.filter((b) => b.role === 'client' && NEEDS_ACTION[b.status])
@@ -82,21 +53,29 @@ export default function Home() {
     .sort((a, b) => a.start - b.start)
   const bookingTiles = [...actionItems, ...upcoming]
 
+  // Three real portfolio shots (different providers) for the Explore teaser.
+  const teaser = []
+  for (const ph of photos.data || []) {
+    if (teaser.length === 3) break
+    if (!teaser.some((t) => t.providerId === ph.providerId)) teaser.push(ph)
+  }
+
+  const [firstShelf, ...otherShelves] = all.data ? feed.shelves : []
+
   return (
     <div className="home">
       <header className="home-header">
         <div>
-          <div className="muted small">{firstName ? `Hi ${firstName}` : 'Welcome'}</div>
-          <div className="title-lg">Find your photographer</div>
+          <div className="hd-greet">{firstName ? `${greeting()}, ${firstName}` : greeting()}</div>
+          <div className="hd-title">What are you planning?</div>
         </div>
-        <Link to="/upload" className="post-btn" aria-label="Post photos">
+        <Link to="/upload" className="post-btn" aria-label="Post your work">
           <Plus size={18} /> Post
         </Link>
       </header>
 
       <div className="pad-x">
-        <SearchLauncher placeholder="Search styles, occasions, names" />
-        <PlanCard />
+        <SearchLauncher placeholder="Photographers, venues, caterers…" />
       </div>
 
       {bookings.error && (
@@ -107,7 +86,7 @@ export default function Home() {
       )}
       {bookingTiles.length > 0 && (
         <section>
-          <SectionHead title="Your bookings" to="/bookings" />
+          <SectionHead title={actionItems.length ? 'Needs your attention' : 'Your bookings'} to="/bookings" />
           <div className="h-scroll">
             {bookingTiles.map((b) => (
               <Link key={b.id} to={`/bookings/${b.id}`} className={`booking-tile ${NEEDS_ACTION[b.status] ? 'action' : ''}`}>
@@ -127,145 +106,92 @@ export default function Home() {
       )}
 
       <section>
-        <SectionHead title="What are you planning?" />
-        {cats.loading && <Loading inline />}
-        {cats.error && <ErrorState error={cats.error} onRetry={cats.reload} />}
-        <div className="cat-grid pad-x">
-          {(cats.data || []).map((c) => {
-            const Icon = CATEGORY_ICONS[c.slug] || Camera
-            return (
-              <Link key={c.slug} to={`/search?cat=${encodeURIComponent(c.slug)}`} className="cat-tile">
-                <Icon size={22} />
-                <span>{c.name}</span>
-              </Link>
-            )
-          })}
-        </div>
-      </section>
-
-      <section>
-        <SectionHead
-          title={hasMatches ? 'Matched to your taste' : 'Top rated photographers'}
-          sub={hasMatches ? 'Based on your Discover swipes' : 'Swipe in Discover to get matched'}
-          to="/search"
-        />
-        {all.loading && <Loading inline />}
-        {all.error && <ErrorState error={all.error} onRetry={all.reload} />}
-        <div className="h-scroll">
-          {matched.map((p) => (
-            <Link key={p.id} to={`/u/${p.id}`} className="match-tile">
-              <div className="match-tile-img">
-                {p.cover ? <img src={p.cover} alt="" loading="lazy" /> : <div className="img-ph" />}
-                {p.tasteMatch != null && <span className="match-badge">{p.tasteMatch}% match</span>}
-              </div>
-              <div className="pad-tile">
-                <div className="person-name small">
-                  {p.name} {p.idVerified && <IdVerified />} {p.pro && <ProBadge />}
-                </div>
-                <div className="muted tiny">{p.specialties.slice(0, 2).join(' · ')}</div>
-                <div className="tiny row gap-xs mt-xs">
-                  <RatingInline p={p} />
-                  {startingPrice(p) != null && <span className="muted">· from {money(startingPrice(p))}</span>}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <SectionHead title="Browse services" sub="Everything for your event, in one place" />
+        <VerticalRail counts={all.data ? feed.counts : null} />
       </section>
 
       <div className="pad-x">
-        <Link to="/discover" className="discover-banner">
-          {bannerShots.length === 2 && (
-            <div className="banner-stack">
-              {bannerShots.map((src) => <img key={src} src={src} alt="" />)}
-            </div>
-          )}
-          <div className="grow">
-            <b>Not sure what style you want?</b>
-            <div className="small">Swipe through real work and we'll match you with photographers.</div>
-          </div>
-          <Layers size={20} />
-        </Link>
+        <PlanCard />
       </div>
 
       <section>
-        <SectionHead
-          title="Available this weekend"
-          sub={weekendDays.map(fmtChip).join(' – ')}
-          to={`/search?dates=${weekendKeys.join(',')}`}
-        />
-        <div className="pad-x">
-          {weekend.loading && <Loading inline />}
-          {weekend.error && <ErrorState error={weekend.error} onRetry={weekend.reload} />}
-          {!weekend.loading && !weekend.error && freeThisWeekend.length === 0 && (
-            <div className="muted small">Nobody has free time this weekend yet.</div>
-          )}
-          {freeThisWeekend.map((p) => (
-            <ProviderRow key={p.id} p={p} />
-          ))}
-        </div>
+        <SectionHead title="Plan by occasion" sub="A checklist of who you’ll need" />
+        <OccasionRow />
       </section>
 
-      {bottom.list.length > 0 && (
+      {all.error && (
         <section>
-          <SectionHead title={bottom.title} to="/search" />
-          <div className="pad-x">
-            {bottom.list.map((p) => (
-              <ProviderRow key={p.id} p={p} />
-            ))}
-          </div>
+          <ErrorState error={all.error} onRetry={all.reload} />
         </section>
       )}
+      {loading && (
+        <section>
+          <SectionHead title="Free this weekend" />
+          <CardsSkeleton />
+        </section>
+      )}
+      {firstShelf && <Shelf shelf={firstShelf} mixed={mixed} weekendLoading={weekend.loading} />}
+
+      {teaser.length === 3 && (
+        <div className="pad-x mt-lg">
+          <Link to="/discover?mode=explore" className="hd-explore">
+            <span className="hd-explore-stack">
+              {teaser.map((t) => <img key={t.id} src={t.src} alt="" />)}
+            </span>
+            <span className="grow">
+              <b>Not sure what you want?</b>
+              <span className="small block">Browse real work from local pros, then tap what you love.</span>
+            </span>
+            <LayoutGrid size={20} />
+          </Link>
+        </div>
+      )}
+
+      {otherShelves.map((s) => (
+        <Shelf key={s.key} shelf={s} mixed={mixed} weekendLoading={weekend.loading} />
+      ))}
+      {loading && (
+        <section>
+          <SectionHead title="New on photomatch" />
+          <RowsSkeleton />
+        </section>
+      )}
+
+      {all.data && feed.soon.length > 0 && (
+        <section className="pad-x">
+          <ComingSoonCard soon={feed.soon} />
+        </section>
+      )}
+      <div className="mt-lg" />
     </div>
   )
 }
 
-function SectionHead({ title, sub, to }) {
+function Shelf({ shelf, mixed, weekendLoading = false }) {
+  const showVertical = mixed && !shelf.vertical
+  if (shelf.key === 'weekend' && weekendLoading) {
+    return (
+      <section>
+        <SectionHead title={shelf.title} sub={shelf.sub} />
+        <CardsSkeleton />
+      </section>
+    )
+  }
+  if (!shelf.items.length && !shelf.empty) return null
   return (
-    <div className="section-head">
-      <div>
-        <h3>{title}</h3>
-        {sub && <div className="muted tiny">{sub}</div>}
-      </div>
-      {to && (
-        <Link to={to} className="small muted inline-icon">
-          See all <ChevronRight size={14} />
-        </Link>
-      )}
-    </div>
-  )
-}
-
-// "★ 4.9 (12)", or "New" before the first review.
-function RatingInline({ p, count = false }) {
-  if (p.rating == null) return <span className="new-tag">New</span>
-  // Inside the photographer's card link: the rating itself opens their reviews.
-  return (
-    <ProfileLink id={p.id} to={`/u/${p.id}?tab=reviews`} className="tap-text" label={`Rated ${p.rating.toFixed(1)}. See reviews`}>
-      <Star size={11} className="star-on" fill="currentColor" /> {p.rating.toFixed(1)}
-      {count && ` (${p.reviewCount})`}
-    </ProfileLink>
-  )
-}
-
-function ProviderRow({ p }) {
-  const photo = p.covers[1] || p.cover
-  return (
-    <Link to={`/u/${p.id}`} className="provider-row">
-      {photo ? <img className="provider-row-img" src={photo} alt="" loading="lazy" /> : <div className="provider-row-img img-ph" />}
-      <div className="grow">
-        <div className="person-name small">
-          {p.name} {p.idVerified && <IdVerified />} {p.pro && <ProBadge />}
+    <section>
+      <SectionHead title={shelf.title} sub={shelf.sub} to={shelf.items.length ? shelf.to : null} />
+      {!shelf.items.length ? (
+        <div className="pad-x muted small">{shelf.empty}</div>
+      ) : shelf.layout === 'rows' ? (
+        <div className="pad-x">
+          {shelf.items.map((p) => <ProviderRow key={p.id} p={p} showVertical={showVertical} />)}
         </div>
-        <div className="muted tiny">{p.specialties.join(' · ')}</div>
-        <div className="tiny row gap-xs mt-xs">
-          <RatingInline p={p} count />
-          {startingPrice(p) != null && <span className="muted">· from {money(startingPrice(p))}</span>}
+      ) : (
+        <div className="h-scroll hd-shelf">
+          {shelf.items.map((p) => <ProviderCard key={p.id} p={p} showVertical={showVertical} />)}
         </div>
-      </div>
-      {p.tasteMatch != null && (
-        <div className="match"><b>{p.tasteMatch}%</b><span>match</span></div>
       )}
-    </Link>
+    </section>
   )
 }

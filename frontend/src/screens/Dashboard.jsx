@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, Copy, EyeOff, Images, Inbox, MapPin, Package, Plus, Star } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Copy, EyeOff, Inbox, MapPin, Package, Plus, Star } from 'lucide-react'
 import Segmented from '../components/Segmented.jsx'
 import Sheet from '../components/Sheet.jsx'
 import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
@@ -13,21 +13,28 @@ import useQuery from '../lib/useQuery.js'
 import { fmtBooking, today, toKey } from '../lib/dates.js'
 import { listMyAlbums, publicUrl } from '../api/portfolio.js'
 import { bookingError, respondToBooking } from '../api/bookings.js'
-import { getCategories } from '../api/catalog.js'
+import { getServices } from '../api/catalog.js'
 import { parsePoint, updateServiceArea } from '../api/locations.js'
 import { avatarUrl } from '../lib/format.js'
 import {
-  addBlackout, createPackage, listBlackouts, listMyPackages, listWorkingHours, removeBlackoutDay, setPackageActive, updatePackage,
+  addBlackout, createPackage, listBlackouts, listMyPackages, listWorkingHours, removeBlackoutDay, setPackageActive, updatePackage, updateProviderAttributes,
 } from '../api/provider.js'
+import PackageFields from '../components/verticals/PackageFields.jsx'
+import AttributeList from '../components/verticals/AttributeList.jsx'
+import { PRICE_TYPES, attributeLines, cleanAttributes, verticalConfig, verticalMeta } from '../verticals/index.js'
 
 // Booking statuses that fill a day on the calendar, and ones that hold it while pending.
 export const BOOKED = ['confirmed', 'in_progress', 'delivered', 'completed']
 const HELD = ['requested', 'countered', 'accepted']
 
-// Provider work tabs, shown inside the profile page in Photographer mode.
+// Provider work tabs, shown inside the profile page in business mode.
 // provider: getProvider() result (may still be loading); bookings: useQuery result of listProviderBookings.
 export default function Dashboard({ tab, onTabChange, provider, bookings, onProviderChanged }) {
+  const { myProvider } = useStore()
   const pending = (bookings?.data || []).filter((r) => r.status === 'requested').length
+  // Non-visual services (DJs, planners...) don't get a Portfolio tab unless they've posted.
+  const showPortfolio = verticalMeta(myProvider?.vertical).visual || (provider?.albumCount ?? 0) > 0
+  if (tab === 'portfolio' && !showPortfolio) tab = 'packages'
 
   return (
     <div className="pad-x">
@@ -36,7 +43,7 @@ export default function Dashboard({ tab, onTabChange, provider, bookings, onProv
           { value: 'requests', label: pending ? `Requests · ${pending}` : 'Requests' },
           { value: 'calendar', label: 'Calendar' },
           { value: 'packages', label: 'Packages' },
-          { value: 'portfolio', label: 'Portfolio' },
+          ...(showPortfolio ? [{ value: 'portfolio', label: 'Portfolio' }] : []),
         ]}
         value={tab}
         onChange={onTabChange}
@@ -307,7 +314,7 @@ function ProviderCalendar({ bookings, provider, onProviderChanged }) {
   )
 }
 
-// Where the photographer is based and how far they travel (shown on the map and their profile).
+// Where the provider is based and how far they travel (shown on the map and their profile).
 function ServiceArea({ provider, onChanged }) {
   const { myProvider, refreshProvider, toast } = useStore()
   const [open, setOpen] = useState(false)
@@ -362,40 +369,40 @@ function ServiceArea({ provider, onChanged }) {
   )
 }
 
-const EMPTY_FORM = {
-  id: null, name: '', categoryId: '', priceType: 'fixed', price: '', hours: '', editedPhotos: '', editingLevel: '', turnaroundDays: '',
-  depositPct: 30, attributes: {}, isActive: true,
-}
-const EDITING_LEVELS = ['Natural color grade', 'Film-style grade', 'Full retouch']
+const EMPTY_FORM = { id: null, name: '', description: '', categoryId: '', priceType: 'fixed', price: '', hours: '', depositPct: 30, attributes: {}, isActive: true }
+
+// What the price field is called for each price type.
+const PRICE_FIELD = { fixed: 'Price', hourly: 'Price per hour', per_person: 'Price per person', per_item: 'Price per item', daily: 'Price per day' }
 
 function Packages({ provider, onChanged }) {
   const { myProvider, toast } = useStore()
   const providerId = myProvider?.id
+  const vertical = myProvider?.vertical || provider?.vertical || 'photography'
+  const config = verticalConfig(vertical)
   const packages = useQuery(providerId ? () => listMyPackages(providerId) : null, [providerId])
-  const { data: allCategories } = useQuery(getCategories, [])
+  const { data: allCategories } = useQuery(() => getServices(vertical), [vertical])
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
-  // Categories this photographer offers (fallback: all photography services).
+  // Services this listing offers (fallback: every service in its vertical).
   const offered = (allCategories || []).filter((c) => provider?.categorySlugs?.includes(c.slug))
   const categories = offered.length ? offered : allCategories || []
+  // An older package may use a price type this vertical doesn't list; keep it selectable.
+  const priceTypes = form && !config.priceTypes.includes(form.priceType) ? [form.priceType, ...config.priceTypes] : config.priceTypes
 
-  const openNew = () => setForm({ ...EMPTY_FORM, categoryId: categories[0]?.id || '' })
+  const openNew = () => setForm({ ...EMPTY_FORM, priceType: config.defaultPriceType, categoryId: categories[0]?.id || '' })
   const openEdit = (p) =>
     setForm({
       id: p.id,
       name: p.name,
+      description: p.description ?? '',
       categoryId: p.categoryId,
       priceType: p.priceType,
       price: p.price ?? '',
       hours: p.hours ?? '',
-      editedPhotos: p.editedPhotos ?? '',
-      editingLevel: p.editingLevel ?? '',
-      turnaroundDays: p.turnaroundDays ?? '',
       depositPct: p.depositPct ?? 30,
-      attributes: p.deliverables?.length ? { deliverables: p.deliverables } : {},
-      secondShooter: p.secondShooter || undefined,
+      attributes: { ...(p.attributes || {}) },
       isActive: p.isActive,
     })
 
@@ -408,17 +415,21 @@ function Packages({ provider, onChanged }) {
 
   const save = async () => {
     setSaving(true)
+    const attributes = cleanAttributes(config.packageFields, form.attributes)
+    // A cleared guest limit is saved as null (it's a column, not an attribute).
+    for (const k of ['min_quantity', 'max_quantity']) if (k in form.attributes && !(k in attributes)) attributes[k] = null
+    const values = { ...form, attributes }
     try {
       if (form.id) {
-        await updatePackage(form.id, form)
+        await updatePackage(form.id, values)
         done('Package updated')
       } else {
-        await createPackage(providerId, { ...form, sortOrder: (packages.data?.length || 0) + 1 })
+        await createPackage(providerId, { ...values, sortOrder: (packages.data?.length || 0) + 1 })
         done('Package published')
       }
     } catch (e) {
       console.warn(e)
-      toast('Couldn’t save: ' + (e.message || 'try again'))
+      toast('Couldn’t save: ' + (/invalid input value for enum/i.test(e.message || '') ? 'this pricing option isn’t available yet.' : e.message || 'try again'))
     } finally {
       setSaving(false)
     }
@@ -438,10 +449,10 @@ function Packages({ provider, onChanged }) {
   }
 
   const priceOk = form && (form.priceType === 'quote' || (form.price !== '' && Number(form.price) >= 0))
-  const levels = form?.editingLevel && !EDITING_LEVELS.includes(form.editingLevel) ? [form.editingLevel, ...EDITING_LEVELS] : EDITING_LEVELS
 
   return (
     <div className="mt-sm">
+      <ListingDetails provider={provider} vertical={vertical} onChanged={onChanged} />
       {packages.loading && !packages.data && <Loading inline />}
       {packages.error && <ErrorState error={packages.error} onRetry={packages.reload} />}
       {packages.data?.length === 0 && (
@@ -456,8 +467,7 @@ function Packages({ provider, onChanged }) {
           <div className="pkg-facts">
             {p.category && <span>{p.category}</span>}
             {p.hours && <span><Clock size={13} /> {p.hours}h</span>}
-            {p.editedPhotos != null && <span><Images size={13} /> {p.editedPhotos} edited</span>}
-            {p.turnaroundDays != null && <span><CalendarDays size={13} /> {p.turnaroundDays} days</span>}
+            {attributeLines(config.packageFields, p.attributes, config.packageKeys).map((l) => <span key={l}>{l}</span>)}
             <span>{p.depositPct}% deposit</span>
             {!p.isActive && <span><EyeOff size={13} /> Hidden</span>}
           </div>
@@ -468,39 +478,33 @@ function Packages({ provider, onChanged }) {
       <Sheet open={!!form} onClose={() => setForm(null)} title={form?.id ? 'Edit package' : 'New package'}>
         {form && (
           <>
-            <label className="field"><span>Name</span><input className="input" maxLength={80} value={form.name} onChange={set('name')} placeholder="e.g. Engagement Session" /></label>
+            <label className="field"><span>Name</span><input className="input" maxLength={80} value={form.name} onChange={set('name')} placeholder={`e.g. ${PACKAGE_EXAMPLES[vertical] || 'Standard package'}`} /></label>
             <label className="field mt-sm">
               <span>Service</span>
               <select className="input" value={form.categoryId} onChange={set('categoryId')}>
                 {!form.categoryId && <option value="">Choose…</option>}
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              {allCategories && !categories.length && <small className="field-hint">{verticalMeta(vertical).name} isn’t open for bookings yet, so packages can’t be published.</small>}
             </label>
             <label className="field mt-sm">
               <span>Pricing</span>
               <select className="input" value={form.priceType} onChange={set('priceType')}>
-                <option value="fixed">Fixed price</option>
-                <option value="hourly">Hourly</option>
-                <option value="quote">Quote-based</option>
+                {priceTypes.map((t) => <option key={t} value={t}>{PRICE_TYPES[t]?.label || t}</option>)}
               </select>
             </label>
             {form.priceType !== 'quote' && (
-              <label className="field mt-sm"><span>Price {form.priceType === 'hourly' && '(per hour)'}</span><input className="input" type="number" min="0" value={form.price} onChange={set('price')} /></label>
-            )}
-            <div className="row gap-xs mt-sm">
-              <label className="field grow"><span>Hours included</span><input className="input" type="number" min="0" step="0.5" value={form.hours} onChange={set('hours')} /></label>
-              <label className="field grow"><span>Edited photos</span><input className="input" type="number" min="0" value={form.editedPhotos} onChange={set('editedPhotos')} /></label>
-            </div>
-            <div className="row gap-xs mt-sm">
-              <label className="field grow">
-                <span>Editing level</span>
-                <select className="input" value={form.editingLevel} onChange={set('editingLevel')}>
-                  <option value="">Not specified</option>
-                  {levels.map((l) => <option key={l}>{l}</option>)}
-                </select>
+              <label className="field mt-sm">
+                <span>{PRICE_FIELD[form.priceType] || 'Price'}</span>
+                <input className="input" type="number" min="0" inputMode="decimal" placeholder="$" value={form.price} onChange={set('price')} />
               </label>
-              <label className="field grow"><span>Turnaround (days)</span><input className="input" type="number" min="0" value={form.turnaroundDays} onChange={set('turnaroundDays')} /></label>
-            </div>
+            )}
+            <label className="field mt-sm"><span>Hours included <span className="pf-optional">optional</span></span><input className="input" type="number" min="0" step="0.5" value={form.hours} onChange={set('hours')} /></label>
+            <label className="field mt-sm">
+              <span>Description <span className="pf-optional">optional</span></span>
+              <textarea className="input" rows={2} maxLength={1000} value={form.description} onChange={set('description')} placeholder="What’s included, in a sentence or two" />
+            </label>
+            <PackageFields fields={config.packageFields} values={form.attributes} onChange={(attributes) => setForm({ ...form, attributes })} />
             <label className="field mt-sm"><span>Deposit: {form.depositPct}%</span><input type="range" min="0" max="100" step="5" value={form.depositPct} onChange={set('depositPct')} /></label>
             <button className="btn block mt" disabled={saving || !form.name.trim() || !form.categoryId || !priceOk} onClick={save}>
               {saving ? 'Saving…' : form.id ? 'Save changes' : 'Publish package'}
@@ -510,6 +514,63 @@ function Packages({ provider, onChanged }) {
                 {form.isActive ? 'Hide from my profile' : 'Show on my profile'}
               </button>
             )}
+          </>
+        )}
+      </Sheet>
+    </div>
+  )
+}
+
+const PACKAGE_EXAMPLES = {
+  photography: 'Engagement session', videography: 'Wedding highlight film', catering: 'Taco bar buffet', venue: 'Saturday evening rental',
+  music: 'Reception DJ set', florals: 'Bridal bouquet', cakes: 'Three-tier wedding cake', bar: 'Open bar, 4 hours', 'hair-makeup': 'Bridal glam',
+  rentals: 'Chiavari chair', planning: 'Day-of coordination',
+}
+
+// The listing's own custom fields (cuisines, capacity, genres...), shown above its packages.
+function ListingDetails({ provider, vertical, onChanged }) {
+  const { myProvider, refreshProvider, toast } = useStore()
+  const fields = verticalConfig(vertical).providerFields.filter((f) => f.key !== 'specialties')
+  const [draft, setDraft] = useState(null)
+  const [saving, setSaving] = useState(false)
+  if (!fields.length || !myProvider) return null
+  const attrs = provider?.attributes || myProvider.attributes || {}
+  const meta = verticalMeta(vertical)
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      // Keep keys this form doesn't edit (photography's gear, specialties...).
+      await updateProviderAttributes(myProvider.id, cleanAttributes(fields, { ...attrs, ...draft }))
+      await refreshProvider()
+      onChanged?.()
+      setDraft(null)
+      toast('Details saved')
+    } catch (e) {
+      console.warn(e)
+      toast('Couldn’t save: ' + (e.message || 'try again'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const empty = !attributeLines(fields, attrs).length
+  return (
+    <div className="info-card listing-details">
+      <div className="row between gap-xs">
+        <div className="small"><b>Your {meta.noun} details</b></div>
+        <button className="btn sm ghost" onClick={() => setDraft({ ...attrs })}>{empty ? 'Add' : 'Edit'}</button>
+      </div>
+      {empty ? (
+        <div className="muted tiny mt-xs">{fields.map((f) => f.label).join(', ')}. Clients filter by these.</div>
+      ) : (
+        <AttributeList fields={fields} attrs={attrs} />
+      )}
+      <Sheet open={!!draft} onClose={() => !saving && setDraft(null)} title={`Your ${meta.noun} details`}>
+        {draft && (
+          <>
+            <PackageFields fields={fields} values={draft} onChange={setDraft} />
+            <button className="btn block mt" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
           </>
         )}
       </Sheet>

@@ -1,4 +1,5 @@
-// Full-screen map of photographers: round avatar pins where they're based.
+// Full-screen map of providers (any vertical): round avatar pins where they're based,
+// ringed in their vertical's color.
 // Tap a pin to see how far they travel (their service radius) and a compact
 // card with a link to their profile and to book. Lazy-loaded (see map/LazyMap.jsx).
 //
@@ -11,7 +12,9 @@ import L from 'leaflet'
 import { Circle, MapContainer, Marker, useMap, useMapEvents } from 'react-leaflet'
 import { LocateFixed, MapPinOff, Maximize2, Search, Star, X, ZoomOut } from 'lucide-react'
 import { IdVerified, ProBadge } from './Badges.jsx'
-import { money, startingPrice } from '../lib/format.js'
+import { fromPriceLabel } from '../lib/format.js'
+import { countLabel, nounFor } from '../verticals/index.js'
+import { VerticalTag } from './verticals/VerticalIcon.jsx'
 import { bboxCenter, distanceKm, fmtKm, parseBbox, fmtBbox, splitByArea } from '../api/locations.js'
 import { AutoSize, Tiles, avatarIcon, circleBounds, clusterIcon, meIcon, pointsBounds, radiusStyle } from './map/mapKit.jsx'
 
@@ -27,10 +30,11 @@ const boxBounds = (b) => L.latLngBounds([b.s, b.w], [b.n, b.e])
 // userLocation: { lat, lng } | null. onLocate(): asks for the user's location, resolves { lat, lng } or null.
 // focusId: provider to open on load. linkQuery: e.g. "dates=2026-10-21" carried to profile/book links.
 // fitUser: also keep the user's own location in frame (e.g. while filtering by distance).
-// onSelect(id | null): the open photographer changed (e.g. to keep it in the URL for Back).
+// onSelect(id | null): the open provider changed (e.g. to keep it in the URL for Back).
+// vertical: the vertical being searched (slug) or null for all; only changes the wording.
 // area: the searched map area { w, s, e, n } or null; onAreaChange(area | null) searches/clears it.
 // Pins outside the area are faded; providers should be every result, not just the area's.
-export default function ProviderMap({ providers, userLocation, onLocate, focusId, linkQuery = '', fitUser = false, onSelect, area = null, onAreaChange }) {
+export default function ProviderMap({ providers, userLocation, onLocate, focusId, linkQuery = '', fitUser = false, onSelect, area = null, onAreaChange, vertical = null }) {
   const wrapRef = useRef()
   const height = useFillHeight(wrapRef)
   const [selectedId, setSelectedId] = useState(() => (providers.some((p) => p.id === focusId) ? focusId : null))
@@ -205,6 +209,7 @@ export default function ProviderMap({ providers, userLocation, onLocate, focusId
             selectedId={selectedId}
             inArea={inArea}
             onSelect={select}
+            vertical={vertical}
             onOpenCluster={(points) => {
               programmatic({}, 600)
               mapRef.current?.flyToBounds(pointsBounds(points), { padding: [EDGE + 40, EDGE + 40], maxZoom: CLUSTER_MAX_ZOOM, duration: 0.6 })
@@ -227,13 +232,13 @@ export default function ProviderMap({ providers, userLocation, onLocate, focusId
               <>
                 <div className="pm-empty-title">Nobody’s based here yet</div>
                 <div className="muted small">
-                  {travels.length === 1 ? '1 photographer travels' : `${travels.length} photographers travel`} to this area.
+                  {countLabel(travels.length, vertical)} travel{travels.length === 1 ? 's' : ''} to this area.
                 </div>
                 <button className="btn sm" onClick={showTravellers}>Show on map</button>
               </>
             ) : (
               <>
-                <div className="pm-empty-title">No photographers here yet</div>
+                <div className="pm-empty-title">No {nounFor(vertical, 2)} here yet</div>
                 <div className="muted small">Zoom out or search a different area.</div>
                 <button className="btn sm" onClick={zoomOut}><ZoomOut size={15} /> Zoom out</button>
               </>
@@ -242,18 +247,18 @@ export default function ProviderMap({ providers, userLocation, onLocate, focusId
         </div>
       )}
 
-      {!touched && !selected && !areaEmpty && <div className="pm-hint">Tap a photographer to see how far they travel</div>}
+      {!touched && !selected && !areaEmpty && <div className="pm-hint">Tap a {nounFor(vertical)} to see how far they travel</div>}
 
       <div className="pm-controls">
-        <button className="pm-ctl" onClick={locate} aria-label="Show photographers near me" disabled={locating}>
+        <button className="pm-ctl" onClick={locate} aria-label={`Show ${nounFor(vertical, 2)} near me`} disabled={locating}>
           {locating ? <span className="spinner pm-spin" /> : <LocateFixed size={19} className={userLocation ? 'pm-located' : ''} />}
         </button>
-        <button className="pm-ctl" onClick={showAll} aria-label="Show all photographers">
+        <button className="pm-ctl" onClick={showAll} aria-label={`Show all ${nounFor(vertical, 2)}`}>
           <Maximize2 size={17} />
         </button>
       </div>
 
-      {selected && <ProviderCard key={selected.id} provider={selected} linkQuery={linkQuery} onClose={() => setSelectedId(null)} />}
+      {selected && <ProviderCard key={selected.id} provider={selected} linkQuery={linkQuery} showVertical={!vertical} onClose={() => setSelectedId(null)} />}
     </div>
   )
 }
@@ -292,7 +297,7 @@ function AreaWatch({ onSettle, onUserGesture, onReady }) {
 
 // Avatar pins. Pins that would overlap at this zoom are grouped into one pin with a
 // count; tapping it zooms in to separate them. The open photographer is never grouped.
-function Pins({ providers, selectedId, inArea, onSelect, onOpenCluster }) {
+function Pins({ providers, selectedId, inArea, onSelect, onOpenCluster, vertical }) {
   const map = useMap()
   const [zoom, setZoom] = useState(() => map.getZoom())
   useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
@@ -319,7 +324,7 @@ function Pins({ providers, selectedId, inArea, onSelect, onOpenCluster }) {
         <Marker
           key={p.id}
           position={[p.location.lat, p.location.lng]}
-          icon={avatarIcon(p.avatar, { selected: g.selected, dim: g.dim && !g.selected })}
+          icon={avatarIcon(p.avatar, { selected: g.selected, dim: g.dim && !g.selected, tint: p.verticalInfo?.tint })}
           zIndexOffset={g.selected ? 1000 : g.dim ? -50 : 0}
           title={p.name}
           alt={p.name}
@@ -335,10 +340,10 @@ function Pins({ providers, selectedId, inArea, onSelect, onOpenCluster }) {
       <Marker
         key={g.members.map((m) => m.id).join('+')}
         position={[lat, lng]}
-        icon={clusterIcon(p.avatar, g.members.length, { dim: g.dim })}
+        icon={clusterIcon(p.avatar, g.members.length, { dim: g.dim, tint: g.members.every((m) => m.vertical === p.vertical) ? p.verticalInfo?.tint : null })}
         zIndexOffset={g.dim ? -40 : 10}
         title={`${names.slice(0, -1).join(', ')} and ${names.at(-1)}`}
-        alt={`${g.members.length} photographers`}
+        alt={countLabel(g.members.length, vertical)}
         eventHandlers={{ click: () => onOpenCluster(points) }}
       />
     )
@@ -396,8 +401,8 @@ function Behaviour({ providers, framePoints, selected, area, onBackgroundTap, on
   return null
 }
 
-function ProviderCard({ provider: p, linkQuery, onClose }) {
-  const price = startingPrice(p)
+function ProviderCard({ provider: p, linkQuery, onClose, showVertical }) {
+  const price = fromPriceLabel(p)
   const q = linkQuery ? `?${linkQuery}` : ''
   const inside = p.distanceKm != null && p.radiusKm != null ? p.distanceKm <= p.radiusKm : null
   return (
@@ -420,8 +425,9 @@ function ProviderCard({ provider: p, linkQuery, onClose }) {
             ) : (
               <span className="new-tag">New</span>
             )}
-            {price != null && <span className="muted">· from <b className="pm-ink">{money(price)}</b></span>}
+            {price && <span className="muted">· <b className="pm-ink">{price}</b></span>}
           </div>
+          {showVertical && <div className="mt-xs"><VerticalTag vertical={p.vertical} /></div>}
           {p.specialties.length > 0 && <div className="muted tiny ellipsis mt-xs">{p.specialties.join(' · ')}</div>}
         </div>
       </Link>

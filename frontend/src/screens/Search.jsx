@@ -8,21 +8,33 @@ import TopBar from '../components/TopBar.jsx'
 import Sheet from '../components/Sheet.jsx'
 import DatePicker from '../components/DatePicker.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
-import { money, startingPrice } from '../components/Booking.jsx'
+import { fromPriceLabel, money, startingPrice } from '../components/Booking.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
+import VerticalSwitcher from '../components/verticals/VerticalSwitcher.jsx'
+import { VerticalBadge, VerticalTag } from '../components/verticals/VerticalIcon.jsx'
+import EmptyVertical from '../components/verticals/EmptyVertical.jsx'
 import { useAuth } from '../auth.jsx'
 import { useStore } from '../store.jsx'
 import { ProviderMap } from '../components/map/LazyMap.jsx'
 import useQuery from '../lib/useQuery.js'
 import { fmtChip, fromKey, isPast, parseDates } from '../lib/dates.js'
-import { getCategories, listProviders, searchProviders, withMatches } from '../api/catalog.js'
+import { countProvidersByVertical, getCategories, listProviders, searchProviders, withMatches } from '../api/catalog.js'
 import { distanceKm, fmtBbox, fmtKm, getMyLocation, lastKnownLocation, parseBbox, parsePoint, splitByArea } from '../api/locations.js'
+import {
+  VERTICALS, attributeLines, countLabel, getService, getVertical, matchesFilters, lowerFirst, nounFor, optionLabel, optionsOf, verticalConfig, verticalMeta, verticalOfService,
+} from '../verticals/index.js'
 
-const PRICE_OPTIONS = [
+// Starting-price filter, by how the vertical usually prices (per person, per day...).
+const PRICE_OPTIONS = {
+  default: [250, 500, 1500],
+  person: [50, 100, 150],
+  item: [50, 150, 500],
+  day: [1000, 3000, 6000],
+  hour: [100, 200, 400],
+}
+const priceOptions = (unit) => [
   { value: null, label: 'Any' },
-  { value: 250, label: 'Under $250' },
-  { value: 500, label: 'Under $500' },
-  { value: 1500, label: 'Under $1,500' },
+  ...(PRICE_OPTIONS[unit] || PRICE_OPTIONS.default).map((v) => ({ value: v, label: `Under ${money(v)}${unit === 'person' ? ' pp' : unit === 'day' ? '/day' : unit === 'hour' ? '/hr' : ''}` })),
 ]
 const RATING_OPTIONS = [
   { value: null, label: 'Any' },
@@ -47,44 +59,62 @@ const SORTS = {
 const NO_FILTERS = { maxPrice: null, minRating: null, proOnly: false, idOnly: false, distance: null }
 const withinDistance = (p, d) => (d === 'travels' ? p.distanceKm <= (p.radiusKm ?? 0) : p.distanceKm <= d)
 
+// ?v= (vertical) and ?cat= (a service slug, a vertical slug, or a service name from
+// older links) -> { vertical, service }. A service implies its vertical.
+function resolveCategory(v, cat, dbVerticals) {
+  if (!cat) return { vertical: v || null, service: null }
+  if (getVertical(cat)) return { vertical: cat, service: null }
+  if (getService(cat)) return { vertical: verticalOfService(cat).slug, service: cat }
+  const all = dbVerticals?.flatMap((x) => x.services) || []
+  const db = all.find((s) => s.slug === cat)
+  if (db) return { vertical: db.vertical, service: db.slug }
+  if (dbVerticals?.some((x) => x.slug === cat)) return { vertical: cat, service: null }
+  // "Wedding" (a name): match within the chosen vertical first, then anywhere.
+  const pool = [...VERTICALS.filter((x) => x.slug === v), ...VERTICALS].flatMap((x) => x.services.map((s) => ({ ...s, vertical: x.slug })))
+  const byName = pool.find((s) => s.name.toLowerCase() === cat.toLowerCase())
+  if (byName) return { vertical: byName.vertical, service: byName.slug }
+  return { vertical: v || null, service: null, unknown: true }
+}
+
 export default function Search() {
   const { user, profile } = useAuth()
   const { toast } = useStore()
   const [params, setParams] = useSearchParams()
-  const [query, setQuery] = useState(() => params.get('q') || '') // ?q= lets other screens link to a text search
-  const [catParam, setCatParam] = useState(params.get('cat')) // a service slug (or a category name from older links)
+  const [query, setQueryState] = useState(() => params.get('q') || '') // ?q= lets other screens link to a text search
   const [filters, setFilters] = useState(NO_FILTERS)
+  const [vFilters, setVFilters] = useState({}) // the vertical's own filters: { guests, dietary... }
   const [sort, setSort] = useState('match')
   const [sheet, setSheet] = useState(null) // dates | filters | sort
 
   const setFilter = (key, value) => setFilters((f) => ({ ...f, [key]: value }))
+  const setVFilter = (key, value) => setVFilters((f) => ({ ...f, [key]: value }))
+  const update = (fn) =>
+    setParams((prev) => {
+      const p = new URLSearchParams(prev)
+      fn(p)
+      return p
+    }, { replace: true })
+  const setQuery = (text) => {
+    setQueryState(text)
+    update((p) => (text.trim() ? p.set('q', text) : p.delete('q')))
+  }
 
   // List or map (in the URL so Back returns to the same view). focus: a provider to open on the map.
   const view = params.get('view') === 'map' ? 'map' : 'list'
   const focusId = params.get('focus')
   const setView = (next) => {
-    const p = new URLSearchParams(params)
-    next === 'map' ? p.set('view', 'map') : p.delete('view')
-    p.delete('focus')
-    setParams(p, { replace: true })
+    update((p) => {
+      next === 'map' ? p.set('view', 'map') : p.delete('view')
+      p.delete('focus')
+    })
     document.querySelector('.viewport')?.scrollTo({ top: 0 })
   }
-  const setFocus = (id) =>
-    setParams((prev) => {
-      const p = new URLSearchParams(prev)
-      id ? p.set('focus', id) : p.delete('focus')
-      return p
-    }, { replace: true })
+  const setFocus = (id) => update((p) => (id ? p.set('focus', id) : p.delete('focus')))
 
   // Map area ("Search this area" on the map): ?bbox=w,s,e,n. Kept by the List/Map toggle.
   const bboxParam = params.get('bbox')
   const area = useMemo(() => parseBbox(bboxParam), [bboxParam])
-  const setArea = (box) =>
-    setParams((prev) => {
-      const p = new URLSearchParams(prev)
-      box ? p.set('bbox', fmtBbox(box)) : p.delete('bbox')
-      return p
-    }, { replace: true })
+  const setArea = (box) => update((p) => (box ? p.set('bbox', fmtBbox(box)) : p.delete('bbox')))
 
   // The user's location (optional): asked for on demand, remembered on this device.
   const [myLoc, setMyLoc] = useState(lastKnownLocation)
@@ -100,27 +130,44 @@ export default function Search() {
     }
   }
 
-  const cats = useQuery(() => getCategories(), [])
-  const categories = cats.data || []
-  const catInfo = catParam ? categories.find((c) => c.slug === catParam || c.name.toLowerCase() === catParam.toLowerCase()) : null
-  const category = catInfo?.slug ?? null
+  // What: a vertical (?v=) and one of its services (?cat=).
+  const cats = useQuery(getCategories, [])
+  const counts = useQuery(countProvidersByVertical, [])
+  const catParam = params.get('cat')
+  const { vertical, service, unknown } = resolveCategory(params.get('v'), catParam, cats.data)
+  const meta = verticalMeta(vertical)
+  const config = verticalConfig(vertical)
+  const vInfo = vertical ? cats.data?.find((v) => v.slug === vertical) : null
+  const services = vertical ? vInfo?.services || meta.services.map((s) => ({ ...s, vertical })) : []
+  const serviceName = service ? services.find((s) => s.slug === service)?.name || getService(service)?.name : null
+  const setVertical = (slug) => {
+    if (slug === vertical && !service) return
+    setVFilters({})
+    setFilter('maxPrice', null)
+    update((p) => {
+      slug ? p.set('v', slug) : p.delete('v')
+      p.delete('cat')
+    })
+  }
+  const setService = (slug) =>
+    update((p) => {
+      if (vertical) p.set('v', vertical)
+      slug ? p.set('cat', slug) : p.delete('cat')
+    })
+  const clearWhat = () => update((p) => { p.delete('v'); p.delete('cat') })
 
   // Dates live in the URL so they survive going to a profile and back.
   const dates = parseDates(params.get('dates'))
-  const setDates = (next) => {
-    const p = new URLSearchParams(params)
-    next.length ? p.set('dates', [...next].sort().join(',')) : p.delete('dates')
-    setParams(p, { replace: true })
-  }
+  const setDates = (next) => update((p) => (next.length ? p.set('dates', [...next].sort().join(',')) : p.delete('dates')))
   const toggleDate = (key) => setDates(dates.includes(key) ? dates.filter((k) => k !== key) : [...dates, key])
   const datesQuery = dates.length ? `dates=${dates.join(',')}` : ''
 
-  // Everyone (with % match when the user has swiped enough).
+  // Everyone (with % match when the user has swiped enough); the vertical is filtered here.
   const all = useQuery(() => listProviders().then(withMatches), [user?.id])
-  // Dates, category, price, rating and Pro are filtered in the database.
-  const serverArgs = { dates, category, maxPrice: filters.maxPrice, minRating: filters.minRating, proOnly: filters.proOnly }
-  const needsServer = dates.length > 0 || !!category || filters.maxPrice != null || filters.minRating != null || filters.proOnly
-  const waitingForCategory = !!catParam && !cats.data && !cats.error
+  // Dates, service, price, rating and Pro are filtered in the database.
+  const serverArgs = { dates, vertical, service, maxPrice: filters.maxPrice, minRating: filters.minRating, proOnly: filters.proOnly }
+  const needsServer = dates.length > 0 || !!service || filters.maxPrice != null || filters.minRating != null || filters.proOnly
+  const waitingForCategory = !!unknown && !cats.data && !cats.error
   const searched = useQuery(needsServer && !waitingForCategory ? () => searchProviders(serverArgs) : null, [JSON.stringify(serverArgs), needsServer, waitingForCategory])
 
   const matchOf = new Map((all.data || []).map((p) => [p.id, p.tasteMatch]))
@@ -132,21 +179,33 @@ export default function Search() {
   const source = needsServer ? searched : all
   // Keep showing the previous results while a new search runs.
   const loading = waitingForCategory || (all.data === undefined && !all.error) || (source.data === undefined && !source.error)
-  const error = all.error || source.error || (catParam && cats.error)
+  const error = all.error || source.error
   const q = query.trim().toLowerCase()
   const allResults = (source.data || [])
+    .filter((p) => !vertical || p.vertical === vertical)
     .map((p) => ({ ...p, tasteMatch: matchOf.get(p.id) ?? null, distanceKm: distanceKm(userLocation, p.location) }))
     .filter((p) => distanceFilter == null || (p.distanceKm != null && withinDistance(p, distanceFilter)))
-    .filter((p) => !q || [p.name, p.username, p.city, ...p.specialties, ...p.categories].join(' ').toLowerCase().includes(q))
+    .filter((p) => !q || [p.name, p.username, p.city, p.verticalInfo?.name, ...p.specialties, ...p.categories].join(' ').toLowerCase().includes(q))
     .filter((p) => !filters.idOnly || p.idVerified)
+    .filter((p) => !vertical || matchesFilters(p, vFilters, vertical))
     .sort((a, b) => freeOn(b).length - freeOn(a).length || SORTS[sortKey].fn(a, b))
   const onMap = allResults.filter((p) => p.location)
-  // In a map area: photographers based in it, then ones based elsewhere who travel to it.
+  // In a map area: providers based in it, then ones based elsewhere who travel to it.
   const { inside: areaInside, travels: areaTravels } = splitByArea(onMap, area)
   const results = area ? [...areaInside, ...areaTravels] : allResults
   const fullyFree = results.filter((p) => freeOn(p).length === dates.length).length
+  const plural = nounFor(vertical, 2)
+  // Nobody at all in this vertical yet (new verticals before vendors join).
+  const verticalEmpty = !!vertical && counts.data && !counts.data[vertical] && !(all.data || []).some((p) => p.vertical === vertical)
 
   // Removable chips for whatever is currently filtering the list.
+  const vChips = config.filters
+    .filter((f) => vFilters[f.key] != null && !(Array.isArray(vFilters[f.key]) && !vFilters[f.key].length))
+    .map((f) => ({
+      key: `v-${f.key}`,
+      label: f.type === 'guests' ? `${vFilters[f.key]}+ guests` : [].concat(vFilters[f.key]).map((v) => optionLabel(f, v)).join(', '),
+      clear: () => setVFilter(f.key, null),
+    }))
   const activeChips = [
     area && { key: 'area', label: 'Map area', icon: MapPin, clear: () => setArea(null) },
     filters.maxPrice != null && { key: 'maxPrice', label: `Under ${money(filters.maxPrice)}`, clear: () => setFilter('maxPrice', null) },
@@ -158,26 +217,52 @@ export default function Search() {
       label: DISTANCE_OPTIONS.find((o) => o.value === distanceFilter)?.label,
       clear: () => setFilter('distance', null),
     },
+    ...vChips,
   ].filter(Boolean)
   const filterCount = activeChips.filter((c) => c.key !== 'area').length // what the Filters sheet controls
 
   const reload = () => {
     all.reload()
     searched.reload()
+    counts.reload()
     if (cats.error) cats.reload()
+  }
+  const clearAll = () => {
+    setFilters(NO_FILTERS)
+    setVFilters({})
+    setQueryState('')
+    update((p) => {
+      p.delete('q')
+      p.delete('cat')
+    })
   }
 
   return (
     <div>
-      <TopBar title={catInfo?.name || 'All photographers'} />
+      <TopBar title={serviceName || (vertical ? meta.plural : 'Find vendors')} subtitle={serviceName ? meta.name : null} />
 
       <div className="pad-x mt-sm">
         <div className="search">
           <SearchIcon size={16} />
-          <input autoFocus={!catParam && !dates.length && view === 'list'} placeholder="Search photographers, styles, cities" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input autoFocus={!catParam && !vertical && !dates.length && view === 'list'} placeholder={`Search ${plural}, styles, cities`} value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && <button className="icon-btn" onClick={() => setQuery('')} aria-label="Clear"><X size={14} /></button>}
         </div>
       </div>
+
+      {/* What: vertical, then its services */}
+      <div className="mt-sm">
+        <VerticalSwitcher value={vertical} onChange={setVertical} counts={counts.data} />
+      </div>
+      {vertical && services.length > 0 && (
+        <div className="chips scroll-x pad-x mt-sm">
+          <button className={`chip toggle ${!service ? 'on' : ''}`} onClick={() => setService(null)}>All {lowerFirst(meta.name)}</button>
+          {services.map((s) => (
+            <button key={s.slug} className={`chip toggle ${service === s.slug ? 'on' : ''}`} onClick={() => setService(s.slug)}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* When: the dates you need someone for */}
       <div className="pad-x mt-sm">
@@ -200,15 +285,6 @@ export default function Search() {
         </div>
       </div>
 
-      <div className="chips scroll-x pad-x mt-sm">
-        <button className={`chip toggle ${!category ? 'on' : ''}`} onClick={() => setCatParam(null)}>All</button>
-        {categories.map((c) => (
-          <button key={c.slug} className={`chip toggle ${category === c.slug ? 'on' : ''}`} onClick={() => setCatParam(c.slug)}>
-            {c.name}
-          </button>
-        ))}
-      </div>
-
       <div className="filter-row scroll-x pad-x">
         <button className={`filter-btn ${filterCount ? 'on' : ''}`} onClick={() => setSheet('filters')}>
           <SlidersHorizontal size={14} /> Filters
@@ -227,7 +303,9 @@ export default function Search() {
       {error ? (
         <ErrorState error={error} onRetry={reload} />
       ) : loading ? (
-        <Loading label="Finding photographers…" />
+        <Loading label={`Finding ${plural}…`} />
+      ) : verticalEmpty ? (
+        <div className="pad-x"><EmptyVertical vertical={vertical} /></div>
       ) : (
         <>
           <div className="pad-x result-bar">
@@ -235,10 +313,10 @@ export default function Search() {
               {area && !dates.length
                 ? areaTravels.length
                   ? `${areaInside.length ? `${areaInside.length} based here · ` : ''}${areaTravels.length} travel${areaTravels.length === 1 ? 's' : ''} here`
-                  : `${areaInside.length} photographer${areaInside.length === 1 ? '' : 's'} in this area`
+                  : `${countLabel(areaInside.length, vertical)} in this area`
                 : dates.length
                   ? `${fullyFree} free on ${dates.length === 1 ? 'your date' : `all ${dates.length} dates`}${results.length > fullyFree ? ` · ${results.length - fullyFree} partly free` : ''}${area ? ' here' : ''}`
-                  : `${results.length} photographer${results.length === 1 ? '' : 's'}`}
+                  : countLabel(results.length, vertical)}
               {view === 'map' && !area && results.length > onMap.length && onMap.length > 0 && ` · ${results.length - onMap.length} not on map`}
             </div>
             <div className="view-toggle" role="tablist" aria-label="View">
@@ -255,6 +333,7 @@ export default function Search() {
             onMap.length ? (
               <ProviderMap
                 providers={onMap}
+                vertical={vertical}
                 area={area}
                 onAreaChange={setArea}
                 userLocation={userLocation}
@@ -268,81 +347,28 @@ export default function Search() {
               <EmptyState
                 icon={MapPinOff}
                 title="Not on the map yet"
-                text={`${allResults.length === 1 ? 'This photographer hasn’t' : 'These photographers haven’t'} set where they’re based yet.`}
+                text={`${allResults.length === 1 ? `This ${nounFor(vertical)} hasn’t` : `These ${plural} haven’t`} set where they’re based yet.`}
                 action={<button className="btn ghost sm" onClick={() => setView('list')}>Show the list</button>}
               />
             )
           )}
 
           <div className="pad-x">
-            {view === 'list' && results.map((p, i) => {
-              const free = freeOn(p)
-              const thumbs = p.covers.slice(0, 3)
-              return (
-                <Fragment key={p.id}>
+            {view === 'list' && results.map((p, i) => (
+              <Fragment key={p.id}>
                 {area && areaTravels.length > 0 && i === areaInside.length && (
                   <div className="area-section">
-                    <div className="area-section-title">{areaInside.length ? 'Also travels here' : 'Nobody’s based here yet, but these photographers travel here'}</div>
+                    <div className="area-section-title">{areaInside.length ? 'Also travels here' : `Nobody’s based here yet, but these ${plural} travel here`}</div>
                     <div className="muted tiny">Based outside this map area; it’s within how far they travel.</div>
                   </div>
                 )}
-                <div className="result-card">
-                  <Link to={`/u/${p.id}${datesQuery && `?${datesQuery}`}`}>
-                    <div className="result-photos">
-                      {thumbs.map((src) => (
-                        <img key={src} src={src} alt="" loading="lazy" />
-                      ))}
-                      {Array.from({ length: 3 - thumbs.length }, (_, i) => (
-                        <div key={`ph${i}`} className="img-ph" />
-                      ))}
-                      {p.tasteMatch != null && <span className="match-badge">{p.tasteMatch}% match</span>}
-                    </div>
-                    <div className="result-info">
-                      <img className="avatar" src={p.avatar} alt="" />
-                      <div className="grow">
-                        <div className="row between gap-xs">
-                          <div className="person-name">
-                            {p.name} {p.idVerified && <IdVerified />} {p.pro && <ProBadge />}
-                          </div>
-                          {startingPrice(p) != null && <span className="result-price">from {money(startingPrice(p))}</span>}
-                        </div>
-                        <div className="muted small ellipsis">{p.specialties.join(' · ')}</div>
-                        <div className="small row gap-xs mt-xs">
-                          {p.rating != null ? (
-                            <>
-                              <Star size={12} className="star-on" fill="currentColor" /> <b>{p.rating.toFixed(1)}</b>
-                              <span className="muted">({p.reviewCount}){p.city && ` · ${p.city}`}</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="new-tag">New</span>
-                              {p.city && <span className="muted">· {p.city}</span>}
-                            </>
-                          )}
-                          {p.distanceKm != null && <span className="muted result-distance">· {fmtKm(p.distanceKm)}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                  {dates.length > 0 && free.length > 0 && (
-                    <div className="provider-avail">
-                      <span className={`avail-label ${free.length === dates.length ? 'full' : 'partial'}`}>
-                        <CalendarCheck size={13} />
-                        {free.length === dates.length
-                          ? dates.length === 1 ? 'Free on your date' : `Free on all ${dates.length} dates`
-                          : free.length === 1 ? `Free ${fmtChip(fromKey(free[0]))} only` : `Free ${free.length} of ${dates.length} dates`}
-                      </span>
-                      <Link to={`/book/${p.id}?dates=${free.join(',')}`} className="btn sm accent">Book</Link>
-                    </div>
-                  )}
-                </div>
-                </Fragment>
-              )
-            })}
+                <ResultCard p={p} free={freeOn(p)} dates={dates} datesQuery={datesQuery} showVertical={!vertical} />
+              </Fragment>
+            ))}
             {area && view === 'list' && results.length === 0 && allResults.length > 0 ? (
               <EmptyState
                 icon={MapPinOff}
-                title="No photographers in this area"
+                title={`No ${plural} in this area`}
                 text="Nobody matching your search is based in this map area or travels to it."
                 action={
                   <div className="row gap-xs">
@@ -354,14 +380,13 @@ export default function Search() {
             ) : (view === 'list' ? results : allResults).length === 0 && (
               <EmptyState
                 icon={SearchX}
-                title={dates.length ? 'Nobody free on those dates' : 'No photographers found'}
-                text={dates.length ? 'Nobody matching these filters is free on those dates.' : 'No photographers match these filters.'}
+                title={dates.length ? 'Nobody free on those dates' : `No ${plural} found`}
+                text={dates.length ? 'Nobody matching these filters is free on those dates.' : `No ${plural} match these filters.`}
                 action={
-                  (activeChips.length > 0 || dates.length > 0 || q || catParam) && (
-                    <div className="row gap-xs">
-                      {(filterCount > 0 || q || catParam) && (
-                        <button className="btn ghost sm" onClick={() => { setFilters(NO_FILTERS); setQuery(''); setCatParam(null) }}>Clear filters</button>
-                      )}
+                  (activeChips.length > 0 || dates.length > 0 || q || service || vertical) && (
+                    <div className="row gap-xs wrap">
+                      {(filterCount > 0 || q || service) && <button className="btn ghost sm" onClick={clearAll}>Clear filters</button>}
+                      {vertical && !filterCount && !q && !service && <button className="btn ghost sm" onClick={clearWhat}>Show all vendors</button>}
                       {area && <button className="btn ghost sm" onClick={() => setArea(null)}>Search everywhere</button>}
                       {dates.length > 0 && <button className="btn ghost sm" onClick={() => setDates([])}>Clear dates</button>}
                     </div>
@@ -379,12 +404,15 @@ export default function Search() {
           <DatePicker selected={dates} onToggle={toggleDate} isDisabled={isPast} />
         </div>
         <button className="btn block mt" onClick={() => setSheet(null)}>
-          {dates.length ? `Show photographers for ${dates.length === 1 ? fmtChip(fromKey(dates[0])) : `${dates.length} dates`}` : 'Done'}
+          {dates.length ? `Show ${plural} for ${dates.length === 1 ? fmtChip(fromKey(dates[0])) : `${dates.length} dates`}` : 'Done'}
         </button>
       </Sheet>
 
       <Sheet open={sheet === 'filters'} onClose={() => setSheet(null)} title="Filters">
-        <FilterGroup label="Starting price" options={PRICE_OPTIONS} value={filters.maxPrice} onChange={(v) => setFilter('maxPrice', v)} />
+        {config.filters.map((f) => (
+          <VerticalFilter key={f.key} filter={f} value={vFilters[f.key] ?? null} onChange={(v) => setVFilter(f.key, v)} />
+        ))}
+        <FilterGroup label="Starting price" options={priceOptions(vertical ? meta.priceUnit : null)} value={filters.maxPrice} onChange={(v) => setFilter('maxPrice', v)} />
         <FilterGroup label="Rating" options={RATING_OPTIONS} value={filters.minRating} onChange={(v) => setFilter('minRating', v)} />
         {userLocation ? (
           <FilterGroup label="Distance" options={DISTANCE_OPTIONS} value={filters.distance} onChange={(v) => setFilter('distance', v)} />
@@ -392,7 +420,7 @@ export default function Search() {
           <div className="filter-group">
             <div className="filter-label">Distance</div>
             <div className="row gap-xs">
-              <div className="muted small grow">Share your location to find photographers who travel to you.</div>
+              <div className="muted small grow">Share your location to find {plural} who travel to you.</div>
               <button className="btn ghost sm" onClick={locate}><LocateFixed size={14} /> Use my location</button>
             </div>
           </div>
@@ -402,7 +430,7 @@ export default function Search() {
           <label className="toggle-row">
             <div className="grow">
               <div className="small">Verified Pro</div>
-              <div className="muted tiny">Photographers on the paid Verified Pro plan</div>
+              <div className="muted tiny">Vendors on the paid Verified Pro plan</div>
             </div>
             <input type="checkbox" className="switch" checked={filters.proOnly} onChange={(e) => setFilter('proOnly', e.target.checked)} />
           </label>
@@ -415,9 +443,9 @@ export default function Search() {
           </label>
         </div>
         <div className="row gap-xs mt">
-          <button className="btn ghost" disabled={!filterCount} onClick={() => setFilters(NO_FILTERS)}>Clear all</button>
+          <button className="btn ghost" disabled={!filterCount} onClick={() => { setFilters(NO_FILTERS); setVFilters({}) }}>Clear all</button>
           <button className="btn grow" onClick={() => setSheet(null)}>
-            {loading ? 'Show photographers' : `Show ${results.length} photographer${results.length === 1 ? '' : 's'}`}
+            {loading ? `Show ${plural}` : `Show ${countLabel(results.length, vertical)}`}
           </button>
         </div>
       </Sheet>
@@ -431,13 +459,78 @@ export default function Search() {
               {sortKey === key && <Check size={18} />}
             </button>
           ))}
-        {!hasMatches && <div className="muted tiny mt-sm">Swipe in Discover to sort by how well photographers match your taste.</div>}
+        {!hasMatches && <div className="muted tiny mt-sm">Swipe in Discover to sort by how well {plural} match your taste.</div>}
         {!userLocation && (
           <button className="link-btn small mt-sm" onClick={async () => { if (await locate()) { setSort('distance'); setSheet(null) } }}>
             <LocateFixed size={14} /> Use my location to sort by distance
           </button>
         )}
       </Sheet>
+    </div>
+  )
+}
+
+// One provider in the list. Visual verticals lead with their latest work; others
+// (DJs, planners...) with their details.
+function ResultCard({ p, free, dates, datesQuery, showVertical }) {
+  const thumbs = p.covers.slice(0, 3)
+  const config = verticalConfig(p.vertical)
+  const details = attributeLines(config.providerFields, p.attributes, config.cardKeys)
+  const sub = details.length ? details.join(' · ') : p.specialties.join(' · ')
+  const price = fromPriceLabel(p)
+  return (
+    <div className="result-card">
+      <Link to={`/u/${p.id}${datesQuery && `?${datesQuery}`}`}>
+        {thumbs.length > 0 && (
+          <div className="result-photos">
+            {thumbs.map((src) => (
+              <img key={src} src={src} alt="" loading="lazy" />
+            ))}
+            {Array.from({ length: 3 - thumbs.length }, (_, i) => (
+              <div key={`ph${i}`} className="img-ph" />
+            ))}
+            {p.tasteMatch != null && <span className="match-badge">{p.tasteMatch}% match</span>}
+          </div>
+        )}
+        <div className="result-info">
+          {thumbs.length ? <img className="avatar" src={p.avatar} alt="" /> : <span className="result-avatar"><img className="avatar" src={p.avatar} alt="" /><VerticalBadge vertical={p.vertical} size={20} className="result-avatar-badge" /></span>}
+          <div className="grow">
+            <div className="row between gap-xs">
+              <div className="person-name">
+                {p.name} {p.idVerified && <IdVerified />} {p.pro && <ProBadge />}
+              </div>
+              {price && <span className="result-price">{price}</span>}
+            </div>
+            {showVertical && <div className="mt-xs"><VerticalTag vertical={p.vertical} /></div>}
+            {sub && <div className="muted small ellipsis">{sub}</div>}
+            <div className="small row gap-xs mt-xs">
+              {p.rating != null ? (
+                <>
+                  <Star size={12} className="star-on" fill="currentColor" /> <b>{p.rating.toFixed(1)}</b>
+                  <span className="muted">({p.reviewCount}){p.city && ` · ${p.city}`}</span>
+                </>
+              ) : (
+                <>
+                  <span className="new-tag">New</span>
+                  {p.city && <span className="muted">· {p.city}</span>}
+                </>
+              )}
+              {p.distanceKm != null && <span className="muted result-distance">· {fmtKm(p.distanceKm)}</span>}
+            </div>
+          </div>
+        </div>
+      </Link>
+      {dates.length > 0 && free.length > 0 && (
+        <div className="provider-avail">
+          <span className={`avail-label ${free.length === dates.length ? 'full' : 'partial'}`}>
+            <CalendarCheck size={13} />
+            {free.length === dates.length
+              ? dates.length === 1 ? 'Free on your date' : `Free on all ${dates.length} dates`
+              : free.length === 1 ? `Free ${fmtChip(fromKey(free[0]))} only` : `Free ${free.length} of ${dates.length} dates`}
+          </span>
+          <Link to={`/book/${p.id}?dates=${free.join(',')}`} className="btn sm accent">Book</Link>
+        </div>
+      )}
     </div>
   )
 }
@@ -455,4 +548,33 @@ function FilterGroup({ label, options, value, onChange }) {
       </div>
     </div>
   )
+}
+
+// A vertical's own filter (verticals/<slug>/config.js `filters`): guests, dietary, setting...
+function VerticalFilter({ filter: f, value, onChange }) {
+  if (f.type === 'guests') {
+    return (
+      <FilterGroup
+        label={f.label}
+        options={[{ value: null, label: 'Any' }, ...f.options.map((n) => ({ value: n, label: `${n}+` }))]}
+        value={value}
+        onChange={onChange}
+      />
+    )
+  }
+  if (f.type === 'tags') {
+    const list = value || []
+    const toggle = (t) => onChange(list.includes(t) ? list.filter((x) => x !== t) : [...list, t])
+    return (
+      <div className="filter-group">
+        <div className="filter-label">{f.label}</div>
+        <div className="chips">
+          {optionsOf(f).map((o) => (
+            <button key={o.value} className={`chip toggle ${list.includes(o.value) ? 'on' : ''}`} aria-pressed={list.includes(o.value)} onClick={() => toggle(o.value)}>{o.label}</button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  return <FilterGroup label={f.label} options={[{ value: null, label: 'Any' }, ...optionsOf(f)]} value={value} onChange={onChange} />
 }

@@ -16,8 +16,8 @@ export function validatePost({ title, categoryId, shotOn }) {
   const errors = {}
   if (!title.trim()) errors.title = 'Give your post a title.'
   else if (title.trim().length > LIMITS.title) errors.title = `Keep the title under ${LIMITS.title} characters.`
-  if (!categoryId) errors.category = 'Pick the kind of shoot this was.'
-  if (shotOn && shotOn > todayKey()) errors.shotOn = 'The shoot date can’t be in the future.'
+  if (!categoryId) errors.category = 'Pick what kind of work this is.'
+  if (shotOn && shotOn > todayKey()) errors.shotOn = 'The date can’t be in the future.'
   return errors
 }
 
@@ -56,7 +56,7 @@ export function CaptionField({ value, onChange }) {
     <label className="field pf-field">
       <span className="pf-label">Caption <Counter value={value} max={LIMITS.caption} /></span>
       <textarea className="input" rows={3} maxLength={LIMITS.caption} value={value} onChange={(e) => onChange(e.target.value)}
-        placeholder="The story behind the shoot, the light, the couple…" />
+        placeholder="The story behind it: the event, the people, the details…" />
     </label>
   )
 }
@@ -70,7 +70,7 @@ export function PlaceDateFields({ location, onLocation, shotOn, onShotOn, dateEr
           <input className="input" maxLength={LIMITS.location} value={location} onChange={(e) => onLocation(e.target.value)} placeholder="City or venue" />
         </label>
         <label className="field pf-field pf-date">
-          <span className="pf-label">Shoot date</span>
+          <span className="pf-label">Date</span>
           <input className={`input ${dateError ? 'invalid' : ''}`} type="date" max={todayKey()} value={shotOn} onChange={(e) => onShotOn(e.target.value)} />
         </label>
       </div>

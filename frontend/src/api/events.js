@@ -8,6 +8,7 @@
 import { supabase } from '../lib/supabase.js'
 import { addDays, fromKey, toKey } from '../lib/dates.js'
 import { toEWKT } from './locations.js'
+import { OCCASIONS } from '../verticals/catalog.js'
 
 const must = ({ data, error }) => {
   if (error) throw error
@@ -17,6 +18,7 @@ const must = ({ data, error }) => {
 const COLUMNS = 'id, owner_id, title, type, starts_at, ends_at, location_text, guest_count, budget_cents, currency, status, created_at, updated_at'
 
 const TYPE_NAMES = {
+  ...Object.fromEntries(OCCASIONS.map((o) => [o.slug, o.name])),
   wedding: 'Wedding',
   engagement: 'Engagement',
   graduation: 'Graduation',
@@ -26,6 +28,7 @@ const TYPE_NAMES = {
   party: 'Party',
   birthday: 'Birthday',
   corporate: 'Corporate event',
+  bachelor: 'Bachelor/ette party',
 }
 export const eventTypeName = (type) =>
   !type ? 'Event' : TYPE_NAMES[type] || type.replace(/[-_]/g, ' ').replace(/^\w/, (c) => c.toUpperCase())

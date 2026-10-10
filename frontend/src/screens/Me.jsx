@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
-  Bookmark, Briefcase, Camera, Check, ChevronRight, CreditCard, Heart, Images, Info, Layers, MapPin, Package, Pencil, PlusSquare,
-  Settings, ShieldCheck, Sparkles, Star,
+  Bookmark, Briefcase, Check, ChevronRight, CreditCard, Heart, Images, Info, Layers, MapPin, Package, Pencil, Plus, PlusSquare,
+  Settings, ShieldCheck, Sparkles, Star, Store,
 } from 'lucide-react'
+import VerticalIcon from '../components/verticals/VerticalIcon.jsx'
+import { nounFor, nounTitle, verticalMeta } from '../verticals/index.js'
 import Sheet from '../components/Sheet.jsx'
 import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
 import { IdVerified } from '../components/Badges.jsx'
@@ -89,7 +91,7 @@ function SignedOut() {
           </div>
         )}
         <h3>Your bookings, favorites and messages, in one place</h3>
-        <p className="muted small">Sign in to request bookings, message photographers and keep your shortlist across devices.</p>
+        <p className="muted small">Sign in to request bookings, message vendors and keep your shortlist across devices.</p>
         <Link to="/sign-in?next=/me" className="btn accent block mt">Sign in or create an account</Link>
       </div>
     </div>
@@ -158,13 +160,13 @@ function ProfileHero({ provider }) {
           <span>as a client · {clientReviews} review{clientReviews === 1 ? '' : 's'}</span>
         </div>
         {myProvider ? (
-          <Link to={`/u/${myProvider.id}?tab=reviews`} className={`rating-cell tappable ${isProvider ? 'on' : ''}`} aria-label="See the reviews on your photographer profile">
+          <Link to={`/u/${myProvider.id}?tab=reviews`} className={`rating-cell tappable ${isProvider ? 'on' : ''}`} aria-label={`See the reviews on your ${nounFor(myProvider.vertical)} profile`}>
             <b><Star size={14} className="star-on" fill="currentColor" /> {rating(provider?.rating) ?? 'New'} <ChevronRight size={14} className="muted rating-cell-go" /></b>
-            <span>as a photographer · {provider?.reviewCount ?? 0} review{provider?.reviewCount === 1 ? '' : 's'}</span>
+            <span>as a {nounFor(myProvider.vertical)} · {provider?.reviewCount ?? 0} review{provider?.reviewCount === 1 ? '' : 's'}</span>
           </Link>
         ) : (
           <div className={`rating-cell ${isProvider ? 'on' : ''}`}>
-            <b><Camera size={14} /> —</b>
+            <b><Store size={14} /> —</b>
             <span>not taking bookings yet</span>
           </div>
         )}
@@ -182,7 +184,7 @@ function ProfileHero({ provider }) {
 
 // One switch for both sides of the account. Each side shows what's waiting for you there.
 function RoleSwitch({ myBookings, providerBookings }) {
-  const { mode, setMode, myProvider } = useStore()
+  const { mode, setMode, myProvider, myProviders } = useStore()
   const activeBookings = (myBookings || []).filter((b) => ACTIVE.includes(b.status)).length
   const pending = (providerBookings || []).filter((r) => r.status === 'requested').length
   const isProvider = mode === 'provider'
@@ -199,9 +201,9 @@ function RoleSwitch({ myBookings, providerBookings }) {
           </div>
         </button>
         <button role="tab" aria-selected={isProvider} className={`role ${isProvider ? 'on' : ''}`} onClick={() => setMode('provider')}>
-          <Camera size={18} />
+          {myProvider ? <VerticalIcon vertical={myProvider.vertical} size={18} /> : <Store size={18} />}
           <div>
-            <b>Photographer</b>
+            <b>{myProviders.length > 1 ? 'My business' : myProvider ? nounTitle(myProvider.vertical) : 'Vendor'}</b>
             <small>{!myProvider ? 'Start taking bookings' : pending ? `${pending} new request${pending === 1 ? '' : 's'}` : 'Your business'}</small>
           </div>
           {pending > 0 && !isProvider && <span className="role-dot">{pending}</span>}
@@ -260,7 +262,7 @@ function ClientView({ bookings }) {
         </>
       )}
 
-      <h4 className="section-title pad-x">Shortlisted photographers</h4>
+      <h4 className="section-title pad-x">Shortlisted</h4>
       {shortlisted.length ? (
         <PeopleRow people={shortlisted} />
       ) : (
@@ -285,7 +287,7 @@ function ClientView({ bookings }) {
             <Heart size={20} />
             <div className="grow">
               <b className="small">{providers || !following.size ? 'Not following anyone yet' : 'Loading…'}</b>
-              <div className="muted tiny">Follow photographers to see their new work first.</div>
+              <div className="muted tiny">Follow vendors to see their new work first.</div>
             </div>
             <ChevronRight size={16} />
           </Link>
@@ -338,7 +340,7 @@ function ClientView({ bookings }) {
       </Sheet>
 
       <div className="pad-x mt muted tiny inline-icon">
-        <Info size={12} /> Photographers see your client rating when you send a request.
+        <Info size={12} /> Vendors see your client rating when you send a request.
       </div>
     </div>
   )
@@ -368,7 +370,7 @@ function TasteCard({ taste }) {
         <Sparkles size={20} />
         <div className="grow">
           <b className="small">{t?.swipes ? 'Still learning your taste' : 'We don’t know your taste yet'}</b>
-          <div className="muted tiny">Like a few photos in Discover and we’ll match you with photographers.</div>
+          <div className="muted tiny">Like a few photos in Discover and we’ll match you with vendors whose style fits.</div>
         </div>
         <ChevronRight size={16} />
       </Link>
@@ -407,21 +409,23 @@ function NextBooking({ b }) {
 
 function ProviderView({ detail, bookings }) {
   const { myProvider, identityStatus } = useStore()
-  const [tab, setTab] = useState('requests')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState(() => (['requests', 'calendar', 'packages', 'portfolio'].includes(params.get('tab')) ? params.get('tab') : 'requests'))
   const tabsRef = useRef()
 
   if (!myProvider) {
     return (
       <div className="mode-body pad-x">
         <EmptyState
-          icon={Camera}
-          title="Take bookings as a photographer"
-          text="Set up your listing, post a few albums and clients can find and book you."
-          action={<Link to="/upload" className="btn accent">Become a photographer</Link>}
+          icon={Store}
+          title="Take bookings for your business"
+          text="Photographer, caterer, DJ, venue, florist… Set up a listing with your packages and clients can find and book you."
+          action={<Link to="/new-listing" className="btn accent">List your services</Link>}
         />
       </div>
     )
   }
+  const visual = verticalMeta(myProvider.vertical).visual
 
   const list = bookings.data || []
   const pending = list.filter((r) => r.status === 'requested').length
@@ -438,9 +442,9 @@ function ProviderView({ detail, bookings }) {
     // Payouts (Stripe Connect) aren't built yet, so this can't be completed.
     { done: false, label: 'Set up payouts', sub: 'Coming soon: bank payouts aren’t available yet', Icon: CreditCard, disabled: true },
     { done: packageCount > 0, label: 'Add a package', sub: 'Clients book a package', Icon: Package, tab: 'packages' },
-    { done: albumCount > 0, label: 'Add portfolio work', sub: 'Post at least one album', Icon: Images, tab: 'portfolio' },
+    visual && { done: albumCount > 0, label: 'Add portfolio work', sub: 'Post at least one album', Icon: Images, tab: 'portfolio' },
     { done: !!provider?.location, label: 'Set your service area', sub: 'Where you’re based and how far you travel', Icon: MapPin, tab: 'calendar' },
-  ]
+  ].filter(Boolean)
   const doneCount = steps.filter((s) => s.done).length
 
   const openTab = (t) => {
@@ -450,6 +454,7 @@ function ProviderView({ detail, bookings }) {
 
   return (
     <div className="mode-body">
+      <ListingSwitch />
       {detail.loading && !provider ? null : doneCount < steps.length ? (
         <div className="pad-x">
           <div className="checklist">
@@ -493,6 +498,27 @@ function ProviderView({ detail, bookings }) {
 
       <div ref={tabsRef} className="tabs-anchor" />
       <Dashboard tab={tab} onTabChange={setTab} provider={provider} bookings={bookings} onProviderChanged={detail.reload} />
+    </div>
+  )
+}
+
+// Your listings (one per vertical): switch between them, or add another service.
+function ListingSwitch() {
+  const { myProvider, myProviders, selectProvider } = useStore()
+  return (
+    <div className="listing-switch" aria-label="Your listings">
+      {myProviders.map((p) => (
+        <button
+          key={p.id}
+          className={`chip toggle ${p.id === myProvider?.id ? 'on' : ''}`}
+          aria-pressed={p.id === myProvider?.id}
+          onClick={() => selectProvider(p.id)}
+          title={p.display_name}
+        >
+          <VerticalIcon vertical={p.vertical} size={13} /> {myProviders.length > 1 ? verticalMeta(p.vertical).name : p.display_name}
+        </button>
+      ))}
+      <Link to="/new-listing" className="chip toggle"><Plus size={13} /> Add a service</Link>
     </div>
   )
 }

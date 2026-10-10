@@ -26,6 +26,9 @@ import Welcome from './screens/Welcome.jsx'
 import ResetPassword from './screens/ResetPassword.jsx'
 import MyWork from './screens/MyWork.jsx'
 import Planner from './screens/Planner.jsx'
+import NewListing from './screens/NewListing.jsx'
+import ServiceHome from './screens/ServiceHome.jsx'
+import Occasion from './screens/Occasion.jsx'
 import { useAuth } from './auth.jsx'
 
 const TAB_ROUTES = ['/', '/discover', '/bookings', '/inbox', '/me']
@@ -70,6 +73,9 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/my-work" element={<MyWork />} />
             <Route path="/plan" element={<Planner />} />
+            <Route path="/new-listing" element={<NewListing />} />
+            <Route path="/services/:vertical" element={<ServiceHome />} />
+            <Route path="/occasions/:slug" element={<Occasion />} />
           </Routes>
         </div>
         {showTabs && <TabBar />}

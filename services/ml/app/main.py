@@ -30,7 +30,7 @@ from .planner.auth import TokenVerifier
 from .planner.claude import ClaudeEngine, make_client
 from .planner.geocode import Nominatim, known_only
 from .planner.schema import PlanRequest
-from .planner.search import PhotographerFinder, SupabaseCatalog
+from .planner.finders import SupabaseCatalog, build_finders
 from .planner.service import Planner
 from .siglip import SigLIP
 from .store import Store
@@ -114,9 +114,8 @@ def get_planner() -> Planner:
             claude_client = make_client() if config.PLANNER_ENGINE != "rules" else None
             geocode = Nominatim() if config.PLANNER_GEOCODER == "nominatim" else known_only
             catalog = SupabaseCatalog(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY)
-            finder = PhotographerFinder(catalog, siglip=state.get("engine"))
             state["planner"] = Planner(
-                finders={"photography": finder.find},
+                finders=build_finders(catalog, siglip=state.get("engine")),  # one per vertical
                 geocode=geocode,
                 claude=ClaudeEngine(claude_client) if claude_client is not None else None,
             )

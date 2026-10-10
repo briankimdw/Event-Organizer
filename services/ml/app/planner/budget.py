@@ -8,17 +8,31 @@ from __future__ import annotations
 
 from .vocab import category_label, is_bookable
 
-# Percent of the total budget per vendor category.
+# Percent of the total budget per vendor category (vertical slugs from catalog.js).
+# For the occasions, the categories are exactly catalog.js OCCASIONS[].needs.
 SPLITS: dict[str, dict[str, float]] = {
-    # Typical US wedding: venue + food are about 60%, photography 10-12%.
+    # Typical US wedding: venue + food are about half, photography 10-12%.
     "wedding": {
-        "venue": 33, "catering": 27, "photography": 12, "florals": 7, "videography": 6,
-        "music": 5, "attire": 5, "extras": 3, "hair-makeup": 2,
+        "venue": 28, "catering": 24, "photography": 11, "florals": 7, "videography": 6, "music": 5,
+        "planning": 5, "rentals": 4, "hair-makeup": 3, "cakes": 3, "transportation": 2, "officiant": 2,
     },
-    # Parties, corporate events, birthdays, galas.
-    "event": {"catering": 35, "venue": 30, "photography": 12, "music": 10, "decor": 8, "extras": 5},
+    # Parties, galas, reunions (anything without its own occasion).
+    "event": {"catering": 33, "venue": 28, "photography": 12, "music": 10, "decor": 8, "bar": 6, "rentals": 3},
+    "birthday": {"catering": 30, "venue": 25, "decor": 10, "music": 10, "photography": 10, "entertainment": 9,
+                 "cakes": 6},
+    # Mostly about the photos; a party (catering, venue...) when the user plans one.
+    "graduation": {"photography": 40, "catering": 30, "venue": 15, "decor": 8, "cakes": 7},
+    # A proposal: photographer to catch it, a planner to stage it, then dinner.
+    "engagement": {"photography": 30, "private-chef": 25, "planning": 20, "florals": 15, "music": 10},
+    "corporate": {"catering": 30, "venue": 28, "bar": 10, "staffing": 9, "photography": 8, "rentals": 8,
+                  "planning": 7},
+    "baby-shower": {"catering": 35, "venue": 25, "decor": 15, "photography": 13, "cakes": 12},
+    "quinceanera": {"venue": 25, "catering": 25, "music": 12, "photography": 10, "decor": 10, "cakes": 6,
+                    "hair-makeup": 5},
+    "dinner-party": {"private-chef": 55, "bar": 20, "staffing": 13, "florals": 12},
+    "bachelor": {"transportation": 25, "bar": 25, "private-chef": 25, "wellness": 15, "photography": 10},
+    "holiday-party": {"catering": 32, "venue": 25, "bar": 15, "music": 10, "decor": 10, "photography": 8},
     # Photo-only bookings.
-    "graduation": {"photography": 100},
     "portrait": {"photography": 100},
     "headshots": {"photography": 100},
     "real-estate": {"photography": 100},
@@ -27,7 +41,7 @@ SPLITS: dict[str, dict[str, float]] = {
 }
 
 # Share for a needed category the event type's table doesn't list (e.g. a DJ at a portrait session).
-FALLBACK_SHARE = {"videography": 30, "hair-makeup": 10, "music": 20, "decor": 15}
+FALLBACK_SHARE = {"videography": 30, "hair-makeup": 10, "music": 20, "decor": 15, "venue": 30, "catering": 30}
 DEFAULT_SHARE = 10
 
 

@@ -271,6 +271,9 @@ RX_GUESTS = [
     re.compile(r"\bguest\s*(?:count|list)\s*(?:of|is|:|around|about|~)?\s*(?:about|around|~)?\s*(\d+)", I),
     re.compile(r"\bhead\s*count\s*(?:of|is|:)?\s*(?:about|around|~)?\s*(\d+)", I),
     re.compile(r"\b(\d+)[-\s]person\b", I),
+    # "catering for 80", "a chef for 12", "drinks for 150", "feed 80"
+    re.compile(r"\b(?:cater(?:ing|er)?|food|dinner|chef|drinks|bar|feed)\s+(?:for\s+)?(\d{1,5})\b"
+               r"(?!\s*(?:hours?|hrs?|minutes?|mins?|days?|dollars|bucks|k\b|%|am\b|pm\b|:|/))", I),
 ]
 
 
@@ -303,7 +306,18 @@ def parse_hours(text: str) -> Optional[float]:
 # =========================================================================== words
 # Event type keywords. The earliest mention in the text wins; ties go to the first listed.
 EVENT_PATTERNS: list[tuple[str, str]] = [
-    ("event", r"grad(?:uation)?\s+part(?:y|ies)|engagement\s+part(?:y|ies)|bridal\s+shower|baby\s+shower|rehearsal\s+dinner"),
+    ("event", r"grad(?:uation)?\s+part(?:y|ies)|engagement\s+part(?:y|ies)|bridal\s+shower|rehearsal\s+dinner"),
+    ("baby-shower", r"baby\s+showers?|gender\s+reveal|sip\s+and\s+see|baby\s+sprinkle"),
+    ("quinceanera", r"quincea[nñ]eras?|quinces?|xv\s+a[nñ]os|sweet\s+(?:16|sixteen)"),
+    ("bachelor", r"bachelor(?:ette)?(?:\s+part(?:y|ies)|\s+weekend)?|stag\s+(?:do|party)|hen\s+(?:do|party)"),
+    ("holiday-party", r"holiday\s+part(?:y|ies)|christmas\s+part(?:y|ies)|xmas\s+part(?:y|ies)|"
+                      r"new\s+year'?s?(?:\s+eve)?\s+part(?:y|ies)|office\s+holiday|friendsgiving|hanukkah\s+part(?:y|ies)"),
+    ("corporate", r"corporate\s+(?:event|party|retreat|offsite|dinner|mixer|gala)s?|company\s+(?:party|event|offsite|retreat)s?|"
+                  r"offsites?|team[\s-]building|team\s+(?:offsite|dinner|retreat)|conference|product\s+launch|launch\s+party|"
+                  r"networking\s+event"),
+    ("dinner-party", r"dinner\s+part(?:y|ies)|private\s+dinner|supper\s+club|dinner\s+at\s+(?:my|our)\s+(?:place|home|house)"),
+    ("engagement", r"proposal|propos(?:e|ing)|pop(?:ping)?\s+the\s+question"),
+    ("birthday", r"birthdays?|b-?day|\d{1,3}(?:st|nd|rd|th)\s+(?:birthday|party)"),
     ("wedding", r"weddings?|elop(?:e|ement|ing)|nuptials|vow\s+renewal|bride|groom"),
     ("graduation", r"graduation|grad\s+(?:photos?|pics?|pictures?|shoot|session|portraits?)|grad|commencement|"
                    r"senior\s+(?:photos?|pictures?|portraits?|session)|cap\s+and\s+gown"),
@@ -314,23 +328,37 @@ EVENT_PATTERNS: list[tuple[str, str]] = [
     ("portrait", r"portraits?|family\s+(?:photos?|pictures?|session|shoot)|maternity|newborn|"
                  r"engagement\s+(?:photos?|shoot|session|pictures?)|couples?\s+(?:photos?|shoot|session)|"
                  r"photo\s?shoot|pet\s+photos?|boudoir"),
-    ("event", r"part(?:y|ies)|birthday|quincea[nñ]era|quince|bar\s+mitzvah|bat\s+mitzvah|b'nai\s+mitzvah|gala|"
-              r"conference|corporate\s+event|concert|festival|fundraiser|reunion|anniversary|launch|celebration|"
+    ("event", r"part(?:y|ies)|bar\s+mitzvah|bat\s+mitzvah|b'nai\s+mitzvah|gala|"
+              r"concert|festival|fundraiser|reunion|anniversary|launch|celebration|"
               r"events?|reception"),
 ]
 _EVENT_RX = [(t, re.compile(rf"\b(?:{p})\b", I)) for t, p in EVENT_PATTERNS]
 
+# Vendor categories (catalog.js vertical slugs) and the words that ask for them:
+# "need a DJ", "catering for 80", "a florist", "photo booth"...
 CATEGORY_PATTERNS: dict[str, str] = {
     "photography": r"photo(?:s|graphy|grapher|graphers)?|pictures?|pics|head\s?shots?|portraits?|photo\s?shoot",
-    "videography": r"video(?:s|grapher|graphers|graphy)?|filmmaker|film(?:ed)?\s+(?:it|the|our|my)",
-    "venue": r"venues?|ballroom|reception\s+hall|banquet\s+hall",
-    "catering": r"cater(?:ing|er|ers)|buffet|dinner\s+service",
-    "florals": r"florals?|flowers|florists?|bouquets?",
-    "music": r"dj|djs|live\s+band|band|music|musicians?|string\s+quartet",
-    "attire": r"attire|wedding\s+dress|dress|gown|tux(?:edo)?s?",
-    "hair-makeup": r"make-?up|hair\s+and\s+make-?up|hmua|hair\s+stylists?|glam",
-    "decor": r"decor|decorations?|rentals?",
-    "extras": r"cake|stationery|invitations?|favou?rs|officiant",
+    "videography": r"video(?:s|grapher|graphers|graphy)?|filmmaker|film(?:ed)?\s+(?:it|the|our|my)|wedding\s+film",
+    "venue": r"venues?|ballroom|reception\s+hall|banquet\s+hall|event\s+space|party\s+space|place\s+to\s+(?:host|have)\s+it",
+    "catering": r"cater(?:ing|er|ers)|buffet|food\s+trucks?|dinner\s+service|feed\s+(?:everyone|the\s+guests|\d+)",
+    "private-chef": r"(?:private|personal)\s+chefs?|chefs?|tasting\s+menu",
+    "cakes": r"cakes?|cupcakes?|desserts?|dessert\s+table|bakery|bakers?|cookies|macarons",
+    "bar": r"bar(?!\s+mitzvah)|bars|bartenders?|mobile\s+bar|open\s+bar|cocktails?|drinks|mixolog(?:y|ist)|coffee\s+cart|"
+           r"booze|wine",
+    "music": r"dj|djs|live\s+band|band|music|musicians?|string\s+quartet|singer|violinist|mc|emcee",
+    "entertainment": r"entertain(?:ment|er|ers)|magicians?|magic\s+show|photobooths?|face\s+paint(?:ing|er)?|clowns?|"
+                     r"caricatur(?:e|ist)s?|dancers",
+    "florals": r"florals?|flowers|florists?|bouquets?|centerpieces?|floral\s+arch",
+    "decor": r"decor|decorations?|balloons?|backdrops?|uplighting|lighting|tablescapes?|draping",
+    "hair-makeup": r"make-?up|hair\s+and\s+make-?up|hmua|hair\s+stylists?|glam|nails|lashes|mua",
+    "rentals": r"rentals?|tables\s+and\s+chairs|chairs|tents?|linens?|bounce\s+houses?|sound\s+system|av\s+equipment|"
+               r"projector",
+    "planning": r"(?:wedding\s+|event\s+|party\s+)?planners?|coordinators?|day[\s-]of\s+coordinat(?:ion|or)",
+    "officiant": r"officiants?|officiate|celebrant|someone\s+to\s+marry\s+us",
+    "transportation": r"transport(?:ation)?|limo(?:usine)?s?|party\s+bus(?:es)?|shuttles?|chauffeurs?|classic\s+car|"
+                      r"getaway\s+car|rolls[\s-]royce",
+    "staffing": r"staff|servers|waiters?|waitstaff|wait\s+staff|valet|security|bouncers?|clean[\s-]?up\s+crew",
+    "wellness": r"massages?|yoga|spa(?:\s+day)?|wellness|personal\s+train(?:er|ing)|meditation|sound\s+bath",
 }
 _CATEGORY_RX = {c: re.compile(rf"\b(?:{p})\b", I) for c, p in CATEGORY_PATTERNS.items()}
 RX_PLANNING = re.compile(r"\b(organi[sz]e|plan|planning|coordinate|everything|whole\s+thing|entire|full\s+event)\b", I)
@@ -365,6 +393,7 @@ def parse_event_type(text: str) -> Optional[str]:
 
 def parse_categories(text: str) -> list[str]:
     t = re.sub(r"cap\s+and\s+gown", " ", text, flags=I)
+    t = re.sub(r"photo\s+booth", "photobooth", t, flags=I)  # entertainment, not photography
     return [c for c in CATEGORIES if c in _CATEGORY_RX and _CATEGORY_RX[c].search(t)]
 
 

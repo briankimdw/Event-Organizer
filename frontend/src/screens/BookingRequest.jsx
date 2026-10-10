@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import { getProvider, freeDays } from '../api/catalog.js'
+import { attributeLines, quantityFor, sessionNoun, verticalConfig } from '../verticals/index.js'
 import { bookingError, requestBooking } from '../api/bookings.js'
 import useQuery from '../lib/useQuery.js'
 import { addDays, fmtBooking, fmtChip, fromKey, isPast, parseDates, toKey, today } from '../lib/dates.js'
@@ -30,7 +31,7 @@ export default function BookingRequest() {
 
   if (loading && !p) return <><TopBar title="Request booking" /><Loading /></>
   if (error) return <><TopBar title="Request booking" /><ErrorState error={error} onRetry={reload} /></>
-  if (!p) return <><TopBar title="Request booking" /><EmptyState icon={CalendarX} title="Photographer not found" text="This listing may have been removed." /></>
+  if (!p) return <><TopBar title="Request booking" /><EmptyState icon={CalendarX} title="Listing not found" text="This listing may have been removed." /></>
   if (!p.packages.length)
     return (
       <>
@@ -53,6 +54,7 @@ function RequestForm({ p }) {
   const initialPkg = p.packages.some((x) => x.id === params.get('pkg')) ? params.get('pkg') : p.packages[0].id
   const [pkgId, setPkgId] = useState(initialPkg)
   const [hours, setHours] = useState(null)
+  const [quantity, setQuantity] = useState(null) // guests / items / days (null = the package's default)
   // Dates picked in a date search arrive pre-selected; each selected date becomes its own request.
   const [requestedDates] = useState(() => parseDates(params.get('dates')).filter((k) => !isPast(fromKey(k))))
   const [dates, setDates] = useState(requestedDates) // 'YYYY-MM-DD'[]
@@ -81,10 +83,15 @@ function RequestForm({ p }) {
   }
 
   const pkg = p.packages.find((x) => x.id === pkgId)
+  const config = verticalConfig(p.vertical)
   const isQuote = pkg.priceType === 'quote' || pkg.price == null
   const isHourly = pkg.priceType === 'hourly'
+  const isDaily = pkg.priceType === 'daily' // charged once per booked day: each date picked is a day
   const hrs = hours ?? pkg.hours ?? 1
-  const base = isQuote ? 0 : isHourly ? pkg.price * hrs : pkg.price
+  // Per-person, per-item and per-day packages are priced × a quantity.
+  const qty = quantityFor(pkg, p.vertical)
+  const count = qty ? Math.min(qty.max, Math.max(qty.min, quantity ?? qty.default)) : null
+  const base = isQuote ? 0 : isHourly ? pkg.price * hrs : qty ? pkg.price * count : pkg.price
   const chosenAddons = p.addons.filter((a) => addons.includes(a.id))
   const addonTotal = chosenAddons.reduce((s, a) => s + (a.price ?? 0), 0)
   const total = base + addonTotal
@@ -104,6 +111,7 @@ function RequestForm({ p }) {
         dates,
         startTime: time,
         hours: isHourly ? hrs : null,
+        quantity: qty ? count : null, // only sent for packages priced per guest / item / day
         addonIds: addons,
         location: loc.trim(),
         notes: note.trim(),
@@ -126,13 +134,11 @@ function RequestForm({ p }) {
         <h4 className="section-title">Package</h4>
         {p.packages.map((x) => (
           <label key={x.id} className={`option ${pkgId === x.id ? 'on' : ''}`}>
-            <input type="radio" checked={pkgId === x.id} onChange={() => { setPkgId(x.id); setHours(null) }} />
+            <input type="radio" checked={pkgId === x.id} onChange={() => { setPkgId(x.id); setHours(null); setQuantity(null) }} />
             <div className="grow">
               <b>{x.name}</b>
               <div className="muted small">
-                {[x.hours && `${x.hours}h`, x.editedPhotos && `${x.editedPhotos} photos`, x.turnaroundDays && `${x.turnaroundDays}-day turnaround`]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {[x.hours && `${x.hours}h`, ...attributeLines(config.packageFields, x.attributes, config.packageKeys)].filter(Boolean).join(' · ')}
               </div>
             </div>
             <b>{priceLabel(x)}</b>
@@ -148,6 +154,10 @@ function RequestForm({ p }) {
               <button onClick={() => setHours(Math.min(12, hrs + 0.5))}>+</button>
             </div>
           </div>
+        )}
+
+        {qty && !isQuote && (
+          <QuantityStepper qty={qty} value={count} onChange={setQuantity} priceText={priceLabel(pkg)} />
         )}
 
         <h4 className="section-title">{dates.length > 1 ? `Dates (${dates.length})` : 'Date'}</h4>
@@ -217,7 +227,7 @@ function RequestForm({ p }) {
         )}
 
         <h4 className="section-title">Notes for {first}</h4>
-        <textarea className="input" rows={3} placeholder="Tell them about the shoot…" value={note} onChange={(e) => setNote(e.target.value)} />
+        <textarea className="input" rows={3} placeholder={`Tell them about your ${sessionNoun(p.vertical)}…`} value={note} onChange={(e) => setNote(e.target.value)} />
 
         <h4 className="section-title">Price</h4>
         {isQuote ? (
@@ -226,13 +236,16 @@ function RequestForm({ p }) {
           </div>
         ) : (
           <div className="summary">
-            <div className="row between"><span>{pkg.name}{isHourly ? ` (${hrs}h × ${money(pkg.price)})` : ''}</span><span>{money(base)}</span></div>
+            <div className="row between">
+              <span>{pkg.name}{isHourly ? ` (${hrs}h × ${money(pkg.price)})` : qty ? ` (${count} ${qty.label.toLowerCase()} × ${money(pkg.price)})` : ''}</span>
+              <span>{money(base)}</span>
+            </div>
             {chosenAddons.map((a) => (
               <div key={a.id} className="row between"><span>{a.name}</span><span>{money(a.price)}</span></div>
             ))}
-            <div className="row between total"><span>{dates.length > 1 ? 'Per date' : 'Total'}</span><span>{money(total)}</span></div>
+            <div className="row between total"><span>{dates.length > 1 ? (isDaily ? 'Per day' : 'Per date') : 'Total'}</span><span>{money(total)}</span></div>
             {dates.length > 1 && (
-              <div className="row between total"><span>Total for {dates.length} dates</span><span>{money(total * dates.length)}</span></div>
+              <div className="row between total"><span>Total for {dates.length} {isDaily ? 'days' : 'dates'}</span><span>{money(total * dates.length)}</span></div>
             )}
             {pkg.depositPct > 0 && (
               <div className="row between muted small"><span>Deposit to confirm ({pkg.depositPct}%){dates.length > 1 && ', per date'}</span><span>{money(deposit)}</span></div>
@@ -264,6 +277,42 @@ function RequestForm({ p }) {
                   ? `Send request · ${fmtBooking(fromKey(dates[0]))}`
                   : `Send ${dates.length} requests`}
         </button>
+      </div>
+    </div>
+  )
+}
+
+// Guests / items / days for a package priced per person, per item or per day.
+// Tap − / + or type a number; min/max come from the package (e.g. min_guests).
+function QuantityStepper({ qty, value, onChange, priceText }) {
+  const [draft, setDraft] = useState(null) // text while typing
+  const step = qty.max >= 200 && value >= 20 ? 5 : 1
+  const clamp = (n) => Math.min(qty.max, Math.max(qty.min, Math.round(n)))
+  const commit = () => {
+    if (draft != null && draft.trim() !== '' && !Number.isNaN(Number(draft))) onChange(clamp(Number(draft)))
+    setDraft(null)
+  }
+  const range = qty.max < 100000 && qty.min > 1 ? `${qty.min}–${qty.max.toLocaleString()}` : qty.min > 1 ? `at least ${qty.min}` : `up to ${qty.max.toLocaleString()}`
+  return (
+    <div className="qty-row">
+      <div>
+        <b className="small">{qty.label}</b>
+        <div className="muted tiny">{range} · {priceText}</div>
+      </div>
+      <div className="stepper">
+        <button type="button" aria-label={`Fewer ${qty.label.toLowerCase()}`} disabled={value <= qty.min} onClick={() => onChange(clamp(value - step))}>−</button>
+        <input
+          type="number"
+          inputMode="numeric"
+          aria-label={qty.label}
+          min={qty.min}
+          max={qty.max}
+          value={draft ?? value}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        />
+        <button type="button" aria-label={`More ${qty.label.toLowerCase()}`} disabled={value >= qty.max} onClick={() => onChange(clamp(value + step))}>+</button>
       </div>
     </div>
   )

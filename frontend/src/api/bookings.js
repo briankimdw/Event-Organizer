@@ -11,11 +11,12 @@ const must = ({ data, error }) => {
   return data
 }
 
+// `*` (rather than a column list) so newer columns such as `quantity` (guests /
+// items / days, from the all-verticals migration) come through when they exist.
 export const BOOKING_COLUMNS = `
-  id, status, client_id, provider_id, package_id, time_range, timezone, location_text, notes,
-  subtotal_cents, addons_cents, travel_fee_cents, total_cents, deposit_cents, package_snapshot, policy_snapshot,
-  expires_at, delivered_at, completed_at, cancelled_at, created_at,
+  *,
   provider:providers!bookings_provider_id_fkey(id, slug, display_name, profile_id, identity_verified, is_pro, rating_avg, rating_count,
+    vertical:service_categories!providers_vertical_id_fkey(slug),
     profile:profiles!providers_profile_id_fkey(username, avatar_path)),
   client:profiles!bookings_client_id_fkey(id, username, display_name, avatar_path, client_rating_avg, client_rating_count),
   addons:booking_addons(name, price_cents),
@@ -60,8 +61,11 @@ export function toBooking(row, viewerId) {
     status: row.status,
     role, // 'client' if the viewer booked it, 'provider' if they're the photographer
     providerId: row.provider_id,
+    vertical: pr.vertical?.slug || 'photography', // the provider's vertical (wording, delivery steps)
+    quantity: row.quantity ?? null, // guests / items / days for per-person, per-item and daily packages
     provider: {
       id: pr.id,
+      vertical: pr.vertical?.slug || 'photography',
       profileId: pr.profile_id,
       name: pr.display_name,
       username: pr.profile?.username ?? pr.slug,
@@ -156,19 +160,21 @@ export async function getBooking(id) {
 const changed = () => invalidate('providers') // availability / ratings may have moved
 
 // Request a package on one or more days. dates: Date[] or 'YYYY-MM-DD'[]; startTime: 'HH:MM'.
+// quantity: guests / items / days for per_person, per_item and daily packages; leave it
+// null otherwise (it's only sent when set, so this works before the all-verticals migration).
 // Returns the new bookings (one per day).
-export async function requestBooking({ packageId, dates, startTime, hours = null, addonIds = [], location = null, notes = null }) {
-  const rows = must(
-    await supabase.rpc('request_booking', {
-      p_package_id: packageId,
-      p_dates: dates.map((d) => (typeof d === 'string' ? d : toKey(d))),
-      p_start_time: startTime,
-      p_hours: hours,
-      p_addon_ids: addonIds,
-      p_location_text: location || null,
-      p_notes: notes || null,
-    }),
-  )
+export async function requestBooking({ packageId, dates, startTime, hours = null, quantity = null, addonIds = [], location = null, notes = null }) {
+  const args = {
+    p_package_id: packageId,
+    p_dates: dates.map((d) => (typeof d === 'string' ? d : toKey(d))),
+    p_start_time: startTime,
+    p_hours: hours,
+    p_addon_ids: addonIds,
+    p_location_text: location || null,
+    p_notes: notes || null,
+  }
+  if (quantity != null) args.p_quantity = Math.max(1, Math.round(quantity))
+  const rows = must(await supabase.rpc('request_booking', args))
   changed()
   return rows
 }

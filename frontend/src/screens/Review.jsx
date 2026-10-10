@@ -9,6 +9,7 @@ import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import { bookingError, getBooking, submitReview } from '../api/bookings.js'
 import useQuery from '../lib/useQuery.js'
+import { sessionNoun } from '../verticals/index.js'
 
 export default function Review() {
   const { id } = useParams()
@@ -27,7 +28,7 @@ function ReviewView({ b, reload }) {
   const { toast } = useStore()
   const isClient = b.role === 'client'
   const other = isClient ? b.provider : b.client
-  const first = (other.name || '').split(' ')[0] || (isClient ? 'your photographer' : 'your client')
+  const first = (other.name || '').split(' ')[0] || (isClient ? 'your vendor' : 'your client')
   const [rating, setRating] = useState(0)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -85,7 +86,7 @@ function ReviewView({ b, reload }) {
         <TopBar title="Leave a review" />
         <EmptyState
           icon={EyeOff}
-          title={b.status === 'completed' ? 'Reviews are closed' : 'Reviews open after the shoot'}
+          title={b.status === 'completed' ? 'Reviews are closed' : `Reviews open after the ${sessionNoun(b.vertical)}`}
           text={b.status === 'completed' ? 'Reviews can be left for 14 days after a booking completes.' : 'You can review once the delivery is accepted and the booking is completed.'}
           action={<Link to={`/bookings/${b.id}`} className="btn sm">Back to booking</Link>}
         />
@@ -98,7 +99,7 @@ function ReviewView({ b, reload }) {
       <TopBar title="Leave a review" />
       <div className="pad center-col">
         <PersonAvatar id={other.id} src={other.avatar} name={other.name} username={other.username} className="avatar xl" />
-        <h3>{isClient ? `How was your shoot with ${first}?` : `How was working with ${first}?`}</h3>
+        <h3>{isClient ? `How was your ${sessionNoun(b.vertical)} with ${first}?` : `How was working with ${first}?`}</h3>
         <div className="muted small">{b.packageName} · {b.date}</div>
         <div className="mt">
           <Stars value={rating} size={36} onChange={setRating} />

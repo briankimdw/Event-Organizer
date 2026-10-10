@@ -4,7 +4,7 @@ import { Sparkles } from 'lucide-react'
 const STEPS = [
   'Reading your request',
   'Splitting the budget',
-  'Checking photographers’ calendars',
+  'Checking vendors’ calendars',
   'Ranking by style, distance and price',
 ]
 

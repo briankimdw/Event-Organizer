@@ -4,7 +4,7 @@ import { useAuth } from '../auth.jsx'
 
 // Looks like a search field; opens the full photographer search.
 // Shows the signed-in user's city (from their profile) when they've set one.
-export default function SearchLauncher({ placeholder = 'Search photographers, styles, occasions', className = '' }) {
+export default function SearchLauncher({ placeholder = 'Search vendors, styles, occasions', className = '' }) {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const city = profile?.city?.split(',')[0]?.trim()

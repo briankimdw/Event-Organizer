@@ -16,8 +16,8 @@ const DEFAULT_TZ = 'America/Los_Angeles'
 // Packages
 // ---------------------------------------------------------------------------
 
-const PACKAGE_COLUMNS =
-  'id, provider_id, category_id, name, description, price_type, price_cents, duration_minutes, deposit_pct, attributes, is_active, sort_order, category:service_categories(name)'
+// `*` so min_quantity / max_quantity come through once the all-verticals migration is applied.
+const PACKAGE_COLUMNS = '*, category:service_categories(name)'
 
 // All my packages, hidden ones included (public pages only show active ones).
 export async function listMyPackages(providerId) {
@@ -27,23 +27,42 @@ export async function listMyPackages(providerId) {
 }
 
 // Form values (dollars, hours) -> a packages row. Only sets attributes that have a value,
-// because the category schema rejects nulls.
+// because the category schemas reject nulls.
+//   form: { name, description?, categoryId, priceType, price, hours, depositPct,
+//           attributes: { min_guests: 50, cuisines: [...] } }  (keys from verticals/<slug>/config.js;
+//           run them through cleanAttributes(fields, attrs) first for typed values;
+//           min_quantity / max_quantity found there are written to their package columns) 
+// The older photography form keys (editedPhotos, turnaroundDays, editingLevel, secondShooter)
+// still work and win over `attributes` when present.
 function toRow(f) {
   const num = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v))
-  const attributes = { ...(f.attributes || {}) }
+  const attributes = {}
+  const columns = {}
+  for (const [k, v] of Object.entries(f.attributes || {})) {
+    // Guest / piece limits are columns. Only sent when the form has them, so
+    // photography packages still save on a database without these columns.
+    if (k === 'min_quantity' || k === 'max_quantity') {
+      columns[k] = v === '' || v == null ? null : Math.max(1, Math.round(Number(v)))
+      continue
+    }
+    if (v == null || v === '' || (Array.isArray(v) && !v.length)) continue
+    attributes[k] = v
+  }
   const setInt = (key, v) => {
     const n = num(v)
     if (n == null) delete attributes[key]
     else attributes[key] = Math.max(0, Math.round(n))
   }
-  setInt('edited_photos', f.editedPhotos)
-  setInt('turnaround_days', f.turnaroundDays)
-  if (f.editingLevel?.trim()) attributes.editing_level = f.editingLevel.trim().slice(0, 80)
-  else delete attributes.editing_level
+  if ('editedPhotos' in f) setInt('edited_photos', f.editedPhotos)
+  if ('turnaroundDays' in f) setInt('turnaround_days', f.turnaroundDays)
+  if ('editingLevel' in f) {
+    if (f.editingLevel?.trim()) attributes.editing_level = f.editingLevel.trim().slice(0, 80)
+    else delete attributes.editing_level
+  }
   if (f.secondShooter != null) attributes.second_shooter_included = !!f.secondShooter
   const price = num(f.price)
   const hours = num(f.hours)
-  return {
+  const row = {
     name: f.name.trim().slice(0, 80),
     category_id: f.categoryId,
     price_type: f.priceType,
@@ -51,7 +70,10 @@ function toRow(f) {
     duration_minutes: hours && hours > 0 ? Math.round(hours * 60) : null,
     deposit_pct: Math.min(100, Math.max(0, Math.round(num(f.depositPct) ?? 30))),
     attributes,
+    ...columns,
   }
+  if ('description' in f) row.description = f.description?.trim().slice(0, 1000) || null
+  return row
 }
 
 export async function createPackage(providerId, form) {
@@ -77,6 +99,18 @@ export async function setPackageActive(id, active) {
   const row = must(await supabase.from('packages').update({ is_active: active }).eq('id', id).select(PACKAGE_COLUMNS).single())
   invalidate('providers')
   return toPackage(row)
+}
+
+// ---------------------------------------------------------------------------
+// Listing details
+// ---------------------------------------------------------------------------
+
+// Replace a listing's custom fields (cuisines, capacity, genres...). Keys must match the
+// vertical's provider JSON Schema; pass them through cleanAttributes(fields, attrs) first.
+export async function updateProviderAttributes(providerId, attributes) {
+  const row = must(await supabase.from('providers').update({ attributes }).eq('id', providerId).select('id, attributes').single())
+  invalidate('providers')
+  return row.attributes
 }
 
 // ---------------------------------------------------------------------------

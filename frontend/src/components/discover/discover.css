@@ -1,0 +1,53 @@
+/* Discover: For you | Explore. Builds on styles.css (.discover, .deck, .chips...). Prefix: dc- */
+
+/* Header tabs: big text tabs, like "Following | For You" */
+.dc-tabs { display: flex; align-items: center; gap: 18px; }
+.dc-tabs button {
+  position: relative; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: #a3a3a3;
+  min-height: 44px; padding: 0 2px; transition: color .15s ease;
+}
+.dc-tabs button.on { color: var(--ink); }
+.dc-tabs button.on::after {
+  content: ''; position: absolute; left: 2px; right: 2px; bottom: 6px; height: 3px; border-radius: 999px; background: var(--ink);
+}
+.dc-tabs button:focus-visible, .dc-vchip:focus-visible, .dc-vrow:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 8px; }
+.discover .home-header, .explore .home-header { padding-top: 6px; padding-bottom: 4px; }
+.dc-icon-pill { width: 40px; height: 40px; padding: 0; justify-content: center; }
+.discover .pill-btn, .explore .pill-btn { min-height: 40px; }
+
+/* Vertical picker chip at the start of the deck's chip row */
+.dc-vchip {
+  flex-shrink: 0; gap: 5px; font-weight: 600; border: 1px solid color-mix(in srgb, var(--tint) 30%, #fff);
+  background: color-mix(in srgb, var(--tint) 10%, #fff); color: color-mix(in srgb, var(--tint) 75%, #111);
+}
+.dc-chip-divider { flex-shrink: 0; width: 1px; align-self: stretch; margin: 4px 2px; background: var(--line); }
+.discover .chips.scroll-x .chip, .explore .chips.scroll-x .chip { min-height: 34px; }
+
+/* Vertical picker sheet */
+.dc-vlist { display: flex; flex-direction: column; gap: 4px; }
+.dc-vrow { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 14px; min-height: 56px; }
+.dc-vrow:hover { background: var(--soft); }
+.dc-vrow.on { background: var(--soft); }
+.dc-soon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; margin-top: 6px; }
+.dc-soon-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); min-width: 0; }
+.dc-soon-item .tint-icon { opacity: .7; }
+
+/* Explore: masonry */
+.explore { min-height: 100%; }
+.dc-filter-row { padding-top: 2px; padding-bottom: 10px; }
+.dc-vfilter { gap: 5px; }
+.dc-vfilter svg { color: var(--tint); }
+.dc-vfilter.on svg { color: #fff; }
+.dc-masonry { display: flex; gap: 8px; padding: 0 12px; align-items: flex-start; }
+.dc-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.dc-tile { margin: 0; }
+.dc-tile-img { display: block; border-radius: 14px; overflow: hidden; background: var(--soft); transition: transform .12s ease, opacity .15s ease; }
+.dc-tile-img:active { transform: scale(.98); opacity: .9; }
+.dc-tile-img:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.dc-tile-img img { width: 100%; height: 100%; object-fit: cover; }
+.dc-tile-cap { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 0 2px; min-width: 0; }
+.dc-tile-cap .avatar { width: 22px; height: 22px; }
+.dc-tile-name { font-size: 12px; font-weight: 600; min-width: 0; flex: 1; }
+.dc-skel { border-radius: 14px; }
+.dc-sentinel { height: 1px; }
+.dc-end { padding: 20px 0 8px; }

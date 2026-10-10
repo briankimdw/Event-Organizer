@@ -1,11 +1,29 @@
-// Photographers (providers), their packages, reviews and availability, plus
-// categories. Everything here is readable while signed out.
+// Providers (photographers, caterers, venues... every vertical), their packages,
+// reviews and availability, plus categories. Everything here is readable while
+// signed out. Plain JS, shared with the Expo app.
 //
 // Screens get plain objects (see toProvider) rather than raw rows, so they
 // don't need to know column names.
+//
+// Vertical-aware API (vertical = a catalog slug like 'catering'; see verticals/catalog.js):
+//   getCategories()                     -> verticals, catalog order, merged with the database:
+//       [{ id|null, slug, name, noun, plural, icon, tint, group, priceUnit, visual, tagline, live,
+//          services: [{ id|null, slug, name, vertical, live }] }]
+//       `live` = the database has this row (false until the all-verticals migration is applied,
+//       so new verticals show a "coming soon"/"be the first" state). DB rows missing from
+//       catalog.js are appended with generic fallbacks.
+//   getVerticalInfo(slug)               -> one entry of getCategories(), or null
+//   getServices(vertical = 'photography') -> [{ id, slug, name, vertical }] live services (pickers)
+//   listProviders({ vertical } = {})    -> active providers, all verticals unless `vertical` is set
+//   searchProviders({ vertical, service, category, dates, maxPrice, minRating, proOnly })
+//       `service` (or legacy `category`) may be a service or vertical slug; `vertical` narrows further.
+//   countProvidersByVertical()          -> { photography: 7, catering: 0, ... } (cached; only verticals with providers)
+// Each provider object carries `vertical` (slug), `verticalInfo` (catalog metadata:
+// name, noun, plural, icon, tint, visual, priceUnit) and `attributes` (its custom fields).
 import { supabase } from '../lib/supabase.js'
 import { avatarUrl, dollars, photoUrl, policyFromRules, toPackage } from '../lib/format.js'
 import { toKey } from '../lib/dates.js'
+import { VERTICALS, verticalMeta, verticalOfService } from '../verticals/index.js'
 import { parsePoint } from './locations.js'
 
 const must = ({ data, error }) => {
@@ -34,12 +52,60 @@ export const invalidate = (prefix = '') => {
 // Categories
 // ---------------------------------------------------------------------------
 
-// Services under Photography: [{ id, slug, name }] in display order.
+// The vertical metadata screens need on a provider (kept small: no services list).
+const verticalInfo = (slug, row) => {
+  const m = verticalMeta(slug, row)
+  return { slug: m.slug, name: m.name, noun: m.noun, plural: m.plural, icon: m.icon, tint: m.tint, group: m.group, priceUnit: m.priceUnit, visual: m.visual, concurrent: m.concurrent }
+}
+
+const categoryRows = () =>
+  cached('categories:rows', async () =>
+    must(await supabase.from('service_categories').select('id, slug, name, kind, parent_id, sort_order, is_active').order('sort_order')),
+  )
+
+// Every vertical (catalog order) with its services, merged with the database rows.
+// See the top of this file for the shape.
 export const getCategories = () =>
   cached('categories', async () => {
-    const rows = must(await supabase.from('service_categories').select('id, slug, name, kind, parent_id, sort_order').eq('is_active', true).order('sort_order'))
-    const photography = rows.find((c) => c.slug === 'photography')
-    return rows.filter((c) => c.parent_id === photography?.id).map(({ id, slug, name }) => ({ id, slug, name }))
+    const rows = (await categoryRows()).filter((r) => r.is_active)
+    const verticalRows = rows.filter((r) => r.kind === 'vertical' || !r.parent_id)
+    const bySlug = new Map(rows.map((r) => [r.slug, r]))
+    const childrenOf = (id) => rows.filter((r) => r.parent_id === id)
+    const build = (meta, vRow) => {
+      const dbServices = vRow ? childrenOf(vRow.id) : []
+      const known = new Set(meta.services.map((s) => s.slug))
+      const services = [
+        ...meta.services.map((s) => {
+          const row = bySlug.get(s.slug)
+          return { id: row?.id ?? null, slug: s.slug, name: s.name, vertical: meta.slug, live: !!row }
+        }),
+        ...dbServices.filter((r) => !known.has(r.slug)).map((r) => ({ id: r.id, slug: r.slug, name: r.name, vertical: meta.slug, live: true })),
+      ]
+      const { services: _drop, known: _k, ...rest } = meta
+      return { ...rest, id: vRow?.id ?? null, live: !!vRow, services }
+    }
+    const fromCatalog = VERTICALS.map((v) => build(verticalMeta(v.slug), bySlug.get(v.slug)))
+    const extra = verticalRows.filter((r) => !VERTICALS.some((v) => v.slug === r.slug)).map((r) => build(verticalMeta(r.slug, r), r))
+    return [...fromCatalog, ...extra]
+  })
+
+/** One vertical from getCategories() (with services and `live`), or null. */
+export const getVerticalInfo = async (slug) => (await getCategories()).find((v) => v.slug === slug) ?? null
+
+/** Live services (with database ids) of one vertical, for pickers: [{ id, slug, name, vertical }]. */
+export const getServices = async (vertical = 'photography') =>
+  ((await getVerticalInfo(vertical))?.services || []).filter((s) => s.live).map(({ id, slug, name, vertical: v }) => ({ id, slug, name, vertical: v }))
+
+/** { [verticalSlug]: number of active providers } (only verticals with at least one). Cached for a minute. */
+export const countProvidersByVertical = () =>
+  cached('providers:counts', async () => {
+    const rows = must(await supabase.from('providers').select('vertical:service_categories!providers_vertical_id_fkey(slug)').eq('status', 'active'))
+    const counts = {}
+    for (const r of rows) {
+      const slug = r.vertical?.slug
+      if (slug) counts[slug] = (counts[slug] || 0) + 1
+    }
+    return counts
   })
 
 // ---------------------------------------------------------------------------
@@ -49,10 +115,11 @@ export const getCategories = () =>
 const LIST_COLUMNS = `
   id, profile_id, slug, display_name, bio, city, base_location, service_radius_km, travel_fee_per_km_cents, timezone,
   attributes, status, identity_verified, is_pro, rating_avg, rating_count, created_at,
+  vertical:service_categories!providers_vertical_id_fkey(slug, name),
   profile:profiles!providers_profile_id_fkey(id, username, display_name, avatar_path),
   policy:cancellation_policies!providers_cancellation_policy_id_fkey(name, rules),
   services:provider_services(category:service_categories(slug, name, sort_order)),
-  packages(id, provider_id, category_id, name, description, price_type, price_cents, duration_minutes, deposit_pct, attributes, is_active, sort_order),
+  packages(*),
   albums(id, created_at, status, cover:photos!albums_cover_photo_fk(display_path)),
   follows(count)`
 
@@ -71,9 +138,13 @@ export function toProvider(row) {
   const priced = packages.filter((p) => p.price != null)
   const attrs = row.attributes || {}
   const fee = row.travel_fee_per_km_cents
+  const vertical = row.vertical?.slug || services.map((s) => verticalOfService(s.slug)?.slug).find(Boolean) || 'photography'
   return {
     id: row.id,
     kind: 'provider',
+    vertical, // 'photography', 'catering'...
+    verticalInfo: verticalInfo(vertical, row.vertical), // { name, noun, plural, icon, tint, visual, priceUnit... }
+    attributes: attrs, // the vertical's custom fields (cuisines, capacity...)
     profileId: row.profile_id,
     slug: row.slug,
     name: row.display_name,
@@ -110,12 +181,18 @@ export function toProvider(row) {
   }
 }
 
-// Every active photographer (cached for a minute).
-export const listProviders = () =>
+// Every active provider (cached for a minute). { vertical: 'catering' } keeps one vertical.
+// (Also safe to pass straight to useQuery / .then: a non-object argument means "all".)
+const allProviders = () =>
   cached('providers', async () => {
     const rows = must(await supabase.from('providers').select(LIST_COLUMNS).eq('status', 'active').order('rating_count', { ascending: false }))
     return rows.map(toProvider)
   })
+export const listProviders = async (opts) => {
+  const vertical = opts && typeof opts === 'object' ? opts.vertical : null
+  const all = await allProviders()
+  return vertical ? all.filter((p) => p.vertical === vertical) : all
+}
 
 // One photographer with add-ons, reviews and working hours.
 // `id` may be the provider id, the owner's profile id, or the slug.
@@ -126,10 +203,12 @@ export async function getProvider(id) {
      package_addons(id, name, price_cents, is_active, sort_order),
      availability_rules(weekday, start_time, end_time)`,
   )
+  // A profile id may own several listings (one per vertical): prefer an exact
+  // provider id, else the owner's first listing.
   q = isUuid ? q.or(`id.eq.${id},profile_id.eq.${id}`) : q.eq('slug', id)
-  const rows = must(await q.limit(1))
+  const rows = must(await q.order('created_at').limit(5))
   if (!rows.length) return null
-  const row = rows[0]
+  const row = rows.find((r) => r.id === id) || rows[0]
   const provider = toProvider(row)
   provider.addons = (row.package_addons || [])
     .filter((a) => a.is_active)
@@ -224,14 +303,16 @@ export const toPerson = (row) => ({
 // ---------------------------------------------------------------------------
 
 // Server-side search. dates: Date[] or 'YYYY-MM-DD'[]. Returns providers (from
-// listProviders) that match, each with freeDates ('YYYY-MM-DD'[]), sorted by
-// "free on the most dates", then price.
-export async function searchProviders({ dates = [], category = null, maxPrice = null, minRating = null, proOnly = false } = {}) {
+// listProviders) that match, each with freeDates ('YYYY-MM-DD'[]).
+//   service:  a service slug ('buffet') or vertical slug; `category` is the older name for it.
+//   vertical: keep one vertical (also implied by a service slug).
+export async function searchProviders({ dates = [], vertical = null, service = null, category = null, maxPrice = null, minRating = null, proOnly = false } = {}) {
   const keys = dates.map((d) => (typeof d === 'string' ? d : toKey(d)))
+  const slug = service || category || vertical || null
   const [rows, all] = await Promise.all([
     supabase.rpc('search_providers', {
       p_dates: keys.length ? keys : null,
-      p_category: category || null,
+      p_category: slug,
       p_max_price_cents: maxPrice == null ? null : Math.round(maxPrice * 100),
       p_min_rating: minRating || null,
       p_pro_only: !!proOnly,
@@ -239,7 +320,9 @@ export async function searchProviders({ dates = [], category = null, maxPrice = 
     listProviders(),
   ])
   const byId = new Map(all.map((p) => [p.id, p]))
-  return rows.filter((r) => byId.has(r.provider_id)).map((r) => ({ ...byId.get(r.provider_id), freeDates: r.free_dates || [] }))
+  return rows
+    .filter((r) => byId.has(r.provider_id) && (!vertical || byId.get(r.provider_id).vertical === vertical))
+    .map((r) => ({ ...byId.get(r.provider_id), freeDates: r.free_dates || [] }))
 }
 
 // Which of these days a photographer is free on (working hours, blocked-off

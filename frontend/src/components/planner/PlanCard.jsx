@@ -17,7 +17,7 @@ export default function PlanCard() {
         <span className="plan-ai-mark lg"><Sparkles size={18} /></span>
         <span className="grow">
           <b>Plan an event with AI</b>
-          <span className="muted small block">Say when, where and your budget. Get a draft plan and photographers who fit.</span>
+          <span className="muted small block">Say when, where and your budget. Get a draft plan and vendors who fit.</span>
         </span>
       </Link>
       <form className="plan-promo-input" onSubmit={submit}>

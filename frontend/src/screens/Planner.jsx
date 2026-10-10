@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BookmarkCheck, BookmarkPlus, Camera, Clock, FolderOpen, GraduationCap, Heart, MessageCircleQuestion, PlugZap, SquarePen, Sparkles, UserSquare } from 'lucide-react'
+import { BookmarkCheck, BookmarkPlus, Cake, Clock, FolderOpen, GraduationCap, Heart, MessageCircleQuestion, PlugZap, SquarePen, Sparkles, UserSquare } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import Sheet from '../components/Sheet.jsx'
 import { Loading, SignInPrompt } from '../components/States.jsx'
@@ -28,7 +28,7 @@ function examples() {
     { icon: Heart, text: `A wedding in Napa, June 11–13 ${juneYear}, about $15k all in, 120 guests` },
     { icon: GraduationCap, text: `Grad photos at UCLA the first week of June ${juneYear}, under $400` },
     { icon: UserSquare, text: `Team headshots for 12 people at our SF office in ${next}, $1,500` },
-    { icon: Camera, text: 'A moody portrait session in downtown LA at golden hour, around $300' },
+    { icon: Cake, text: 'A backyard birthday for 40 in Pasadena next month, with catering and a DJ, $3,000' },
   ]
 }
 
@@ -45,7 +45,7 @@ export default function Planner() {
         <div className="plan-intro pad-x">
           <span className="plan-ai-mark xl"><Sparkles size={24} /></span>
           <h2>Plan your event in a sentence</h2>
-          <p className="muted small">Tell me the occasion, dates, place and budget. I’ll draft a budget and find photographers who are free and fit. You approve every booking.</p>
+          <p className="muted small">Tell me the occasion, dates, place and budget. I’ll draft a budget and find vendors who are free and fit. You approve every booking.</p>
         </div>
         <SignInPrompt title="Sign in to plan with AI" text="Plans are saved to your account so you can come back to them." />
       </div>
@@ -207,7 +207,7 @@ function PlannerChat() {
         <div className="plan-intro pad-x">
           <span className="plan-ai-mark xl"><Sparkles size={24} /></span>
           <h2>What are you planning?</h2>
-          <p className="muted small">Tell me the occasion, dates, place and budget. I’ll draft a budget and find photographers who are free and fit. You approve every booking.</p>
+          <p className="muted small">Tell me the occasion, dates, place and budget. I’ll draft a budget and find vendors who are free and fit. You approve every booking.</p>
           <Composer
             hero
             autoFocus
@@ -336,7 +336,7 @@ function PlanResult({ plan, mock, busy, providers, providersState, onEdit, onAns
       <BudgetBreakdown budget={budget} total={brief?.budget_total_cents} />
 
       {providersState.loading && !providersState.data ? (
-        <Loading inline label="Loading photographers…" />
+        <Loading inline label="Loading vendors…" />
       ) : (
         <Recommendations recommendations={recommendations} providers={providers} brief={brief} />
       )}
@@ -345,8 +345,8 @@ function PlanResult({ plan, mock, busy, providers, providersState, onEdit, onAns
         <div className="plan-card plan-soon">
           <Clock size={16} className="muted" />
           <div className="grow">
-            <b className="small">Coming soon: {comingSoon.map((c) => c.label).join(', ')}</b>
-            <div className="muted tiny">Their share stays in the budget so the numbers add up. You’ll be able to book them here later.</div>
+            <b className="small">Not bookable here yet: {comingSoon.map((c) => c.label).join(', ')}</b>
+            <div className="muted tiny">Their share stays in the budget so the numbers add up. Know someone great? Invite them from Search.</div>
           </div>
         </div>
       )}
@@ -361,7 +361,7 @@ function PlanResult({ plan, mock, busy, providers, providersState, onEdit, onAns
               {save.saving ? 'Saving…' : save.saved ? 'Save changes to this event' : 'Save as event'}
             </button>
           )}
-          <div className="muted tiny plan-fineprint">The planner only drafts. Nothing is booked until you send a request and the photographer accepts.</div>
+          <div className="muted tiny plan-fineprint">The planner only drafts. Nothing is booked until you send a request and the vendor accepts.</div>
         </div>
       )}
     </div>

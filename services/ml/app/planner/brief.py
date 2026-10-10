@@ -8,7 +8,7 @@ from typing import Optional
 from .budget import default_services
 from .geocode import Geocoder
 from .schema import Brief, LatLng
-from .vocab import CATEGORIES, EVENT_LABELS, EVENT_TYPES
+from .vocab import CATEGORIES, EVENT_LABELS, EVENT_TYPES, GUEST_EVENT_TYPES
 
 MAX_DATES = 14
 MAX_QUESTIONS = 2
@@ -137,7 +137,7 @@ def missing_questions(b: Brief, today: date, month_hint: Optional[str] = None) -
     if b.budget_total_cents is None:
         photo_only = b.services_needed == ["photography"]
         qs.append("What's your budget for photos?" if photo_only else "What's your total budget?")
-    if b.guest_count is None and b.event_type in ("wedding", "event"):
+    if b.guest_count is None and b.event_type in GUEST_EVENT_TYPES:
         qs.append("About how many guests?")
     return qs[:MAX_QUESTIONS]
 

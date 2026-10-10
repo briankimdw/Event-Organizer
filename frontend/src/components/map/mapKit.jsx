@@ -24,16 +24,17 @@ const esc = (s = '') => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
 
 // Round avatar pin. Icons are cached so markers don't re-render their DOM.
 const icons = new Map()
-// dim: faded (e.g. outside the searched map area).
-export function avatarIcon(avatar, { selected = false, size = 40, dim = false } = {}) {
-  const key = `${avatar}|${selected}|${size}|${dim}`
+// dim: faded (e.g. outside the searched map area). tint: ring color (the provider's vertical).
+const tintStyle = (tint) => (tint && /^#[0-9a-f]{3,8}$/i.test(tint) ? `;--tint:${tint}` : '')
+export function avatarIcon(avatar, { selected = false, size = 40, dim = false, tint = null } = {}) {
+  const key = `${avatar}|${selected}|${size}|${dim}|${tint}`
   if (!icons.has(key)) {
     const box = selected ? size + 8 : size
     icons.set(
       key,
       L.divIcon({
         className: 'pm-pin-wrap',
-        html: `<div class="pm-pin${selected ? ' on' : ''}${dim ? ' dim' : ''}" style="width:${box}px;height:${box}px"><img src="${esc(avatar)}" alt="" draggable="false"/></div>`,
+        html: `<div class="pm-pin${selected ? ' on' : ''}${dim ? ' dim' : ''}${tint ? ' tinted' : ''}" style="width:${box}px;height:${box}px${tintStyle(tint)}"><img src="${esc(avatar)}" alt="" draggable="false"/></div>`,
         iconSize: [box, box],
         iconAnchor: [box / 2, box / 2],
       }),
@@ -43,14 +44,14 @@ export function avatarIcon(avatar, { selected = false, size = 40, dim = false } 
 }
 
 // A group of pins too close to tell apart: the first avatar with a count badge.
-export function clusterIcon(avatar, count, { size = 40, dim = false } = {}) {
-  const key = `cluster|${avatar}|${count}|${size}|${dim}`
+export function clusterIcon(avatar, count, { size = 40, dim = false, tint = null } = {}) {
+  const key = `cluster|${avatar}|${count}|${size}|${dim}|${tint}`
   if (!icons.has(key)) {
     icons.set(
       key,
       L.divIcon({
         className: 'pm-pin-wrap',
-        html: `<div class="pm-cluster${dim ? ' dim' : ''}" style="width:${size}px;height:${size}px"><div class="pm-pin pm-stack"></div><div class="pm-pin"><img src="${esc(avatar)}" alt="" draggable="false"/></div><span class="pm-count">${count}</span></div>`,
+        html: `<div class="pm-cluster${dim ? ' dim' : ''}" style="width:${size}px;height:${size}px"><div class="pm-pin pm-stack"></div><div class="pm-pin${tint ? ' tinted' : ''}" style="${tintStyle(tint).slice(1)}"><img src="${esc(avatar)}" alt="" draggable="false"/></div><span class="pm-count">${count}</span></div>`,
         iconSize: [size, size],
         iconAnchor: [size / 2, size / 2],
       }),

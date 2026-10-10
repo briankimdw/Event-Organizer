@@ -404,7 +404,7 @@ function ChatInfo({ open, onClose, conversation: c, onChanged, onLeft, onReport 
               <img className="avatar" src={m.avatar} alt="" />
               <div className="grow">
                 <div>{m.name}</div>
-                {m.username && <div className="muted tiny">@{m.username}{m.isPhotographer ? ' · Photographer' : ''}</div>}
+                {m.username && <div className="muted tiny">@{m.username}{m.isPhotographer ? ' · Vendor' : ''}</div>}
               </div>
               <ChevronRight size={16} className="muted" />
             </Link>

@@ -57,7 +57,7 @@ export default function Gallery() {
         <EmptyState
           icon={ImageOff}
           title={data ? 'No albums yet' : 'Portfolio not found'}
-          text={data ? `${data.provider.name} hasn’t posted any work yet.` : 'This photographer doesn’t exist or is no longer listed.'}
+          text={data ? `${data.provider.name} hasn’t posted any work yet.` : 'This profile doesn’t exist or is no longer listed.'}
           action={<Link to={data ? `/u/${data.provider.id}` : '/'} className="btn sm">{data ? 'View profile' : 'Go home'}</Link>}
         />
       </div>
@@ -559,7 +559,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
           <>
             <h4 className="section-title">Tags</h4>
             <div className="chips">
-              {album.genre && <Link to={`/search?cat=${encodeURIComponent(album.genre)}`} className="chip solid chip-link" aria-label={`Find ${album.genre} photographers`}>{album.genre}</Link>}
+              {album.genre && <Link to={`/search?cat=${encodeURIComponent(album.genre)}`} className="chip solid chip-link" aria-label={`Find more ${album.genre}`}>{album.genre}</Link>}
               {(album.tags || []).map((t) => <span key={t} className="chip">#{t}</span>)}
               {(album.autoTags || []).map((t) => (
                 <span key={t} className="chip auto" title="Suggested automatically from the photos"><Sparkles size={11} /> {t}</span>
@@ -625,7 +625,7 @@ export function PostRedirect() {
     return (
       <div className="reel reel-state">
         <GalleryClose />
-        <EmptyState icon={ImageOff} title="Post not found" text="It may have been removed by the photographer."
+        <EmptyState icon={ImageOff} title="Post not found" text="It may have been removed by its owner."
           action={<Link to="/" className="btn sm">Go home</Link>} />
       </div>
     )

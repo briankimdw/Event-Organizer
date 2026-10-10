@@ -12,7 +12,8 @@ import { Posted, PostFailed, Posting } from '../components/upload/PostingStatus.
 import { useAuth } from '../auth.jsx'
 import { useStore } from '../store.jsx'
 import { invalidate } from '../api/catalog.js'
-import { becomeProvider, getMyProvider, getPhotographyServices, getProviderServiceIds, postAlbum, slugify } from '../api/portfolio.js'
+import { getMyProvider, getProviderServiceIds, getServicesOf, postAlbum } from '../api/portfolio.js'
+import { ListingSetup } from './NewListing.jsx'
 
 const lastCategoryKey = (providerId) => `pm:last-category:${providerId}`
 const readLast = (key) => {
@@ -30,9 +31,12 @@ const friendlyError = (err) => {
 }
 
 // Post work to your portfolio. Signed-in users only; the first time, it sets up
-// the photographer listing that albums belong to.
+// the listing that albums belong to (photography by default). With several
+// listings, photos go to the one selected on the Me tab.
 export default function Upload() {
-  const { user, profile, loading } = useAuth()
+  const { user, loading } = useAuth()
+  const { myProvider } = useStore()
+  const selectedId = myProvider?.id ?? null
   const [provider, setProvider] = useState(undefined) // undefined = loading, null = none yet
   const [loadError, setLoadError] = useState(null)
   const [tick, setTick] = useState(0)
@@ -41,17 +45,17 @@ export default function Upload() {
     if (!user) return
     let live = true
     setLoadError(null)
-    getMyProvider(user.id)
+    getMyProvider(user.id, selectedId)
       .then((p) => live && setProvider(p))
       .catch((e) => live && setLoadError(e))
     return () => { live = false }
-  }, [user, tick])
+  }, [user, tick, selectedId])
 
   if (!loading && !user) {
     return (
       <div className="up-screen">
         <Header title="New post" />
-        <SignInPrompt title="Sign in to post your work" text="Share your shoots on your photographer profile so clients can find and book you." />
+        <SignInPrompt title="Sign in to post your work" text="Share your work on your profile so clients can find and book you." />
       </div>
     )
   }
@@ -71,7 +75,7 @@ export default function Upload() {
       </div>
     )
   }
-  if (provider === null) return <BecomePhotographer profile={profile} onDone={setProvider} />
+  if (provider === null) return <ListingSetup initialVertical="photography" title="Become a photographer" onDone={setProvider} />
   return <Composer provider={provider} userId={user.id} />
 }
 
@@ -95,112 +99,6 @@ function Header({ title, subtitle, onBack, close = false, right }) {
       </div>
       <div className="topbar-side right">{right}</div>
     </header>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// First time only: create the photographer listing
-// ---------------------------------------------------------------------------
-function BecomePhotographer({ profile, onDone }) {
-  const { refreshProvider, toast } = useStore()
-  const [name, setName] = useState(profile?.display_name || '')
-  const [slug, setSlug] = useState(slugify(profile?.display_name || profile?.username || ''))
-  const [slugTouched, setSlugTouched] = useState(false)
-  const [editLink, setEditLink] = useState(false)
-  const [city, setCity] = useState(profile?.city || '')
-  const [services, setServices] = useState(null)
-  const [picked, setPicked] = useState(new Set())
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    getPhotographyServices().then(setServices).catch(() => setServices([]))
-  }, [])
-
-  const slugOk = /^[a-z0-9-]{3,40}$/.test(slug)
-  const ready = name.trim().length > 0 && slugOk
-
-  const save = async (e) => {
-    e.preventDefault()
-    if (!ready) {
-      setError(!name.trim() ? 'Add the name clients will see.' : 'Your profile link needs 3–40 letters, numbers or dashes.')
-      if (!slugOk) setEditLink(true)
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      const provider = await becomeProvider({ displayName: name.trim(), slug, city: city.trim(), serviceIds: [...picked] })
-      await refreshProvider()
-      invalidate('providers')
-      toast('You’re set up. Now add your first photos.')
-      onDone(provider)
-    } catch (err) {
-      if (err.code === '23505') {
-        setEditLink(true)
-        setError('That profile link is taken. Try another.')
-      } else {
-        setError(friendlyError(err))
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <form className="up-screen" onSubmit={save} noValidate>
-      <Header title="Become a photographer" />
-      <div className="pad bp">
-        <div className="bp-hero">
-          <span className="bp-icon"><Camera size={26} /></span>
-          <h2>Show clients your work</h2>
-          <p className="muted small">Set up your photographer profile once, then post your shoots. You can change any of this later.</p>
-        </div>
-
-        <label className="field pf-field">
-          <span className="pf-label">Name clients will see</span>
-          <input className="input" maxLength={80} placeholder="Alex Rivera Photography" value={name} autoComplete="organization"
-            onChange={(e) => { setName(e.target.value); if (!slugTouched) setSlug(slugify(e.target.value)) }} />
-        </label>
-        {editLink ? (
-          <label className="field pf-field">
-            <span className="pf-label">Profile link</span>
-            <div className="input-prefix">
-              <span>photomatch.app/</span>
-              <input value={slug} maxLength={40} autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                onChange={(e) => { setSlugTouched(true); setSlug(slugify(e.target.value)) }} />
-            </div>
-            {slug && !slugOk && <small className="field-hint">3–40 characters: letters, numbers and dashes.</small>}
-          </label>
-        ) : (
-          <div className="bp-link muted tiny">
-            <span>Your link: photomatch.app/<b>{slug || '…'}</b></span>
-            <button type="button" className="link-btn accent tiny" onClick={() => setEditLink(true)}>Change</button>
-          </div>
-        )}
-
-        <label className="field pf-field">
-          <span className="pf-label">City <span className="pf-optional">optional</span></span>
-          <input className="input" maxLength={80} placeholder="Los Angeles, CA" value={city} autoComplete="address-level2" onChange={(e) => setCity(e.target.value)} />
-        </label>
-
-        <div className="field pf-field">
-          <span className="pf-label">What do you shoot? <span className="pf-optional">optional</span></span>
-          <div className="chips">
-            {services === null ? <span className="muted tiny">Loading…</span> : services.map((s) => (
-              <button type="button" key={s.id} className={`chip toggle ${picked.has(s.id) ? 'on' : ''}`} aria-pressed={picked.has(s.id)}
-                onClick={() => setPicked((prev) => { const n = new Set(prev); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n })}>
-                {s.name}
-              </button>
-            ))}
-          </div>
-        </div>
-        {error && <div className="form-error" role="alert">{error}</div>}
-      </div>
-      <div className="up-footer">
-        <button className="btn accent block" disabled={busy}>{busy ? 'Setting up…' : 'Continue'}</button>
-      </div>
-    </form>
   )
 }
 
@@ -235,7 +133,7 @@ function Composer({ provider, userId }) {
   // Categories, and a sensible default: the last one used, or the only one offered.
   useEffect(() => {
     let live = true
-    Promise.all([getPhotographyServices(), getProviderServiceIds(provider.id).catch(() => [])])
+    Promise.all([getServicesOf(provider.vertical || 'photography'), getProviderServiceIds(provider.id).catch(() => [])])
       .then(([all, mine]) => {
         if (!live) return
         // The photographer's own services first.
@@ -433,7 +331,7 @@ function Composer({ provider, userId }) {
           <CategoryField value={categoryId} services={services} error={errors.category}
             onChange={(v) => { setCategoryId(v); errors.category && setErrors((e) => ({ ...e, category: undefined })) }} />
 
-          <Disclosure title="More details" badge={<span className="pf-optional">optional</span>} summary={moreSummary || 'Caption, location, shoot date'}
+          <Disclosure title="More details" badge={<span className="pf-optional">optional</span>} summary={moreSummary || 'Caption, location, date'}
             open={openMore} onToggle={() => setOpenMore((o) => !o)}>
             <CaptionField value={caption} onChange={setCaption} />
             <PlaceDateFields location={place} onLocation={setPlace} shotOn={shotOn}

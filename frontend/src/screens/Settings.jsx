@@ -48,7 +48,7 @@ export default function Settings() {
             <div className="grow">
               <div>Identity verification</div>
               <div className={`tiny ${verified ? 'ok' : 'muted'}`}>
-                {verified ? 'Verified' : myProvider ? 'Not verified' : 'Only needed to take bookings as a photographer'}
+                {verified ? 'Verified' : myProvider ? 'Not verified' : 'Only needed to take paid bookings as a vendor'}
               </div>
             </div>
             <ChevronRight size={16} className="muted" />
@@ -65,7 +65,7 @@ export default function Settings() {
 
         {myProvider && (
           <>
-            <div className="section-label">Photographer</div>
+            <div className="section-label">Your business</div>
             <div className="settings-group">
               <div className="list-row">
                 <span className="round-icon"><Stamp size={18} /></span>

@@ -52,7 +52,7 @@ export default function Welcome() {
     <div className="pad welcome">
       <div className="wordmark">photomatch</div>
       <h1 className="signin-title mt">Welcome! What should we call you?</h1>
-      <p className="muted small">Photographers see your name when you message or book them.</p>
+      <p className="muted small">Vendors see your name when you message or book them.</p>
 
       <form onSubmit={save} className="mt">
         <label className="field">

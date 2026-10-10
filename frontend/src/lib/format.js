@@ -1,5 +1,6 @@
 // Shared formatting + small lookups used across screens (no data fetching here).
 import { supabase } from './supabase.js'
+import { priceSuffix } from '../verticals/index.js'
 
 // ---- money ------------------------------------------------------------------
 export const dollars = (cents) => (cents == null ? null : cents / 100)
@@ -9,11 +10,24 @@ export const money = (n) => {
   const cents = Math.round(Number(n) * 100) % 100 !== 0
   return `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: 2 })}`
 }
+// A package's price with its unit: "$1,200", "$150/hr", "$65 / person", "$85 each"
+// (or "$85 / centerpiece" when the package names its unit), "$3,500 / day", "Custom quote".
 export const priceLabel = (pkg) =>
-  pkg.priceType === 'quote' ? 'Custom quote' : pkg.priceType === 'hourly' ? `${money(pkg.price)}/hr` : money(pkg.price)
+  pkg.priceType === 'quote' || pkg.price == null ? 'Custom quote' : `${money(pkg.price)}${priceSuffix(pkg.priceType, pkg)}`
+// The lowest package price (dollars), or null. Units may differ between packages; see startingPackage.
 export const startingPrice = (provider) => {
   const priced = (provider.packages || []).filter((x) => x.price != null)
   return priced.length ? Math.min(...priced.map((x) => x.price)) : provider.startingPrice ?? null
+}
+// The cheapest priced package (so its unit can be shown), or null.
+export const startingPackage = (provider) =>
+  (provider.packages || []).filter((x) => x.price != null && x.priceType !== 'quote').sort((a, b) => a.price - b.price)[0] ?? null
+// "from $65 / person", "from $1,200", or null when nothing is priced.
+export const fromPriceLabel = (provider) => {
+  const pkg = startingPackage(provider)
+  if (pkg) return `from ${priceLabel(pkg)}`
+  const n = startingPrice(provider)
+  return n == null ? null : `from ${money(n)}`
 }
 
 // ---- images -----------------------------------------------------------------
@@ -90,6 +104,12 @@ export function toPackage(p) {
     turnaroundDays: a.turnaround_days ?? null,
     deliverables: a.deliverables || [],
     secondShooter: !!a.second_shooter_included,
+    // Guest / piece limits (packages.min_quantity / max_quantity, from the all-verticals migration).
+    minQuantity: p.min_quantity ?? null,
+    maxQuantity: p.max_quantity ?? null,
+    // Every custom field (cuisines, courses...) plus the limits under their column names,
+    // so field configs (verticals/) can show and edit them alike.
+    attributes: { ...a, ...(p.min_quantity != null && { min_quantity: p.min_quantity }), ...(p.max_quantity != null && { max_quantity: p.max_quantity }) },
     depositPct: p.deposit_pct,
     isActive: p.is_active !== false,
   }

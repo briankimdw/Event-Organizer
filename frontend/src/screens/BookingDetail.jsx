@@ -18,7 +18,10 @@ import {
   respondToOffer,
 } from '../api/bookings.js'
 import useQuery from '../lib/useQuery.js'
+import { deliversMedia, nounFor, quantityFor, sessionNoun } from '../verticals/index.js'
 import { today } from '../lib/dates.js'
+
+const capitalize = (s) => s[0].toUpperCase() + s.slice(1)
 
 const CANCELLABLE = ['requested', 'countered', 'accepted', 'confirmed']
 
@@ -49,7 +52,7 @@ function Detail({ b, reload }) {
   const { toast, myProvider } = useStore()
   const isClient = b.role === 'client'
   const other = isClient ? b.provider : { ...b.client, idVerified: false, pro: false }
-  const first = (other.name || (isClient ? 'The photographer' : 'The client')).split(' ')[0]
+  const first = (other.name || (isClient ? `The ${nounFor(b.vertical)}` : 'The client')).split(' ')[0]
   const [sheet, setSheet] = useState(null) // cancel | counter
   const [busy, setBusy] = useState(false)
   const [counterTotal, setCounterTotal] = useState('')
@@ -116,7 +119,13 @@ function Detail({ b, reload }) {
           ) : (
             <>
               {b.subtotal != null && (
-                <div className="row between"><span>{b.packageName}{b.pkg?.priceType === 'hourly' ? ` (${b.hours}h)` : ''}</span><span>{money(b.subtotal)}</span></div>
+                <div className="row between">
+                  <span>
+                    {b.packageName}
+                    {b.pkg?.priceType === 'hourly' ? ` (${b.hours}h)` : b.quantity ? ` (${b.quantity} ${(quantityFor(b.pkg, b.vertical)?.label || 'guests').toLowerCase()})` : ''}
+                  </span>
+                  <span>{money(b.subtotal)}</span>
+                </div>
               )}
               {b.addons.map((a) => (
                 <div key={a.name} className="row between"><span>{a.name}</span><span>{money(a.price)}</span></div>
@@ -229,19 +238,24 @@ function ClientCallout({ b, first, busy, act }) {
         </div>
       )
     case 'in_progress':
-      return <div className="callout"><b>Shoot day!</b><div className="muted small">{first} will mark the booking delivered once your photos are ready.</div></div>
-    case 'delivered':
+      return deliversMedia(b.vertical) ? (
+        <div className="callout"><b>Shoot day!</b><div className="muted small">{first} will mark the booking delivered once your {b.vertical === 'videography' ? 'video is' : 'photos are'} ready.</div></div>
+      ) : (
+        <div className="callout"><b>It’s {sessionNoun(b.vertical)} day!</b><div className="muted small">{first} will mark the booking done afterwards, and you’ll be asked to confirm.</div></div>
+      )
+    case 'delivered': {
+      const media = deliversMedia(b.vertical)
       return (
         <div className="callout accent">
-          <b>Your photos are ready</b>
+          <b>{media ? `Your ${b.vertical === 'videography' ? 'video is' : 'photos are'} ready` : `${first} marked this done`}</b>
           <div className="muted small">
-            Accept the delivery once you have your photos.
+            {media ? 'Accept the delivery once you have everything.' : 'Confirm everything went as planned.'}
             {b.deliveryExpiresDays != null && ` It's accepted automatically in ${b.deliveryExpiresDays} day${b.deliveryExpiresDays === 1 ? '' : 's'}.`}
           </div>
-          <Link to={`/bookings/${b.id}/delivery`} className="btn accent block mt-sm">View delivery</Link>
+          {media && <Link to={`/bookings/${b.id}/delivery`} className="btn accent block mt-sm">View delivery</Link>}
           <div className="row gap-xs mt-sm">
-            <button className="btn ghost sm grow" disabled={busy} onClick={() => act(() => acceptDelivery(b.id), 'Delivery accepted. You can leave a review now.')}>
-              Accept delivery
+            <button className={`btn sm grow ${media ? 'ghost' : 'accent'}`} disabled={busy} onClick={() => act(() => acceptDelivery(b.id), media ? 'Delivery accepted. You can leave a review now.' : 'Confirmed. You can leave a review now.')}>
+              {media ? 'Accept delivery' : 'Confirm it’s done'}
             </button>
             <button className="btn ghost sm grow danger" disabled title="Disputes aren't available yet">
               <ShieldAlert size={14} /> Report a problem · soon
@@ -249,6 +263,7 @@ function ClientCallout({ b, first, busy, act }) {
           </div>
         </div>
       )
+    }
     case 'completed':
       return <CompletedCallout b={b} first={first} />
     case 'disputed':
@@ -259,7 +274,7 @@ function ClientCallout({ b, first, busy, act }) {
         </div>
       )
     case 'declined':
-      return <div className="callout"><b>This request was declined</b><div className="muted small">Try another date or photographer.</div></div>
+      return <div className="callout"><b>This request was declined</b><div className="muted small">Try another date or {nounFor(b.vertical)}.</div></div>
     case 'expired':
       return <div className="callout"><b>This request expired</b><div className="muted small">{first} didn't respond in time.</div></div>
     case 'cancelled_by_client':
@@ -314,15 +329,17 @@ function ProviderCallout({ b, first, busy, act, verified, shootDayReached, openC
     case 'in_progress':
       return (
         <div className="callout">
-          <b className="inline-icon">{b.status === 'confirmed' ? <><Lock size={14} /> Booked</> : <><Clock size={14} /> Shoot in progress</>}</b>
+          <b className="inline-icon">{b.status === 'confirmed' ? <><Lock size={14} /> Booked</> : <><Clock size={14} /> {capitalize(sessionNoun(b.vertical))} in progress</>}</b>
           <div className="muted small">
             {shootDayReached || b.status === 'in_progress'
-              ? `Share the gallery with ${first} in chat, then mark the booking delivered.`
+              ? deliversMedia(b.vertical)
+                ? `Share the gallery with ${first} in chat, then mark the booking delivered.`
+                : `Once the ${sessionNoun(b.vertical)} is done, mark the booking done. ${first} confirms it.`
               : `Your calendar is locked for this date.`}
           </div>
           {(shootDayReached || b.status === 'in_progress') && (
-            <button className="btn accent block mt-sm" disabled={busy} onClick={() => act(() => markDelivered(b.id), `Marked delivered. ${first} has 7 days to accept.`)}>
-              Mark as delivered
+            <button className="btn accent block mt-sm" disabled={busy} onClick={() => act(() => markDelivered(b.id), `Marked ${deliversMedia(b.vertical) ? 'delivered' : 'done'}. ${first} has 7 days to confirm.`)}>
+              {deliversMedia(b.vertical) ? 'Mark as delivered' : 'Mark as done'}
             </button>
           )}
         </div>
@@ -330,7 +347,7 @@ function ProviderCallout({ b, first, busy, act, verified, shootDayReached, openC
     case 'delivered':
       return (
         <div className="callout">
-          <b>Delivered</b>
+          <b>{deliversMedia(b.vertical) ? 'Delivered' : 'Marked done'}</b>
           <div className="muted small">
             Waiting for {first} to accept.
             {b.deliveryExpiresDays != null && ` It's accepted automatically in ${b.deliveryExpiresDays} day${b.deliveryExpiresDays === 1 ? '' : 's'}.`}

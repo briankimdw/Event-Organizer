@@ -2,6 +2,11 @@
 // functions instead of talking to Supabase directly.
 import { supabase } from '../lib/supabase.js'
 import { fileExtension, makeDisplayCopy, readCameraSettings } from '../lib/images.js'
+import { getVertical } from '../verticals/catalog.js'
+
+// Bookings a new listing can hold at the same time when its vertical serves
+// several events at once (caterers, rentals). Owners can change it later.
+const DEFAULT_CONCURRENT = 3
 
 const must = ({ data, error }) => {
   if (error) throw error
@@ -14,16 +19,40 @@ export const publicUrl = (bucket, path) => supabase.storage.from(bucket).getPubl
 // Photographer listing
 // ---------------------------------------------------------------------------
 
-// The signed-in user's photographer listing, or null if they haven't set one up.
-export async function getMyProvider(userId) {
-  return must(await supabase.from('providers').select('*').eq('profile_id', userId).maybeSingle())
+// All of the signed-in user's listings (one per vertical), oldest first.
+// Each is a providers row plus `vertical` (slug).
+export async function getMyProviders(userId) {
+  if (!userId) return []
+  const rows = must(
+    await supabase
+      .from('providers')
+      .select('*, vertical:service_categories!providers_vertical_id_fkey(slug)')
+      .eq('profile_id', userId)
+      .order('created_at'),
+  )
+  return rows.map((r) => ({ ...r, vertical: r.vertical?.slug || 'photography' }))
 }
 
-// Services under Photography (Wedding, Graduation, ...), in display order.
-export async function getPhotographyServices() {
-  const rows = must(await supabase.from('service_categories').select('id, slug, name, kind, parent_id, sort_order').order('sort_order'))
-  const photography = rows.find((c) => c.slug === 'photography')
-  return rows.filter((c) => c.parent_id === photography?.id)
+// One of the user's listings, or null if they haven't set one up.
+// `pick`: a provider id or vertical slug to prefer; otherwise the oldest listing.
+export async function getMyProvider(userId, pick = null) {
+  const all = await getMyProviders(userId)
+  return all.find((p) => p.id === pick || p.vertical === pick) || all[0] || null
+}
+
+// Services under a vertical (Wedding, Graduation, ... for photography), in display order: [{ id, slug, name, ... }].
+export async function getServicesOf(vertical = 'photography') {
+  const rows = must(await supabase.from('service_categories').select('id, slug, name, kind, parent_id, sort_order').eq('is_active', true).order('sort_order'))
+  const parent = rows.find((c) => c.slug === vertical)
+  return parent ? rows.filter((c) => c.parent_id === parent.id) : []
+}
+// Older name, kept for existing callers.
+export const getPhotographyServices = () => getServicesOf('photography')
+
+// Is this vertical in the database yet? (New verticals arrive with a migration.)
+export async function verticalIsLive(vertical) {
+  const { data } = await supabase.from('service_categories').select('id').eq('slug', vertical).eq('is_active', true).maybeSingle()
+  return !!data
 }
 
 // Category ids a photographer offers (provider_services), e.g. to pre-pick a post's category.
@@ -32,18 +61,23 @@ export async function getProviderServiceIds(providerId) {
   return rows.map((r) => r.category_id)
 }
 
-// Create the listing (active straight away), and record which services it offers.
-export async function becomeProvider({ displayName, slug, city, serviceIds }) {
+// Create a listing in a vertical (active straight away), and record which services it offers.
+// A user can have one listing per vertical.
+export async function becomeProvider({ displayName, slug, city, serviceIds = [], vertical = 'photography', bio = null }) {
   const provider = must(await supabase.rpc('become_provider', {
     p_display_name: displayName,
     p_slug: slug,
-    p_vertical_slug: 'photography',
+    p_vertical_slug: vertical,
     p_city: city || null,
+    p_bio: bio || null,
   }))
   if (serviceIds.length) {
     must(await supabase.from('provider_services').insert(serviceIds.map((category_id) => ({ provider_id: provider.id, category_id }))))
   }
-  return must(await supabase.from('providers').update({ status: 'active' }).eq('id', provider.id).select().single())
+  // max_concurrent only exists once the all-verticals migration is applied, and
+  // only concurrent verticals need it (they don't exist before that migration).
+  const changes = getVertical(vertical)?.concurrent ? { status: 'active', max_concurrent: DEFAULT_CONCURRENT } : { status: 'active' }
+  return must(await supabase.from('providers').update(changes).eq('id', provider.id).select().single())
 }
 
 // "Maya Chen Photo" -> "maya-chen-photo"

@@ -42,7 +42,7 @@ export default function Inbox() {
       {authLoading ? (
         <Loading />
       ) : !user ? (
-        <SignInPrompt title="Sign in to see your messages" text="Chat with photographers about bookings, pricing and style." />
+        <SignInPrompt title="Sign in to see your messages" text="Chat with vendors about bookings, pricing and style." />
       ) : (
         <>
           <div className="pad-x">
@@ -59,7 +59,7 @@ export default function Inbox() {
             <EmptyState
               icon={MessageCircle}
               title="No messages yet"
-              text="Message anyone on photomatch, ask a photographer a question, or request a booking to start a thread."
+              text="Message anyone on photomatch, ask a vendor a question, or request a booking to start a thread."
               action={<Link className="btn sm" to="/inbox/new">New message</Link>}
             />
           ) : !list.length ? (

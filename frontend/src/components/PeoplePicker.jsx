@@ -62,7 +62,7 @@ export default function PeoplePicker({ selected, onChange, exclude = [], autoFoc
         <Loading inline />
       ) : !list.length ? (
         <div className="muted small pp-empty">
-          {q.trim() ? `No one found for “${q.trim()}”.` : 'Search for anyone on photomatch: photographers or clients.'}
+          {q.trim() ? `No one found for “${q.trim()}”.` : 'Search for anyone on photomatch: vendors or clients.'}
         </div>
       ) : (
         <ul className="pp-list">
@@ -76,7 +76,7 @@ export default function PeoplePicker({ selected, onChange, exclude = [], autoFoc
                     <div className="ellipsis">
                       <b>{p.name}</b>
                       {p.isPhotographer && (
-                        <span className="pp-badge" title="Photographer">
+                        <span className="pp-badge" title="Vendor">
                           <Camera size={11} />
                         </span>
                       )}

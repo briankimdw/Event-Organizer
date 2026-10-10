@@ -17,6 +17,8 @@ export default function MyWork() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { user, profile, loading } = useAuth()
+  const { myProvider } = useStore()
+  const selectedId = myProvider?.id ?? null // the listing picked in Me (users can have one per vertical)
   const [data, setData] = useState(null) // { provider, albums }
   const [error, setError] = useState(null)
   const [tick, setTick] = useState(0)
@@ -28,7 +30,7 @@ export default function MyWork() {
     setError(null)
     ;(async () => {
       try {
-        const provider = await getMyProvider(user.id)
+        const provider = await getMyProvider(user.id, selectedId)
         const rows = provider ? await listMyAlbums(provider.id) : []
         if (live) setData({ provider, albums: rows.filter((a) => a.photos?.length).map(toViewerAlbum) })
       } catch (e) {
@@ -36,7 +38,7 @@ export default function MyWork() {
       }
     })()
     return () => { live = false }
-  }, [user, tick])
+  }, [user, tick, selectedId])
 
   if (!loading && !user) {
     return (
@@ -106,7 +108,7 @@ function WorkGrid({ data, setData }) {
       <div>
         <TopBar title="My work" />
         <EmptyState icon={ImagePlus} title="Show clients your work"
-          text="Set up your photographer profile and post your first shoot."
+          text="Set up your profile and post your first work."
           action={<Link to="/upload" className="btn accent">Get started</Link>} />
       </div>
     )

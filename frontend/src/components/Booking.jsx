@@ -2,7 +2,7 @@ import { Check } from 'lucide-react'
 import { bookingSteps, statusLabels } from '../lib/format.js'
 
 // Re-exported so screens can keep importing the money helpers from here.
-export { money, priceLabel, startingPrice } from '../lib/format.js'
+export { fromPriceLabel, money, priceLabel, startingPackage, startingPrice } from '../lib/format.js'
 
 export function StatusPill({ status }) {
   return <span className={`status-pill s-${status}`}>{statusLabels[status] || status}</span>

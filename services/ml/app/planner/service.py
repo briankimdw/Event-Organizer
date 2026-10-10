@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Callable, Optional
 
@@ -11,18 +12,22 @@ from .claude import ClaudeEngine
 from .geocode import Geocoder
 from .rules import understand as rules_understand
 from .schema import Brief, PlanRequest, Understanding
-from .vocab import category_label, is_bookable
+from .vocab import GUEST_EVENT_TYPES, category_label, is_bookable, vendor_noun
 
 log = logging.getLogger(__name__)
 
-# Bookable category -> finder(brief, category budget in cents) -> options. Add new
-# vendor types here as they become bookable.
+# Bookable category -> finder(brief, category budget in cents) -> options.
+# finders.build_finders() makes one for every vertical.
 Finder = Callable[[Brief, Optional[int]], list[dict]]
+MAX_PARALLEL_SEARCHES = 6
 
 EVENT_PHRASES = {
     "wedding": "a wedding", "graduation": "graduation photos", "portrait": "a portrait session",
     "event": "an event", "headshots": "headshots", "real-estate": "a real estate shoot",
     "product": "a product shoot", "other": "a photo shoot",
+    "birthday": "a birthday party", "engagement": "a proposal", "corporate": "a corporate event",
+    "baby-shower": "a baby shower", "quinceanera": "a quinceañera", "dinner-party": "a dinner party",
+    "bachelor": "a bachelor/ette party", "holiday-party": "a holiday party",
 }
 
 
@@ -54,16 +59,23 @@ class Planner:
         budget = split_budget(brief.budget_total_cents, brief.event_type, brief.services_needed)
         share = {row["category"]: row["cents"] for row in budget}
 
-        recommendations, search_failed = [], False
-        for category in brief.services_needed:
-            finder = self.finders.get(category)
-            if not is_bookable(category) or finder is None:
-                continue
+        # One search per needed category, run in parallel (a wedding needs about 12).
+        searchable = [c for c in brief.services_needed if is_bookable(c) and self.finders.get(c) is not None]
+
+        def search(category: str) -> tuple[list[dict], bool]:
             try:
-                options = finder(brief, share.get(category))
+                return self.finders[category](brief, share.get(category)), False
             except Exception as e:
                 log.warning("Vendor search failed for %s (%s)", category, type(e).__name__)
-                options, search_failed = [], True
+                return [], True
+
+        if len(searchable) > 1:
+            with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_SEARCHES, len(searchable))) as pool:
+                results = list(pool.map(search, searchable))
+        else:
+            results = [search(c) for c in searchable]
+        recommendations, search_failed = [], any(failed for _, failed in results)
+        for category, (options, _) in zip(searchable, results):
             recommendations.append({"category": category, "label": category_label(category),
                                     "budget_cents": share.get(category), "options": options})
         coming_soon = [{"category": c, "label": category_label(c)}
@@ -94,23 +106,23 @@ def compose_reply(brief: Brief, share: dict[str, int], recommendations: list[dic
         what += f" on {fmt_dates(days)}"
     extras = []
     if brief.guest_count:
-        extras.append(f"about {brief.guest_count} {'guests' if brief.event_type in ('wedding', 'event') else 'people'}")
+        extras.append(f"about {brief.guest_count} {'guests' if brief.event_type in GUEST_EVENT_TYPES else 'people'}")
     if brief.budget_total_cents:
         extras.append(f"a {money(brief.budget_total_cents)} budget")
     parts = [f"Here's a first plan for {what}" + (f" ({', '.join(extras)})" if extras else "") + "."]
 
     for rec in recommendations:
         n = len(rec["options"])
-        noun = "photographer" if rec["category"] == "photography" else rec["label"].lower()
+        noun, nouns = vendor_noun(rec["category"]), vendor_noun(rec["category"], plural=True)
         if n:
-            found = f"found {n} {noun}{'s' if n != 1 else ''}"
+            found = f"found {n} {noun if n == 1 else nouns}"
             if days:
                 found += " free on " + ("that day" if len(days) == 1 else "those dates")
             set_aside = f"I set aside {money(rec['budget_cents'])} for {rec['label'].lower()} and " \
                 if rec.get("budget_cents") and len(share) > 1 else "I "
             parts.append(f"{set_aside}{found}, best matches first.")
         elif days:
-            parts.append(f"No {noun}s are free on those dates yet. Nearby dates might work.")
+            parts.append(f"No {nouns} are free on those dates yet. Nearby dates might work.")
         else:
             parts.append(f"I couldn't find a matching {noun} yet.")
 
