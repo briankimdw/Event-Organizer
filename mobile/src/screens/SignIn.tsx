@@ -6,9 +6,12 @@
 // For the link (not the code) to open the app, that URL must be in Supabase Auth >
 // URL Configuration > Redirect URLs, and /auth/callback must exchange the token
 // (TODO: port AuthCallback). Entering the code from the email works without any of that.
-// TODO(google): Google sign-in needs a development build (not Expo Go) plus a deep-link
-// redirect (expo-auth-session / expo-web-browser + supabase.auth.signInWithIdToken or PKCE).
+// Google: Supabase's OAuth page in an in-app browser session (works in Expo Go); the
+// redirect back to Linking.createURL('/auth/callback') must be an allowed Redirect URL
+// (exp://** for Expo Go, eventorganizer://** for builds). Native Google account picker
+// (signInWithIdToken) would need a development build.
 import * as Linking from 'expo-linking'
+import * as WebBrowser from 'expo-web-browser'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ArrowLeft, Eye, EyeOff, Mail, X } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
@@ -19,6 +22,7 @@ import { listProviders } from '@shared/api/catalog.js'
 import { Button, Photo, Segmented, Text, TextField } from '@/components'
 import useQuery from '@/hooks/useQuery'
 import { supabase } from '@/lib/supabase'
+import { completeAuthFromUrl } from '@/screens/account/authLink'
 import { safeNext, useAuth } from '@/state/auth'
 import { makeStyles, useTheme } from '@/theme'
 import type { Provider } from '@/types'
@@ -40,6 +44,9 @@ const friendly = (error: { message?: string; status?: number } | null) => {
   if (msg.includes('expired') || msg.includes('invalid') || msg.includes('token')) return 'That code didn’t work. Check it, or send a new one.'
   return error?.message || 'Something went wrong. Please try again.'
 }
+
+// Closes the auth popup on the web target (no-op on phones).
+WebBrowser.maybeCompleteAuthSession()
 
 type Step = 'form' | 'code' | 'confirm' | 'forgot' | 'forgot-sent'
 
@@ -100,6 +107,20 @@ export default function SignIn() {
       setBusy(false)
     }
   }
+
+  // Google through Supabase: open its sign-in page, wait for the redirect back to the
+  // app, then finish the session from that URL (same handler as email links).
+  const google = () =>
+    run(async () => {
+      const redirectTo = Linking.createURL('/auth/callback')
+      const { data, error: err } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true } })
+      if (err || !data?.url) return setError(friendly(err))
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo)
+      if (result.type !== 'success') return // closed or cancelled
+      const done = await completeAuthFromUrl(result.url)
+      if (done.error) setError(done.error)
+      else if (!done.handled) setError('Google sign-in didn’t finish. Make sure this app’s link is an allowed redirect URL in Supabase.')
+    })
 
   const logIn = () => {
     if (!checkEmail()) return
@@ -197,8 +218,7 @@ export default function SignIn() {
                 <Text variant="display">Event Organizer<Text variant="display" color="accent">.</Text></Text>
                 <Text variant="h2">{mode === 'login' ? 'Welcome back' : 'Find and book vendors you’ll love'}</Text>
 
-                <Button title="Continue with Google" variant="outline" block disabled style={s.mtSm} />
-                <Text variant="tiny" muted center>Google sign-in is coming to the app soon.</Text>
+                <Button title="Continue with Google" variant="outline" block onPress={google} disabled={busy} style={s.mtSm} />
 
                 <View style={s.divider}>
                   <View style={s.rule} />

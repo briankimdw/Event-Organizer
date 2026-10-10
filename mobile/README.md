@@ -186,8 +186,9 @@ swipe deck (use gesture-handler + reanimated), `navigator.share` (RN `Share`), G
   code from the same email always works.
 - New accounts (no display name) are sent to `/welcome?next=...` by `src/state/WelcomeGate.tsx`
   (mounted in the root layout), like the web App does, except on the auth routes.
-- **Google sign-in: TODO.** Needs a development build (not Expo Go) and a deep-link redirect
-  (expo-web-browser auth session + `signInWithOAuth` PKCE, or native Google Sign-In + `signInWithIdToken`).
+- **Google sign-in:** Supabase's Google page in an in-app browser (`expo-web-browser` auth session +
+  `signInWithOAuth`), finished by `authLink.ts`. Works in Expo Go once `exp://**` (and `eventorganizer://**`
+  for builds) are allowed Redirect URLs in Supabase. Google's native account picker would need a dev build.
 - Deep link scheme: `eventorganizer://` (app.json). App name "Event Organizer" (placeholder).
 
 ## Web screens -> native status
@@ -199,7 +200,7 @@ swipe deck (use gesture-handler + reanimated), `navigator.share` (RN `Share`), G
 | `/u/:id` | Profile.jsx | **Ported** (availability strip, your dates, avatar viewer, followers sheet, review detail, map preview; TODO: report/block menu) | A |
 | `/services/:vertical` | ServiceHome.jsx | **Ported** (`buildVerticalPage`; tinted hero, shelves, invite, popular occasions) | A |
 | `/occasions/:slug` | Occasion.jsx | **Ported** (`buildOccasionChecklist`; ticks in AsyncStorage, top vendors, AI prompt box) | A |
-| `/sign-in` | SignIn.jsx | **Ported** (Google = TODO) | C |
+| `/sign-in` | SignIn.jsx | **Ported** (Google via browser session) | C |
 | `/me` | Me.jsx (+ Dashboard.jsx) | **Ported**: hero + edit, Hiring/Business switch, client view, listing switcher, checklist, stat tiles, Dashboard tabs (requests, calendar + blackouts, service area, packages, listing details, portfolio). `?tab=` opens a tab | C |
 | `/discover` | Discover.jsx (+ components/discover) | **Ported** (swipe deck on gesture-handler + reanimated, sheets, match moment, vertical picker; Explore masonry) | A |
 | `/gallery/:personId`, `/post/:id` | Gallery.jsx | **Ported** (paged albums/photos, pinch-peek zoom, hold to hide UI; TODO: persistent zoom, before/after, owner edit, report, collections) | A |
