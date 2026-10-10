@@ -27,7 +27,7 @@ export default function ProviderMap({
   providers, userLocation, onLocate, focusId, dates, fitUser = false, onSelect, area = null, onAreaChange, vertical = null, style,
 }: ProviderMapProps) {
   const s = useStyles()
-  const { c } = useTheme()
+  const { c, scheme } = useTheme()
   const mapRef = useRef<MapView>(null)
   const [selectedId, setSelectedId] = useState<string | null>(() => (providers.some((p) => p.id === focusId) ? focusId! : null))
   const [touched, setTouched] = useState(!!focusId)
@@ -159,6 +159,7 @@ export default function ProviderMap({
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
+        userInterfaceStyle={scheme}
         initialRegion={initialRegion}
         onRegionChangeComplete={onRegionChangeComplete}
         onPress={(e) => {

@@ -74,12 +74,10 @@ export default function Me() {
     <SafeAreaView style={s.root} edges={['top']}>
       <View style={s.header}>
         <Text variant="h1">Profile</Text>
-        {user && (
-          <View style={s.inline}>
-            <IconButton icon={SquarePlus} label="Post photos" onPress={() => router.push('/upload')} />
-            <IconButton icon={Settings} label="Settings" onPress={() => router.push('/settings')} />
-          </View>
-        )}
+        <View style={s.inline}>
+          {user && <IconButton icon={SquarePlus} label="Post photos" onPress={() => router.push('/upload')} />}
+          <IconButton icon={Settings} label="Settings" onPress={() => router.push('/settings')} />
+        </View>
       </View>
       {loading ? (
         <Loading />
@@ -89,7 +87,7 @@ export default function Me() {
         <ScrollView
           ref={scroller}
           contentContainerStyle={s.scroll}
-          refreshControl={<RefreshControl refreshing={pulling} onRefresh={refresh} tintColor={c.muted} />}
+          refreshControl={<RefreshControl refreshing={pulling} onRefresh={refresh} tintColor={c.muted} colors={[c.ink]} progressBackgroundColor={c.card} />}
         >
           <ProfileHero provider={providerDetail.data} />
           <RoleSwitch myBookings={myBookings.data} providerBookings={providerBookings.data} />
@@ -244,7 +242,7 @@ function AccountLinks() {
     <View style={[s.padX, s.links]}>
       <Group>
         {myProvider && verticalMeta(myProvider.vertical).visual ? <ListRow icon={Images} title="My work" sub="Your posts: view, edit, reorder" onPress={() => router.push('/my-work')} /> : null}
-        <ListRow icon={Settings} title="Settings" sub="Password, verification, privacy" onPress={() => router.push('/settings')} />
+        <ListRow icon={Settings} title="Settings" sub="Appearance, password, verification, privacy" onPress={() => router.push('/settings')} />
         <ListRow icon={LogOut} title="Sign out" chevron={false} onPress={async () => { await signOut(); toast('Signed out') }} />
       </Group>
     </View>

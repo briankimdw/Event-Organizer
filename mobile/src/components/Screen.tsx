@@ -38,7 +38,7 @@ export function Screen({
       style={s.flex}
       contentContainerStyle={[padded && s.padded, s.scrollContent, contentStyle]}
       keyboardShouldPersistTaps="handled"
-      refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.muted} /> : undefined}
+      refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.muted} colors={[c.ink]} progressBackgroundColor={c.card} /> : undefined}
     >
       {children}
     </ScrollView>

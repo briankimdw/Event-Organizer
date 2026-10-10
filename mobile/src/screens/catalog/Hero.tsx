@@ -67,7 +67,7 @@ export function MetaPill({ label, icon: Icon, tint }: { label: string; icon?: Lu
 const useStyles = makeStyles((t) => ({
   hero: { paddingHorizontal: t.space.lg, paddingBottom: 20 },
   disc: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+    width: 56, height: 56, borderRadius: 28, backgroundColor: t.scheme === 'dark' ? t.c.soft : '#fff', alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 1,
   },
   title: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5, marginTop: 10, marginBottom: 2, color: t.c.ink },

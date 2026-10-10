@@ -1,8 +1,15 @@
 // Design tokens, mirroring the web app's CSS variables (frontend/src/styles.css :root).
 // Light values are the web's; dark values are the native app's own (the web has no
 // dark mode yet). Use them through useTheme() / makeStyles(), never hard-coded hex.
-import { useMemo } from 'react'
-import { StyleSheet, useColorScheme, type TextStyle } from 'react-native'
+//
+// Light / dark is the user's choice (Settings > Appearance), not the phone's:
+// preference 'light' (default, the web's black-and-white look) | 'dark' | 'system',
+// saved in AsyncStorage under THEME_KEY. <AppThemeProvider> (root layout) holds it;
+// useThemePreference() reads / changes it; useTheme() / makeStyles() follow it.
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as SystemUI from 'expo-system-ui'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Appearance, StyleSheet, useColorScheme, type TextStyle } from 'react-native'
 
 const light = {
   bg: '#ffffff', // --bg
@@ -69,9 +76,91 @@ export const theme = { light, dark }
 
 export type Theme = { scheme: 'light' | 'dark'; c: Colors; radius: typeof radius; space: typeof space; font: typeof font }
 
+export type Scheme = 'light' | 'dark'
+export type ThemePreference = Scheme | 'system'
+export const THEME_KEY = 'pm:theme'
+export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'light'
+
+const isPreference = (v: unknown): v is ThemePreference => v === 'light' || v === 'dark' || v === 'system'
+
+const themes: Record<Scheme, Theme> = {
+  light: { scheme: 'light', c: light, radius, space, font },
+  dark: { scheme: 'dark', c: dark, radius, space, font },
+}
+
+type ThemeState = {
+  preference: ThemePreference
+  setPreference: (p: ThemePreference) => void
+  scheme: Scheme // what's on screen
+  ready: boolean // the saved preference has been read
+}
+
+const ThemeContext = createContext<ThemeState | null>(null)
+
+// Native chrome (keyboard, alerts, date pickers, Apple Maps) follows the chosen scheme too.
+// 'unspecified' hands it back to the OS. No-op where unsupported (web).
+function applyNativeAppearance(pref: ThemePreference) {
+  try {
+    if (typeof Appearance.setColorScheme === 'function') Appearance.setColorScheme(pref === 'system' ? 'unspecified' : pref)
+  } catch {}
+}
+
+// Started at import so it's usually done before the first render.
+let saved: ThemePreference | null = null
+const loading: Promise<ThemePreference> = AsyncStorage.getItem(THEME_KEY)
+  .then((v) => (saved = isPreference(v) ? v : DEFAULT_THEME_PREFERENCE))
+  .catch(() => (saved = DEFAULT_THEME_PREFERENCE))
+
+export function AppThemeProvider({ children }: { children: ReactNode }) {
+  const [preference, setPref] = useState<ThemePreference>(saved ?? DEFAULT_THEME_PREFERENCE)
+  const [ready, setReady] = useState(saved != null)
+  const system = useColorScheme()
+
+  useEffect(() => {
+    if (ready) return
+    let done = false
+    const finish = (p: ThemePreference) => {
+      if (done) return
+      done = true
+      setPref(p)
+      setReady(true)
+    }
+    loading.then(finish)
+    const timer = setTimeout(() => finish(DEFAULT_THEME_PREFERENCE), 1000) // never hold the app on storage
+    return () => clearTimeout(timer)
+  }, [ready])
+
+  // While the override is on, useColorScheme() reports it; with 'system' it's the OS value.
+  const scheme: Scheme = preference === 'system' ? (system === 'dark' ? 'dark' : 'light') : preference
+
+  useEffect(() => {
+    applyNativeAppearance(preference)
+  }, [preference])
+
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(themes[scheme].c.bg).catch(() => {})
+  }, [scheme])
+
+  const setPreference = useCallback((p: ThemePreference) => {
+    saved = p
+    setPref(p)
+    AsyncStorage.setItem(THEME_KEY, p).catch(() => {})
+  }, [])
+
+  const value = useMemo(() => ({ preference, setPreference, scheme, ready }), [preference, setPreference, scheme, ready])
+  return createElement(ThemeContext.Provider, { value }, children)
+}
+
+// The preference and its setter (Settings > Appearance).
+export function useThemePreference(): ThemeState {
+  return (
+    useContext(ThemeContext) ?? { preference: DEFAULT_THEME_PREFERENCE, setPreference: () => {}, scheme: 'light', ready: true }
+  )
+}
+
 export function useTheme(): Theme {
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light'
-  return useMemo(() => ({ scheme, c: theme[scheme], radius, space, font }), [scheme])
+  const ctx = useContext(ThemeContext)
+  return themes[ctx?.scheme ?? 'light']
 }
 
 // Theme-aware StyleSheets:

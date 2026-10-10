@@ -14,13 +14,14 @@ export type MapPreviewProps = { location: LatLng; radiusKm?: number | null; avat
 
 export default function MapPreview({ location, radiusKm, avatar, name, tint, onPress }: MapPreviewProps) {
   const s = useStyles()
-  const { c } = useTheme()
+  const { c, scheme } = useTheme()
   const color = tint || c.accent
   return (
     <Pressable onPress={onPress} style={s.wrap} accessibilityRole="button" accessibilityLabel="Open the map">
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <MapView
           style={StyleSheet.absoluteFill}
+          userInterfaceStyle={scheme}
           initialRegion={circleRegion(location, radiusKm ?? 0, 1.2)}
           scrollEnabled={false}
           zoomEnabled={false}

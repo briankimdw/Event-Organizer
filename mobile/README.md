@@ -63,7 +63,9 @@ mobile/
     state/              auth.tsx (session + profile), store.tsx (follows, shortlist, toast...)
     lib/                supabase.ts (the one client)
     shims/              browser APIs for shared code + native stand-ins for web-only modules
-    theme.ts            design tokens (colors light/dark, radius, space, font) + makeStyles
+    theme.ts            design tokens (colors light/dark, radius, space, font) + makeStyles;
+                        AppThemeProvider / useThemePreference: Light (default) / Dark / System,
+                        chosen in Settings, saved in AsyncStorage `pm:theme` (not the phone's setting)
     types.ts            types inferred from the shared JS (Provider, Package, Vertical...)
 ```
 

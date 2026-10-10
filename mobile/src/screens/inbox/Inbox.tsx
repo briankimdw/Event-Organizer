@@ -69,7 +69,7 @@ export default function Inbox() {
               await Promise.resolve(reload())
               setTimeout(() => setPulling(false), 400)
             }}
-            tintColor={col.muted}
+            tintColor={col.muted} colors={[col.ink]} progressBackgroundColor={col.card}
           />
         }
         ListHeaderComponent={

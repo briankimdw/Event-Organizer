@@ -22,7 +22,7 @@ export const TextField = forwardRef<TextInput, Props>(function TextField(
   ref,
 ) {
   const s = useStyles()
-  const { c } = useTheme()
+  const { c, scheme } = useTheme()
   return (
     <View style={containerStyle}>
       {(label || labelRight) && (
@@ -38,6 +38,8 @@ export const TextField = forwardRef<TextInput, Props>(function TextField(
           value={value}
           onChangeText={onChangeText}
           placeholderTextColor={c.faint}
+          keyboardAppearance={scheme}
+          cursorColor={c.ink}
           style={[s.input, style]}
           {...rest}
         />

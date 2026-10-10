@@ -72,7 +72,7 @@ export function Explore({ tabs, vertical, service }: { tabs: ReactNode; vertical
         ref={scroller}
         onScroll={onScroll}
         scrollEventThrottle={200}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={c.muted} />}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={c.muted} colors={[c.ink]} progressBackgroundColor={c.card} />}
         contentContainerStyle={s.content}
       >
         {(showVerticalChips || filters.services.length > 0) && (

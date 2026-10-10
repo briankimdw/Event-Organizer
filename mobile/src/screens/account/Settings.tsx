@@ -1,13 +1,14 @@
 // /settings: native port of frontend/src/screens/Settings.jsx. Rows for features
-// that aren't built yet say so instead of pretending to work.
+// that aren't built yet say so instead of pretending to work. Appearance (light /
+// dark / system, native-only) is shown signed in or not.
 import { useRouter } from 'expo-router'
 import { CreditCard, Download, KeyRound, LogOut, ShieldCheck, Stamp, Trash2 } from 'lucide-react-native'
 import { useState } from 'react'
 
-import { Button, Loading, Screen, Sheet, SignInPrompt, Text } from '@/components'
+import { Button, Loading, Screen, Segmented, Sheet, SignInPrompt, Text } from '@/components'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
-import { makeStyles, useTheme } from '@/theme'
+import { makeStyles, useTheme, useThemePreference, type ThemePreference } from '@/theme'
 import { Group, ListRow, SectionLabel, SoonTag } from './ui'
 
 export default function Settings() {
@@ -28,7 +29,8 @@ export default function Settings() {
 
   if (loading || !user) {
     return (
-      <Screen title="Settings" back>
+      <Screen title="Settings" back padded>
+        <AppearanceSection />
         {loading ? <Loading /> : <SignInPrompt title="Sign in to manage your account" />}
       </Screen>
     )
@@ -36,7 +38,9 @@ export default function Settings() {
 
   return (
     <Screen title="Settings" back padded>
-      <SectionLabel style={s.first}>Account</SectionLabel>
+      <AppearanceSection />
+
+      <SectionLabel>Account</SectionLabel>
       <Group>
         <ListRow icon={KeyRound} title="Set or change password" sub={`Signed in as ${user.email}`} onPress={() => router.push('/reset-password')} />
         <ListRow
@@ -82,7 +86,29 @@ export default function Settings() {
   )
 }
 
+const APPEARANCE: { value: ThemePreference; label: string }[] = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
+]
+
+// Light is the default (the web's look); System follows the phone's setting.
+function AppearanceSection() {
+  const s = useStyles()
+  const { preference, setPreference } = useThemePreference()
+  return (
+    <>
+      <SectionLabel style={s.first}>Appearance</SectionLabel>
+      <Segmented options={APPEARANCE} value={preference} onChange={setPreference} />
+      <Text variant="tiny" muted style={s.hint}>
+        {preference === 'system' ? 'Matches your phone’s light or dark setting.' : 'System matches your phone’s light or dark setting.'}
+      </Text>
+    </>
+  )
+}
+
 const useStyles = makeStyles((t) => ({
   first: { paddingTop: 0 },
+  hint: { marginTop: t.space.sm },
   logout: { marginTop: t.space.xl },
 }))
