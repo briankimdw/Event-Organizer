@@ -426,7 +426,7 @@ export async function listCredits(albumIds) {
   if (!ids.length || creditsMissing) return out
   const { data, error } = await supabase
     .from('album_credits')
-    .select(`album_id, role, created_at, provider:providers(${VENDOR_COLUMNS})`)
+    .select(`album_id, role, created_at, provider:providers!album_credits_provider_id_fkey(${VENDOR_COLUMNS})`)
     .in('album_id', ids)
     .order('created_at')
   if (error) {
@@ -482,7 +482,7 @@ export async function listTaggedAlbums(providerId, { limit = 24 } = {}) {
   if (!providerId || creditsMissing) return []
   const { data, error } = await supabase
     .from('album_credits')
-    .select(`created_at, album:albums(${ALBUM_COLUMNS}, by:providers!albums_provider_id_fkey(id, display_name, status))`)
+    .select(`created_at, album:albums!album_credits_album_id_fkey(${ALBUM_COLUMNS}, by:providers!albums_provider_id_fkey(id, display_name, status))`)
     .eq('provider_id', providerId)
     .order('created_at', { ascending: false })
     .limit(limit)

@@ -120,7 +120,7 @@ const LIST_COLUMNS = `
   policy:cancellation_policies!providers_cancellation_policy_id_fkey(name, rules),
   services:provider_services(category:service_categories(slug, name, sort_order)),
   packages(*),
-  albums(id, created_at, status, cover:photos!albums_cover_photo_fk(display_path)),
+  albums!albums_provider_id_fkey(id, created_at, status, cover:photos!albums_cover_photo_fk(display_path)),
   follows(count)`
 
 // A providers row (with the embeds above) as the object screens use.
