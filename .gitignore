@@ -2,3 +2,5 @@
 .env.*
 !.env.example
 .idea/*
+.orchestrator/
+__pycache__/
