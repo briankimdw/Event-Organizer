@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null
     }
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
-    if (error) console.warn('Could not load profile', error)
+    if (error) console.warn('[auth] could not load profile', error.code, error.message)
     setProfile(data ?? null)
     return data ?? null
   }, [])
@@ -46,7 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (active) setLoading(false)
     })
     // Fires on sign-in, sign-out, token refresh and OTP verification.
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+      if (__DEV__) console.log('[auth] event', event, next?.user?.email ?? '')
       setSession(next)
       // Defer the query: supabase-js warns against awaiting inside this callback.
       setTimeout(() => loadProfile(next?.user.id), 0)

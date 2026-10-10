@@ -48,6 +48,13 @@ const friendly = (error: { message?: string; status?: number } | null) => {
 // Closes the auth popup on the web target (no-op on phones).
 WebBrowser.maybeCompleteAuthSession()
 
+// Dev-only sign-in trace in the Expo server's terminal (never passwords or tokens).
+const authLog = (...args: unknown[]) => {
+  if (__DEV__) console.log('[auth]', ...args)
+}
+// A redirect URL with its tokens / codes cut out.
+const redact = (url: string) => url.replace(/([?#&](access_token|refresh_token|code|provider_token|token_hash)=)[^&]+/g, '$1…')
+
 type Step = 'form' | 'code' | 'confirm' | 'forgot' | 'forgot-sent'
 
 export default function SignIn() {
@@ -103,6 +110,10 @@ export default function SignIn() {
     setNotice('')
     try {
       await fn()
+    } catch (e: any) {
+      // Network failures and browser errors throw instead of returning { error }.
+      authLog('sign-in step threw', e?.name, e?.message)
+      setError(friendly(e))
     } finally {
       setBusy(false)
     }
@@ -113,11 +124,27 @@ export default function SignIn() {
   const google = () =>
     run(async () => {
       const redirectTo = Linking.createURL('/auth/callback')
+      authLog('google: redirectTo', redirectTo)
       const { data, error: err } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true } })
-      if (err || !data?.url) return setError(friendly(err))
+      if (err || !data?.url) {
+        authLog('google: could not start', err?.status, err?.message)
+        return setError(friendly(err))
+      }
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo)
-      if (result.type !== 'success') return // closed or cancelled
+      authLog('google: browser closed', result.type, result.type === 'success' ? redact(result.url) : '')
+      if (result.type !== 'success') {
+        // Android can hand the redirect to the /auth/callback route instead of this
+        // promise; give it a moment, then see whether that signed us in.
+        await new Promise((r) => setTimeout(r, 800))
+        const { data: now } = await supabase.auth.getSession()
+        if (now.session) return
+        if (result.type === 'dismiss' || result.type === 'cancel') {
+          setError(`Google didn’t send you back to the app. If you ended up on a website, add ${redirectTo.split('/--/')[0]}/** to Supabase → Authentication → URL Configuration → Redirect URLs.`)
+        }
+        return
+      }
       const done = await completeAuthFromUrl(result.url)
+      authLog('google: finished', done.handled, done.error || 'ok')
       if (done.error) setError(done.error)
       else if (!done.handled) setError('Google sign-in didn’t finish. Make sure this app’s link is an allowed redirect URL in Supabase.')
     })
@@ -126,6 +153,7 @@ export default function SignIn() {
     if (!checkEmail()) return
     run(async () => {
       const { error: err } = await supabase.auth.signInWithPassword({ email: cleanEmail, password })
+      authLog('password sign-in', err ? `failed: ${err.status} ${err.name} ${err.message}` : 'ok')
       if (err) setError(friendly(err))
       // On success the auth listener picks up the session and the effect above navigates.
     })
@@ -164,6 +192,7 @@ export default function SignIn() {
     if (!checkEmail()) return
     run(async () => {
       const { error: err } = await supabase.auth.signInWithOtp({ email: cleanEmail, options: { emailRedirectTo: callbackUrl(), shouldCreateUser: true } })
+      authLog('email code sent', err ? `failed: ${err.status} ${err.message}` : 'ok')
       if (err) return setError(friendly(err))
       setCode('')
       go('code')
@@ -174,6 +203,7 @@ export default function SignIn() {
   const verifyCode = () =>
     run(async () => {
       const { error: err } = await supabase.auth.verifyOtp({ email: cleanEmail, token: code.trim(), type: 'email' })
+      authLog('email code check', err ? `failed: ${err.status} ${err.message}` : 'ok')
       if (err) setError(friendly(err))
     })
 
