@@ -2,7 +2,7 @@
 
 Where the project stands, what was decided, and what's next. Update this file at the end of each work session.
 
-**Last updated:** 2026-10-08
+**Last updated:** 2026-10-10
 
 ---
 
@@ -15,7 +15,43 @@ Where the project stands, what was decided, and what's next. Update this file at
 | Database + auth | **Supabase project "Event Organizer" is set up and tested** (phases 0–2). Design and status: `docs/DATABASE.md`. |
 | Discover ML (SigLIP) | All 70 test photos analysed. Discover uses `discover_feed()`; "% match" uses `provider_matches()`. |
 | Payments (Stripe) | Not started |
-| Mobile app (Expo / React Native) | Not started. The web prototype is the reference design. |
+| Mobile app (Expo / React Native) | **`mobile/`**: Expo SDK 57 + expo-router, every screen ported. It imports `frontend/src/{api,lib,verticals}` directly through Metro (see `mobile/README.md`). Type-checks and bundles; not yet tried on a real phone. |
+| Service verticals | **18 verticals and 10 occasions** in `frontend/src/verticals/catalog.js` (the shared source of truth). Plan: `docs/EVENT_PLATFORM_PLAN.md`; how to add one: `docs/VERTICALS.md`. The DB changes are written but **not applied yet** (see below). |
+
+---
+
+## 2026-10-10: all event services, Home/Discover redesign, Expo app
+
+- **Catalog:** 18 verticals (87 services) in 7 groups, plus 10 occasions, each with the verticals it needs.
+- **Database (written, tested offline in PGlite, NOT applied to the hosted project):** `20261010000000_all_verticals.sql`
+  - New price types: `per_person`, `per_item` and `daily`.
+  - `packages.min_quantity` / `max_quantity` and `bookings.quantity`.
+  - `providers.max_concurrent`, enforced by a slot-based overlap rule: capacity 1 still means no overlaps at all.
+  - JSON Schemas per vertical in `seed.sql`.
+  - 34 test vendors (`docs/test-users.json`) and demo data.
+- **To apply** (the Supabase MCP is disconnected), in order:
+  1. Paste `supabase/demo/all_verticals_setup.sql` into the SQL editor. It includes the two pending messaging/portfolio migrations.
+  2. Run `cd frontend && node scripts/seed-test-users.mjs`.
+  3. Paste `supabase/demo/demo_data.sql`.
+  4. Optionally run `supabase/tests/verticals_test.sql`.
+- **Web:**
+  - Vertical switcher in Search and the map.
+  - Vertical-aware profiles and packages.
+  - Guest/item stepper when booking.
+  - `/new-listing` ("What do you offer?") and several listings per user.
+  - Home redesigned: service rail, plan by occasion, intent shelves, and a "coming soon" invite card.
+  - Discover now has For you | Explore.
+  - New pages: `/services/:vertical` and `/occasions/:slug`.
+- **AI planner:** a vendor finder per vertical (`services/ml/app/planner/finders/`) and a budget split per occasion; 77 tests pass.
+- **Mobile:** run with `cd mobile && npx expo start` and scan the QR code with Expo Go.
+  - Magic links need these Redirect URLs in Supabase Auth: `eventorganizer://**` and `exp://**` (dev only).
+- **Known follow-ups:**
+  - Nothing in the new verticals was tested against the real DB.
+  - Native-only features are untested on a device: maps, gestures, uploads, realtime.
+  - `mobile/src/screens/bookings/DatePicker.tsx` duplicates `mobile/src/components/DatePicker.tsx`.
+  - `catalog.js` and `locations.js` import each other (a require cycle).
+  - Shared JS default parameters type as `null`/`never` in TypeScript.
+  - Explore pages photos on the client.
 
 ---
 
