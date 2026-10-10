@@ -42,7 +42,7 @@ export function ProviderCard({ provider: p, variant = 'row', onPress, footer, me
     return (
       <Pressable onPress={open} style={({ pressed }) => [s.tile, pressed && s.pressed]} accessibilityRole="button" accessibilityLabel={p.name}>
         <View>
-          <Photo uri={p.cover} style={s.tileImg} />
+          <Photo uri={p.cover} vertical={p.vertical} style={s.tileImg} />
           {p.tasteMatch != null && <MatchBadge pct={p.tasteMatch} />}
         </View>
         <View style={s.tileBody}>
@@ -91,7 +91,7 @@ export function ProviderCard({ provider: p, variant = 'row', onPress, footer, me
 
   return (
     <Pressable onPress={open} style={({ pressed }) => [s.row, pressed && s.pressed]} accessibilityRole="button" accessibilityLabel={p.name}>
-      <Photo uri={p.covers[1] || p.cover} style={s.rowImg} />
+      <Photo uri={p.covers[1] || p.cover} vertical={p.vertical} style={s.rowImg} />
       <View style={s.grow}>
         {name}
         <Text variant="tiny" muted numberOfLines={1}>{p.specialties.join(' · ')}</Text>

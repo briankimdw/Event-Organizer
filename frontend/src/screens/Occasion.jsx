@@ -6,6 +6,7 @@ import { EmptyState, ErrorState } from '../components/States.jsx'
 import { RatingInline, RowsSkeleton, SectionHead } from '../components/home/Cards.jsx'
 import { TintIcon } from '../components/home/CatalogIcon.jsx'
 import { ComingSoonCard } from '../components/home/Browse.jsx'
+import { CoverFallback } from '../components/verticals/VerticalIcon.jsx'
 import useQuery from '../lib/useQuery.js'
 import { money } from '../lib/format.js'
 import { buildOccasionChecklist, listBrowseProviders, occasionPrompt, readCovered, withArticle, writeCovered } from '../api/home.js'
@@ -152,7 +153,7 @@ function OccasionPage({ occasion: o }) {
                     <div className="occ-vendors scroll-x">
                       {it.top.map((p) => (
                         <Link key={p.id} to={`/u/${p.id}`} className="occ-vendor" aria-label={p.name}>
-                          {p.cover ? <img src={p.cover} alt="" loading="lazy" draggable={false} /> : <div className="img-ph" />}
+                          {p.cover ? <img src={p.cover} alt="" loading="lazy" draggable={false} /> : <CoverFallback vertical={p.vertical} />}
                           <div className="tiny ellipsis"><b>{p.name}</b></div>
                           <div className="tiny"><RatingInline p={p} /></div>
                         </Link>

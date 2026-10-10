@@ -173,7 +173,7 @@ function OccasionPage({ o }: { o: Occasion }) {
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.vendors} style={s.vendorRail}>
                       {it.top.map((p) => (
                         <Pressable key={p.id} onPress={() => router.push(`/u/${p.id}`)} style={s.vendor} accessibilityRole="link" accessibilityLabel={p.name}>
-                          <Photo uri={p.cover} style={s.vendorImg} />
+                          <Photo uri={p.cover} vertical={p.vertical} style={s.vendorImg} />
                           <Text variant="tiny" weight="700" numberOfLines={1}>{p.name}</Text>
                           <RatingInline rating={p.rating} size={11} />
                         </Pressable>

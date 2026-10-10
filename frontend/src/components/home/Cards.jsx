@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ChevronRight, Star } from 'lucide-react'
 import { IdVerified, ProBadge } from '../Badges.jsx'
 import ProfileLink, { PersonAvatar } from '../ProfileLink.jsx'
+import { CoverFallback } from '../verticals/VerticalIcon.jsx'
 import { fromKey } from '../../lib/dates.js'
 import { priceFrom, subtitleOf } from '../../api/home.js'
 import './home.css'
@@ -46,7 +47,7 @@ export function ProviderCard({ p, showVertical = false, wide = false }) {
   return (
     <Link to={`/u/${p.id}`} className={`hd-card ${wide ? 'wide' : ''}`} aria-label={`${p.name}${price ? `, ${price}` : ''}`}>
       <div className="hd-card-img">
-        {p.cover ? <img src={p.cover} alt="" loading="lazy" draggable={false} /> : <div className="img-ph" />}
+        {p.cover ? <img src={p.cover} alt="" loading="lazy" draggable={false} /> : <CoverFallback vertical={p.vertical} />}
         {badge && <span className={`hd-badge ${p.tasteMatch != null ? 'accent' : ''}`}>{badge}</span>}
         <span className="hd-card-avatar">
           <PersonAvatar id={p.id} src={p.avatar} name={p.name} username={p.username} />
@@ -74,7 +75,7 @@ export function ProviderRow({ p, showVertical = false }) {
   const price = priceFrom(p)
   return (
     <Link to={`/u/${p.id}`} className="provider-row">
-      {photo ? <img className="provider-row-img" src={photo} alt="" loading="lazy" /> : <div className="provider-row-img img-ph" />}
+      {photo ? <img className="provider-row-img" src={photo} alt="" loading="lazy" /> : <CoverFallback vertical={p.vertical} className="provider-row-img" />}
       <div className="grow">
         <div className="person-name small">
           {p.name} {p.idVerified && <IdVerified />} {p.pro && <ProBadge />}

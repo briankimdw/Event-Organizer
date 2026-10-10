@@ -20,6 +20,17 @@ export default function VerticalIcon({ name, vertical, size = 18, ...rest }) {
   return <Icon size={size} aria-hidden="true" {...rest} />
 }
 
+// Stands in for a cover photo when a listing has none (DJs, planners, new vendors):
+// the vertical's tint with its icon, so cards never show an empty grey box.
+export function CoverFallback({ vertical, className = '' }) {
+  const m = verticalMeta(vertical)
+  return (
+    <div className={`cover-fallback ${className}`} style={{ '--tint': m.tint }} aria-hidden="true">
+      <VerticalIcon name={m.icon} size={34} strokeWidth={1.5} />
+    </div>
+  )
+}
+
 // The icon in a soft circle of the vertical's tint.
 export function VerticalBadge({ vertical, size = 36, className = '' }) {
   const m = verticalMeta(vertical)
