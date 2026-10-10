@@ -76,6 +76,21 @@ def _bullets(body: str) -> list[str]:
     return items
 
 
+def _outside_fences(body: str) -> list[str]:
+    """Lines outside ``` / ~~~ fenced code blocks: examples there (e.g. JSON objects)
+    are not template slots."""
+    lines, fence = [], ""
+    for line in body.splitlines():
+        m = re.match(r"^\s*(`{3,}|~{3,})", line)
+        if m and not fence:
+            fence = m.group(1)
+        elif m and m.group(1).startswith(fence):
+            fence = ""
+        elif not fence:
+            lines.append(line)
+    return lines
+
+
 def _subsection(text: str, name: str) -> str:
     m = re.search(rf"^###\s+{re.escape(name)}\s*$(.*?)(?=^##|\Z)", text, re.I | re.M | re.S)
     return m.group(1).strip() if m else ""
@@ -112,7 +127,7 @@ def _parse_spec(visible: str) -> dict[str, str]:
         if n in numbered and all(_PLACEHOLDER.match(line) for line in body.splitlines()):
             problems.append(f"section {n} is empty")
     for n in range(1, 13):
-        slots = [ln for ln in numbered.get(n, "").splitlines() if _TEMPLATE_SLOT.match(ln)]
+        slots = [ln for ln in _outside_fences(numbered.get(n, "")) if _TEMPLATE_SLOT.match(ln)]
         if slots:
             problems.append(f"section {n} still has a template slot: {slots[0].strip()[:60]!r}")
     if re.search(r"Unconfirmed \(to ask before Gate B\)", visible):

@@ -4,3 +4,4 @@
 .idea/*
 .orchestrator/
 __pycache__/
+specs/

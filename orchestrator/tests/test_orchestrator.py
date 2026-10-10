@@ -673,6 +673,13 @@ class OrchestratorTest(unittest.TestCase):
                 parse_plan(text)
             self.assertIn(expected, str(cm.exception))
 
+    def test_braces_in_fenced_code_are_not_template_slots(self) -> None:
+        from orchestrator.plan import parse_plan
+
+        example = 'Extends calc.py.\n```json\n[\n  {"a": 1},\n  {"b": 2}\n]\n```'
+        plan = parse_plan(SPEC.replace("Extends calc.py.", example))
+        self.assertIn('{"a": 1}', plan.text)
+
     def test_unfilled_skill_template_is_rejected(self) -> None:
         from orchestrator.plan import PlanError, parse_plan
 
