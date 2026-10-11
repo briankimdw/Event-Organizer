@@ -1,7 +1,7 @@
 // Text with the app's type scale. Variants mirror the web's h2/h3/h4, .small, .tiny, .muted.
 //   <Text variant="h3">Title</Text>  <Text variant="small" muted>Secondary</Text>
 import type { Ref } from 'react'
-import { Text as RNText, type TextProps, type TextStyle } from 'react-native'
+import { Platform, Text as RNText, type TextProps, type TextStyle } from 'react-native'
 
 import { font, useTheme, type Colors } from '@/theme'
 
@@ -35,6 +35,9 @@ const HEADERS = new Set<TextVariant>(['display', 'h1', 'h2', 'h3', 'label'])
 // (already 20-24pt) stop at 150% so one-line titles stay readable. Tight spots (badges on
 // photos, tab labels) pass a lower maxFontSizeMultiplier themselves.
 const MAX_SCALE: Partial<Record<TextVariant, number>> = { display: 1.5, h1: 1.5, h2: 1.6, caption: 1.6 }
+// Native text breaks an unbroken word (a pasted link, a long @handle) when it hits the edge; the
+// browser only does that with break-word, so the web preview matches the phone.
+const WEB_BREAK = Platform.OS === 'web' ? ({ wordBreak: 'break-word' } as TextStyle) : null
 
 export function Text({ variant = 'body', muted, color, weight, center, style, ...rest }: AppTextProps) {
   const { c } = useTheme()
@@ -44,7 +47,7 @@ export function Text({ variant = 'body', muted, color, weight, center, style, ..
       accessibilityRole={HEADERS.has(variant) && !rest.onPress ? 'header' : undefined}
       maxFontSizeMultiplier={MAX_SCALE[variant] ?? 2}
       {...rest}
-      style={[VARIANTS[variant], { color: tint }, weight != null && { fontWeight: weight }, center && { textAlign: 'center' }, style]}
+      style={[VARIANTS[variant], WEB_BREAK, { color: tint }, weight != null && { fontWeight: weight }, center && { textAlign: 'center' }, style]}
     />
   )
 }

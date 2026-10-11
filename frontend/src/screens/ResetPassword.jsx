@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff } from 'lucide-react'
+import { CircleAlert, CircleCheck, KeyRound, Link2Off } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../auth.jsx'
 import { useStore } from '../store.jsx'
-
-const MIN_PASSWORD = 8
+import { MIN_PASSWORD } from '../components/auth/authKit.js'
+import PasswordField from '../components/auth/PasswordField.jsx'
+import '../components/auth/auth.css'
 
 // Choose a new password. Reached two ways:
 //  - from a "reset your password" email (the link signs you in for this one step)
@@ -46,16 +47,20 @@ export default function ResetPassword() {
 
   if (!user) {
     return (
-      <div>
+      <div className="au">
         <TopBar title="New password" />
-        <div className="pad center-col auth-status">
+        <div className="au-status-screen">
           {loading || !waited ? (
-            <div className="spinner" />
+            <>
+              <div className="spinner" />
+              <p className="au-lede" role="status">Checking your link…</p>
+            </>
           ) : (
             <>
-              <h2 className="h3">That reset link didn’t work</h2>
-              <p className="muted small">It may have expired or already been used. Request a new one from the log-in screen.</p>
-              <Link to="/sign-in" className="btn mt">Back to log in</Link>
+              <div className="au-badge" aria-hidden="true"><Link2Off size={26} /></div>
+              <h2 className="au-title">That reset link didn’t work</h2>
+              <p className="au-lede">It may have expired or already been used. Request a new one from the log-in screen.</p>
+              <Link to="/sign-in" className="au-btn au-btn-primary">Back to log in</Link>
             </>
           )}
         </div>
@@ -63,31 +68,53 @@ export default function ResetPassword() {
     )
   }
 
+  const matches = confirm.length > 0 && confirm === password
+  const mismatch = confirm.length >= password.length && confirm.length > 0 && confirm !== password
   return (
-    <div>
+    <div className="au">
       <TopBar title="New password" />
-      <form className="pad" onSubmit={save} noValidate>
-        <p className="muted small">Choose a password for <b className="ink">{user.email}</b>. You’ll use it to log in from now on.</p>
-        <div className="field mt">
-          <label htmlFor="reset-password">New password</label>
-          <div className="input-prefix">
-            <input id="reset-password" type={show ? 'text' : 'password'} autoComplete="new-password" placeholder={`At least ${MIN_PASSWORD} characters`}
-              aria-describedby={['reset-hint', error && 'reset-error'].filter(Boolean).join(' ')}
-              value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-            <button type="button" className="icon-btn" onClick={() => setShow((v) => !v)} aria-label="Show password" aria-pressed={show}>
-              {show ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
-            </button>
+      <form className="au-welcome" onSubmit={save} noValidate>
+        <div className="au-badge" aria-hidden="true"><KeyRound size={26} /></div>
+        <h2 className="au-title">Choose a new password</h2>
+        <p className="au-lede">For <b className="au-ink">{user.email}</b>. You’ll use it to log in from now on.</p>
+        <div className="au-form">
+          <PasswordField
+            id="reset-password"
+            label="New password"
+            value={password}
+            onChange={(v) => { setPassword(v); if (error) setError('') }}
+            autoComplete="new-password"
+            show={show}
+            onToggleShow={() => setShow((v) => !v)}
+            meter
+            describedBy={error ? 'reset-error' : undefined}
+            enterKeyHint="next"
+            autoFocus
+          />
+          <div className="au-field">
+            <PasswordField
+              id="reset-confirm"
+              label="Confirm password"
+              value={confirm}
+              onChange={(v) => { setConfirm(v); if (error) setError('') }}
+              autoComplete="new-password"
+              show={show}
+              toggle={false}
+              invalid={mismatch}
+              describedBy={['reset-match', error && 'reset-error'].filter(Boolean).join(' ')}
+              enterKeyHint="done"
+            />
+            <div id="reset-match" aria-live="polite">
+              {matches && <span className="au-status ok"><CircleCheck size={15} aria-hidden="true" /> Passwords match</span>}
+              {mismatch && <span className="au-status bad"><CircleAlert size={15} aria-hidden="true" /> The passwords don’t match yet</span>}
+            </div>
           </div>
-          <span id="reset-hint" className="sr-only">At least {MIN_PASSWORD} characters</span>
+          {error && <div className="au-error" role="alert" id="reset-error">{error}</div>}
+          <button className="au-btn au-btn-primary" disabled={busy || !password || !confirm} aria-busy={busy || undefined}>
+            {busy && <span className="au-spin" aria-hidden="true" />}
+            {busy ? 'Saving…' : 'Save password'}
+          </button>
         </div>
-        <label className="field mt-sm">
-          <span>Confirm password</span>
-          <input className="input" type={show ? 'text' : 'password'} autoComplete="new-password"
-            aria-describedby={error ? 'reset-error' : undefined}
-            value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        </label>
-        {error && <div className="form-error mt-sm" role="alert" id="reset-error">{error}</div>}
-        <button className="btn block mt" disabled={busy || !password || !confirm}>{busy ? 'Saving…' : 'Save password'}</button>
       </form>
     </div>
   )

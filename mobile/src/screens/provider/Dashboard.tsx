@@ -148,11 +148,11 @@ function Requests({ bookings }: { bookings: QueryState<any[]> }) {
                   <Text variant="tiny" color="warn">Expires in {r.expiresIn}</Text>
                 </View>
               )}
-              <View style={[s.row, s.mtSm]}>
-                <Button title="Accept" size="sm" grow disabled={busy === r.id} onPress={() => respond(r, 'accept')} />
-                <Button title="Counter" size="sm" variant="ghost" grow disabled={busy === r.id}
+              <View style={[s.row, s.wrapRow, s.mtSm]}>
+                <Button title="Accept" size="sm" grow style={s.fitBtn} disabled={busy === r.id} onPress={() => respond(r, 'accept')} />
+                <Button title="Counter" size="sm" variant="ghost" grow style={s.fitBtn} disabled={busy === r.id}
                   onPress={() => { setCounterFor(r); setCounterPrice(r.total == null ? '' : String(r.total)); setCounterNote('') }} />
-                <Button title="Decline" size="sm" variant="danger" grow disabled={busy === r.id} onPress={() => respond(r, 'decline')} />
+                <Button title="Decline" size="sm" variant="danger" grow style={s.fitBtn} disabled={busy === r.id} onPress={() => respond(r, 'decline')} />
               </View>
             </>
           ) : (
@@ -607,6 +607,9 @@ const useStyles = makeStyles((t) => ({
   card: { marginTop: t.space.sm, gap: 4 },
   inactive: { opacity: 0.55 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Large text: Accept / Counter / Decline wrap onto two lines instead of breaking "Counter" mid-word.
+  wrapRow: { flexWrap: 'wrap' },
+  fitBtn: { flexBasis: 'auto' },
   inline: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   grow: { flex: 1, minWidth: 0 },

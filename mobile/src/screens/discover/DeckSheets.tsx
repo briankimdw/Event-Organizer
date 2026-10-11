@@ -271,10 +271,10 @@ export function ShortlistSheet({ open, onClose, uid, shortlist, likedCardsFrom, 
                   ))}
                 </ScrollView>
               )}
-              <View style={s.row}>
-                <Button title="Profile" size="sm" variant="ghost" grow onPress={() => go(`/u/${sp.id}`)} />
-                <Button title="Message" size="sm" variant="ghost" grow onPress={() => onMessage(sp.id)} />
-                <Button title="Book" size="sm" grow onPress={() => go({ pathname: '/book/[providerId]', params: { providerId: sp.id } })} />
+              <View style={[s.row, s.wrapRow]}>
+                <Button title="Profile" size="sm" variant="ghost" grow style={s.fitBtn} onPress={() => go(`/u/${sp.id}`)} />
+                <Button title="Message" size="sm" variant="ghost" grow style={s.fitBtn} onPress={() => onMessage(sp.id)} />
+                <Button title="Book" size="sm" grow style={s.fitBtn} onPress={() => go({ pathname: '/book/[providerId]', params: { providerId: sp.id } })} />
                 <Pressable onPress={() => onRemove(sp.id)} style={s.remove} hitSlop={5} accessibilityRole="button" accessibilityLabel={`Remove ${sp.name} from shortlist`}>
                   <X size={14} color={c.ink} />
                 </Pressable>
@@ -374,6 +374,9 @@ const useStyles = makeStyles((t) => ({
   pkg: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: t.c.line },
   actions: { flexDirection: 'row', gap: 8, marginTop: 18 },
   row: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  // Large text: the shortlist actions wrap to a second line rather than breaking "Message" mid-word.
+  wrapRow: { flexWrap: 'wrap' },
+  fitBtn: { flexBasis: 'auto' },
   tasteRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 },
   tasteTag: { width: 110 },
   tasteBar: { flex: 1, height: 8, borderRadius: 999, backgroundColor: t.c.soft, overflow: 'hidden' },

@@ -1,6 +1,7 @@
-// /sign-in: native port of frontend/src/screens/SignIn.jsx. Email + password
-// (log in / create account), passwordless email link + 6-digit code, forgot password.
-// ?next=/u/abc returns there after signing in.
+// /sign-in: native port of frontend/src/screens/SignIn.jsx. A short stepper:
+// start (Google / email) -> email -> password (log in or create, live strength) -> done,
+// with side trips: code (email link + 6-digit code), confirm (new account), forgot -> forgot-sent.
+// ?next=/u/abc returns there after signing in; ?mode=signup preselects "Sign up".
 //
 // Email links: the app passes Linking.createURL('/auth/callback') as the redirect.
 // For the link (not the code) to open the app, that URL must be in Supabase Auth >
@@ -10,26 +11,29 @@
 // redirect back to Linking.createURL('/auth/callback') must be an allowed Redirect URL
 // (exp://** for Expo Go, eventorganizer://** for builds). Native Google account picker
 // (signInWithIdToken) would need a development build.
+import { LinearGradient } from 'expo-linear-gradient'
 import * as Linking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { ArrowLeft, Eye, EyeOff, Mail, X } from 'lucide-react-native'
-import { useEffect, useState } from 'react'
-import { Pressable, ScrollView, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { ArrowLeft, KeyRound, Mail, MailCheck, X } from 'lucide-react-native'
+import { useEffect, useRef, useState } from 'react'
+import { Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native'
+import Animated, { FadeIn, FadeInRight } from 'react-native-reanimated'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { listProviders } from '@shared/api/catalog.js'
-import { Button, KeyboardView, Photo, Segmented, Text, TextField } from '@/components'
+import { CODE_LENGTH, MIN_PASSWORD, coverMix } from '@shared/components/auth/authKit.js'
+import { KeyboardView, Photo, Segmented, Text } from '@/components'
 import useQuery from '@/hooks/useQuery'
+import { focusOn } from '@/lib/a11y'
 import { supabase } from '@/lib/supabase'
 import { completeAuthFromUrl } from '@/screens/account/authLink'
+import { AuthButton, AuthField, AuthMessage, Badge, CodeInput, GoogleLogo, Legal, PasswordField, TextLink } from '@/screens/auth/AuthUI'
 import { safeNext, useAuth } from '@/state/auth'
-import { TOGGLE_ROLE } from '@/lib/a11y'
 import { makeStyles, useTheme } from '@/theme'
 import type { Provider } from '@/types'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const MIN_PASSWORD = 8
 const RESEND_SECONDS = 30
 
 // Turn Supabase auth errors into something a person can act on (same as the web).
@@ -56,20 +60,28 @@ const authLog = (...args: unknown[]) => {
 // A redirect URL with its tokens / codes cut out.
 const redact = (url: string) => url.replace(/([?#&](access_token|refresh_token|code|provider_token|token_hash)=)[^&]+/g, '$1…')
 
-type Step = 'form' | 'code' | 'confirm' | 'forgot' | 'forgot-sent'
+// A short slide-in per step. Not on the web target: there the entering animation starts the
+// step hidden, so its field can't take autofocus.
+const STEP_IN = Platform.OS === 'web' ? undefined : FadeInRight.duration(240)
+
+type Step = 'start' | 'email' | 'password' | 'code' | 'confirm' | 'forgot' | 'forgot-sent'
 
 export default function SignIn() {
   const s = useStyles()
   const { c } = useTheme()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
+  const { height } = useWindowDimensions()
   const params = useLocalSearchParams<{ next?: string; mode?: string }>()
   const next = safeNext(params.next)
   const { user, profile, needsWelcome } = useAuth()
   const { data: providers } = useQuery<Provider[]>(() => listProviders(), [])
-  const collage = coverMix(providers)
+  const collage = coverMix(providers, 6)
 
   const [mode, setMode] = useState<'login' | 'signup'>(params.mode === 'signup' ? 'signup' : 'login')
-  const [step, setStep] = useState<Step>('form')
+  // The way back: each step pushes; the back arrow pops.
+  const [trail, setTrail] = useState<Step[]>(['start'])
+  const step = trail[trail.length - 1]
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -78,6 +90,7 @@ export default function SignIn() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [resendIn, setResendIn] = useState(0)
+  const headingRef = useRef<View>(null)
 
   // Signed in (or just finished): move on.
   useEffect(() => {
@@ -90,11 +103,27 @@ export default function SignIn() {
     return () => clearTimeout(t)
   }, [resendIn])
 
+  // Steps without a field: the screen reader starts at the heading (the others autofocus their field).
+  useEffect(() => {
+    if (step === 'confirm' || step === 'forgot-sent') focusOn(headingRef, 300)
+  }, [step])
+
   const callbackUrl = () => Linking.createURL('/auth/callback', { queryParams: { next } })
   const cleanEmail = email.trim().toLowerCase()
 
   const go = (nextStep: Step) => {
-    setStep(nextStep)
+    setTrail((t) => (nextStep === 'start' ? ['start'] : [...t, nextStep]))
+    setError('')
+    setNotice('')
+  }
+  const jump = (newTrail: Step[]) => {
+    setTrail(newTrail)
+    setError('')
+    setNotice('')
+  }
+  const back = () => jump(trail.length > 1 ? trail.slice(0, -1) : ['start'])
+  const switchMode = (m: 'login' | 'signup') => {
+    setMode(m)
     setError('')
     setNotice('')
   }
@@ -106,6 +135,7 @@ export default function SignIn() {
     return true
   }
   const run = async (fn: () => Promise<void>) => {
+    if (busy) return
     setBusy(true)
     setError('')
     setNotice('')
@@ -149,6 +179,12 @@ export default function SignIn() {
       if (done.error) setError(done.error)
       else if (!done.handled) setError('Google sign-in didn’t finish. Make sure this app’s link is an allowed redirect URL in Supabase.')
     })
+
+  // Email step: check the address, then ask for the password.
+  const submitEmail = () => {
+    if (!checkEmail()) return
+    go('password')
+  }
 
   const logIn = () => {
     if (!checkEmail()) return
@@ -196,17 +232,24 @@ export default function SignIn() {
       authLog('email code sent', err ? `failed: ${err.status} ${err.message}` : 'ok')
       if (err) return setError(friendly(err))
       setCode('')
-      go('code')
+      if (step !== 'code') go('code')
+      else setNotice('New code sent. Check your inbox (and spam).')
       setResendIn(RESEND_SECONDS)
     })
   }
 
-  const verifyCode = () =>
+  // `token` lets the code boxes submit the moment the last digit lands.
+  const verifyCode = (token: string = code) => {
+    if (busy || token.length < CODE_LENGTH) return
     run(async () => {
-      const { error: err } = await supabase.auth.verifyOtp({ email: cleanEmail, token: code.trim(), type: 'email' })
+      const { error: err } = await supabase.auth.verifyOtp({ email: cleanEmail, token: token.trim(), type: 'email' })
       authLog('email code check', err ? `failed: ${err.status} ${err.message}` : 'ok')
-      if (err) setError(friendly(err))
+      if (err) {
+        setError(friendly(err))
+        setCode('')
+      }
     })
+  }
 
   const sendReset = () => {
     if (!checkEmail()) return
@@ -219,190 +262,307 @@ export default function SignIn() {
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'))
 
-  const BackLink = ({ label = 'Back' }: { label?: string }) => (
-    <Pressable onPress={() => go('form')} style={s.backLink} accessibilityRole="button">
-      <ArrowLeft size={14} color={c.muted} />
-      <Text variant="small" muted>{label}</Text>
-    </Pressable>
+  const messages = (
+    <>
+      {!!notice && <AuthMessage tone="notice">{notice}</AuthMessage>}
+      {!!error && <AuthMessage>{error}</AuthMessage>}
+    </>
+  )
+  const heading = (text: string) => (
+    <Text ref={headingRef as any} variant="h1" style={s.title}>{text}</Text>
+  )
+  const emailChip = (
+    <View style={s.chip}>
+      <Mail size={16} color={c.muted} />
+      <Text variant="small" weight="600" numberOfLines={1} style={s.chipText}>{cleanEmail}</Text>
+      <TextLink title="Change" accessibilityLabel="Change email" onPress={() => jump(['start', 'email'])} />
+    </View>
   )
 
-  return (
-    <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-      {/* KeyboardView: KeyboardAvoidingView with behavior={undefined} does nothing on Android edge-to-edge. */}
-      <KeyboardView style={s.flex}>
-        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-          <View style={s.hero}>
+  // ---------------------------------------------------------------- start
+  if (step === 'start') {
+    const heroH = Math.max(220, Math.min(340, height * 0.4))
+    const tileH = heroH * 0.56
+    return (
+      <SafeAreaView style={s.root} edges={['bottom']}>
+        <ScrollView contentContainerStyle={s.startScroll} bounces={false}>
+          <View style={[s.hero, { height: heroH + insets.top }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
             <View style={s.collage}>
-              {[0, 3].map((start) => (
-                <View key={start} style={s.collageRow}>
-                  {[0, 1, 2].map((i) => <Photo key={i} uri={collage[start + i]} style={s.tile} />)}
+              {[0, 1, 2].map((col) => (
+                <View key={col} style={[s.collageCol, { marginTop: col === 1 ? -tileH * 0.35 : col === 2 ? tileH * 0.12 : 0 }]}>
+                  {[0, 3].map((row) => (
+                    <Animated.View key={row} entering={FadeIn.duration(500).delay((col + row) * 60)}>
+                      <Photo uri={collage[col + row]} style={[s.tile, { height: tileH }]} />
+                    </Animated.View>
+                  ))}
                 </View>
               ))}
             </View>
-            <Pressable onPress={close} style={s.close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
-              <X size={22} color={c.ink} />
-            </Pressable>
+            <LinearGradient colors={[`${c.bg}00`, `${c.bg}d9`, c.bg]} locations={[0.4, 0.8, 1]} style={s.fade} />
           </View>
+          <Pressable onPress={close} style={[s.close, { top: insets.top + 10 }]} accessibilityRole="button" accessibilityLabel="Close" hitSlop={4}>
+            <X size={20} color={c.ink} />
+          </Pressable>
 
-          <View style={s.body}>
-            {step === 'form' && (
+          <View style={s.startBody}>
+            <Text variant="display">Event Organizer<Text variant="display" color="accent" accessibilityRole="none">.</Text></Text>
+            <Text variant="h1" style={s.headline}>Plan any event. Book trusted vendors.</Text>
+            <Text muted style={s.sub}>Photographers, caterers, venues, DJs and more, all in one place.</Text>
+
+            <View style={s.actions}>
+              <AuthButton title="Continue with Google" variant="outline" left={<GoogleLogo />} onPress={google} loading={busy} />
+              <AuthButton title="Continue with email" icon={Mail} onPress={() => go('email')} disabled={busy} />
+            </View>
+            {messages}
+            <View style={s.switchRow}>
+              <Text variant="small" muted>New here?</Text>
+              <TextLink title="Create an account" onPress={() => { switchMode('signup'); go('email') }} />
+            </View>
+            <Legal />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
+
+  // ---------------------------------------------------------------- focused steps
+  return (
+    <SafeAreaView style={s.root} edges={['top', 'bottom']}>
+      <View style={s.bar}>
+        <Pressable onPress={back} style={s.barBtn} accessibilityRole="button" accessibilityLabel="Back">
+          <ArrowLeft size={22} color={c.ink} />
+        </Pressable>
+        <Text variant="h3" weight="800" importantForAccessibility="no" accessibilityElementsHidden accessibilityRole="none">
+          Event Organizer<Text variant="h3" weight="800" color="accent">.</Text>
+        </Text>
+        <Pressable onPress={close} style={s.barBtn} accessibilityRole="button" accessibilityLabel="Close">
+          <X size={22} color={c.ink} />
+        </Pressable>
+      </View>
+      {/* KeyboardView: KeyboardAvoidingView with behavior={undefined} does nothing on Android edge-to-edge. */}
+      <KeyboardView style={s.flex}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+          <Animated.View key={step} entering={STEP_IN} style={s.body}>
+            {step === 'email' && (
               <>
-                <Text variant="display">Event Organizer<Text variant="display" color="accent" accessibilityRole="none">.</Text></Text>
-                <Text variant="h2">{mode === 'login' ? 'Welcome back' : 'Find and book vendors you’ll love'}</Text>
+                <Segmented
+                  options={[{ value: 'login', label: 'Log in' }, { value: 'signup', label: 'Sign up' }]}
+                  value={mode}
+                  label="Log in or sign up"
+                  onChange={switchMode}
+                />
+                <View style={s.gapLg} />
+                {heading(mode === 'login' ? 'Welcome back' : 'Create your account')}
+                <Text muted>{mode === 'login' ? 'Log in with the email you signed up with.' : 'Free, and it takes less than a minute.'}</Text>
+                <View style={s.form}>
+                  <AuthField
+                    label="Email"
+                    value={email}
+                    onChangeText={(v) => { setEmail(v); if (error) setError('') }}
+                    placeholder="you@example.com"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    returnKeyType="next"
+                    onSubmitEditing={submitEmail}
+                    submitBehavior="submit"
+                    invalid={!!error}
+                    autoFocus
+                  />
+                  {messages}
+                  <AuthButton title="Continue" disabled={!email.trim()} onPress={submitEmail} />
+                </View>
+              </>
+            )}
 
-                <Button title="Continue with Google" variant="outline" block onPress={google} disabled={busy} style={s.mtSm} />
-
+            {step === 'password' && (
+              <>
+                {heading(mode === 'login' ? 'Enter your password' : 'Create a password')}
+                {emailChip}
+                <View style={s.form}>
+                  <PasswordField
+                    label={mode === 'login' ? 'Password' : 'New password'}
+                    labelRight={mode === 'login' ? <TextLink title="Forgot password?" onPress={() => go('forgot')} /> : undefined}
+                    value={password}
+                    onChangeText={(v) => { setPassword(v); if (error) setError('') }}
+                    show={showPassword}
+                    onToggleShow={() => setShowPassword((v) => !v)}
+                    meter={mode === 'signup'}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    textContentType={mode === 'login' ? 'password' : 'newPassword'}
+                    passwordRules={mode === 'signup' ? `minlength: ${MIN_PASSWORD};` : undefined}
+                    returnKeyType="go"
+                    onSubmitEditing={mode === 'login' ? logIn : signUp}
+                    submitBehavior="submit"
+                    invalid={!!error}
+                    autoFocus
+                  />
+                  {messages}
+                  {mode === 'login' && error === 'Wrong email or password.' && (
+                    <View style={s.switchRowLeft}>
+                      <Text variant="small" muted>New here?</Text>
+                      <TextLink title="Create an account instead" onPress={() => switchMode('signup')} />
+                    </View>
+                  )}
+                  <AuthButton
+                    title={busy ? (mode === 'login' ? 'Logging in…' : 'Creating account…') : mode === 'login' ? 'Log in' : 'Create account'}
+                    loading={busy}
+                    disabled={!password}
+                    onPress={mode === 'login' ? logIn : signUp}
+                  />
+                </View>
                 <View style={s.divider}>
                   <View style={s.rule} />
-                  <Text variant="tiny" muted>or</Text>
+                  <Text variant="small" muted>or</Text>
                   <View style={s.rule} />
                 </View>
-
-                <Segmented
-                  options={[{ value: 'login', label: 'Log in' }, { value: 'signup', label: 'Create account' }]}
-                  value={mode}
-                  onChange={(m) => { setMode(m); setError(''); setNotice('') }}
-                />
-
-                <TextField
-                  label="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="you@example.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  textContentType="emailAddress"
-                  containerStyle={s.mt}
-                />
-                <TextField
-                  label="Password"
-                  labelRight={mode === 'login' ? (
-                    <Pressable onPress={() => go('forgot')} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} accessibilityRole="link"><Text variant="tiny">Forgot password?</Text></Pressable>
-                  ) : undefined}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder={mode === 'signup' ? `At least ${MIN_PASSWORD} characters` : ''}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  textContentType={mode === 'login' ? 'password' : 'newPassword'}
-                  onSubmitEditing={mode === 'login' ? logIn : signUp}
-                  right={
-                    <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={14} accessibilityRole={TOGGLE_ROLE} accessibilityLabel="Show password" accessibilityState={{ checked: showPassword }}>
-                      {showPassword ? <EyeOff size={16} color={c.muted} /> : <Eye size={16} color={c.muted} />}
-                    </Pressable>
-                  }
-                  containerStyle={s.mtSm}
-                />
-                <Button
-                  title={busy ? 'One moment…' : mode === 'login' ? 'Log in' : 'Create account'}
-                  block
-                  disabled={busy || !email.trim() || !password}
-                  onPress={mode === 'login' ? logIn : signUp}
-                  style={s.mt}
-                />
-                <Button title="Email me a sign-in link instead" icon={Mail} variant="link" size="sm" disabled={busy} onPress={sendLink} style={s.center} />
+                <AuthButton title="Email me a code instead" variant="ghost" icon={KeyRound} disabled={busy} onPress={sendLink} />
               </>
             )}
 
             {step === 'code' && (
               <>
-                <BackLink label="Use a different email" />
-                <Text variant="h2">Check your email</Text>
-                <Text variant="small" muted>
-                  We sent a sign-in link to <Text variant="small" weight="700">{cleanEmail}</Text>. Enter the code from the email here.
+                <Badge icon={MailCheck} />
+                {heading('Check your email')}
+                <Text muted>
+                  We sent a {CODE_LENGTH}-digit code to <Text weight="700">{cleanEmail}</Text>. Enter it below.
                 </Text>
-                <TextField
-                  value={code}
-                  onChangeText={(v) => setCode(v.replace(/\D/g, ''))}
-                  placeholder="••••••"
-                  keyboardType="number-pad"
-                  autoComplete="one-time-code"
-                  textContentType="oneTimeCode"
-                  maxLength={10}
-                  autoFocus
-                  accessibilityLabel="Sign-in code"
-                  style={s.code}
-                  containerStyle={s.mt}
-                />
-                <Button title={busy ? 'Checking…' : 'Sign in'} block disabled={busy || code.length < 6} onPress={verifyCode} style={s.mtSm} />
-                <Button title={resendIn > 0 ? `Resend email in ${resendIn}s` : 'Resend email'} variant="link" size="sm" disabled={resendIn > 0 || busy} onPress={sendLink} />
+                <View style={s.form}>
+                  <CodeInput
+                    label={`${CODE_LENGTH}-digit code`}
+                    value={code}
+                    onChange={(v) => { setCode(v); if (error) setError('') }}
+                    onComplete={verifyCode}
+                    invalid={!!error}
+                    autoFocus
+                  />
+                  {messages}
+                  <AuthButton title={busy ? 'Checking…' : 'Verify and continue'} loading={busy} disabled={!busy && code.length < CODE_LENGTH} onPress={() => verifyCode()} />
+                </View>
+                <View style={s.switchRow}>
+                  <Text variant="small" muted>Didn’t get it?</Text>
+                  {resendIn > 0 ? (
+                    <Text variant="small" weight="700">Resend in {resendIn}s</Text>
+                  ) : (
+                    <TextLink title="Resend code" disabled={busy} onPress={sendLink} />
+                  )}
+                </View>
+                <View style={s.center}>
+                  <TextLink title="Use a different email" onPress={() => jump(['start', 'email'])} />
+                </View>
               </>
             )}
 
             {step === 'confirm' && (
               <>
-                <BackLink />
-                <Text variant="h2">Confirm your email</Text>
-                <Text variant="small" muted>
-                  We sent a confirmation link to <Text variant="small" weight="700">{cleanEmail}</Text>. Open it to finish creating your account, then log in with your email and password.
+                <Badge icon={MailCheck} />
+                {heading('Confirm your email')}
+                <Text muted>
+                  We sent a confirmation link to <Text weight="700">{cleanEmail}</Text>. Open it to finish creating your account, then log in with your email and password.
                 </Text>
-                <Button title={resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend confirmation email'} variant="ghost" block disabled={resendIn > 0 || busy} onPress={resendConfirmation} style={s.mt} />
-                <Button title="Already confirmed? Log in" variant="link" size="sm" onPress={() => { setMode('login'); go('form') }} style={s.center} />
+                <View style={s.form}>
+                  {messages}
+                  <AuthButton title="I’ve confirmed, log me in" onPress={() => { setMode('login'); jump(['start', 'email', 'password']) }} />
+                </View>
+                <View style={s.switchRow}>
+                  <Text variant="small" muted>Didn’t get it?</Text>
+                  {resendIn > 0 ? (
+                    <Text variant="small" weight="700">Resend in {resendIn}s</Text>
+                  ) : (
+                    <TextLink title="Resend confirmation email" disabled={busy} onPress={resendConfirmation} />
+                  )}
+                </View>
               </>
             )}
 
             {step === 'forgot' && (
               <>
-                <BackLink label="Back to log in" />
-                <Text variant="h2">Reset your password</Text>
-                <Text variant="small" muted>Enter your account email and we’ll send a link to choose a new password.</Text>
-                <TextField value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" autoComplete="email" autoFocus containerStyle={s.mt} />
-                <Button title={busy ? 'Sending…' : 'Send reset link'} block disabled={busy || !email.trim()} onPress={sendReset} style={s.mtSm} />
+                {heading('Reset your password')}
+                <Text muted>Enter your account email and we’ll send a link to choose a new password.</Text>
+                <View style={s.form}>
+                  <AuthField
+                    label="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="you@example.com"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    returnKeyType="send"
+                    onSubmitEditing={sendReset}
+                    invalid={!!error}
+                    autoFocus
+                  />
+                  {messages}
+                  <AuthButton title={busy ? 'Sending…' : 'Send reset link'} loading={busy} disabled={!email.trim()} onPress={sendReset} />
+                </View>
               </>
             )}
 
             {step === 'forgot-sent' && (
               <>
-                <BackLink label="Back to log in" />
-                <Text variant="h2">Check your email</Text>
-                <Text variant="small" muted>
-                  If <Text variant="small" weight="700">{cleanEmail}</Text> has an account, a password reset link is on its way. It works once and expires after an hour.
+                <Badge icon={MailCheck} tone="ok" />
+                {heading('Check your email')}
+                <Text muted>
+                  If <Text weight="700">{cleanEmail}</Text> has an account, a password reset link is on its way. It works once and expires after an hour.
                 </Text>
+                <View style={s.form}>
+                  <AuthButton title="Back to log in" onPress={() => { setMode('login'); jump(['start', 'email', 'password']) }} />
+                </View>
               </>
             )}
-
-            {!!notice && <View style={s.notice}><Text variant="small">{notice}</Text></View>}
-            {!!error && <View style={s.error} accessibilityRole="alert"><Text variant="small" color="danger">{error}</Text></View>}
-
-            <Text variant="tiny" muted center style={s.legal}>By continuing you agree to the Terms and Privacy Policy.</Text>
-          </View>
+          </Animated.View>
+          <View style={s.flex} />
+          <Legal />
         </ScrollView>
       </KeyboardView>
     </SafeAreaView>
   )
 }
 
-// Round-robin over providers so the collage isn't all one person's work: up to 6 cover URLs.
-function coverMix(providers: Provider[] = []) {
-  const out: string[] = []
-  const lists = providers.map((p) => p.covers || [])
-  for (let round = 0; out.length < 6 && lists.some((l) => l.length > round); round++) {
-    for (const l of lists) if (l[round] && out.length < 6) out.push(l[round])
-  }
-  return out
-}
-
 const useStyles = makeStyles((t) => ({
   root: { flex: 1, backgroundColor: t.c.bg },
   flex: { flex: 1 },
-  scroll: { paddingBottom: t.space.xxl },
-  hero: { height: 170, overflow: 'hidden' },
-  collage: { flex: 1, gap: 2 },
-  collageRow: { flex: 1, flexDirection: 'row', gap: 2 },
-  tile: { flex: 1, height: '100%' },
-  close: { position: 'absolute', top: 10, right: 12, backgroundColor: t.c.bg, borderRadius: 999, padding: 6 },
-  body: { padding: 20, gap: 10 },
-  mt: { marginTop: t.space.lg },
-  mtSm: { marginTop: t.space.sm },
-  center: { alignSelf: 'center' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 6 },
+  // start
+  startScroll: { flexGrow: 1, paddingBottom: t.space.lg },
+  hero: { overflow: 'hidden' },
+  collage: {
+    position: 'absolute', top: -30, left: -50, right: -50, flexDirection: 'row', gap: 10,
+    transform: [{ rotate: '-7deg' }],
+  },
+  collageCol: { flex: 1, gap: 10 },
+  tile: { width: '100%', borderRadius: 18 },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, top: 0 },
+  close: {
+    position: 'absolute', right: 12, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: t.c.bg, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3,
+  },
+  startBody: { flexGrow: 1, paddingHorizontal: 24, marginTop: -28 },
+  headline: { fontSize: 30, lineHeight: 35, fontWeight: '800', letterSpacing: -0.9, marginTop: 12 },
+  sub: { fontSize: 15, lineHeight: 22, marginTop: 8 },
+  actions: { gap: 12, marginTop: 28, marginBottom: 4 },
+  switchRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 6, rowGap: 2, marginTop: 20 },
+  switchRowLeft: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6 },
+  center: { alignItems: 'center', marginTop: 14 },
+  // focused steps
+  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, minHeight: 56 },
+  barBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: t.space.xl },
+  body: { gap: 8, paddingTop: 4 },
+  gapLg: { height: 14 },
+  // Focused (for screen readers) on steps without a field; no browser outline on the web target.
+  title: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8, ...((Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) as object) },
+  form: { gap: 14, marginTop: 18 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', maxWidth: '100%', marginTop: 6,
+    paddingLeft: 14, paddingRight: 12, minHeight: 44, borderRadius: 999, backgroundColor: t.c.soft,
+  },
+  chipText: { flexShrink: 1 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 20 },
   rule: { flex: 1, height: 1, backgroundColor: t.c.line },
-  backLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
-  code: { fontSize: 22, letterSpacing: 6, textAlign: 'center' },
-  notice: { padding: 12, borderRadius: t.radius.md, backgroundColor: t.c.soft },
-  error: { padding: 12, borderRadius: t.radius.md, backgroundColor: t.c.dangerSoft },
-  legal: { marginTop: t.space.xl },
 }))

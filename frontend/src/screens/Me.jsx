@@ -140,9 +140,9 @@ function ProfileHero({ provider }) {
         <ViewableAvatar src={avatarUrl(profile.avatar_path, name)} name={name} username={profile.username} />
         <div className="grow">
           <h2>{name}</h2>
-          <div className="muted small inline-icon">
+          <div className="muted small me-meta">
             <Link to={`/u/${profile.username || profile.id}`} className="tap-text" aria-label="View your public profile">@{profile.username}</Link>
-            {profile.city && <> · <MapPin size={12} /> {profile.city}</>}
+            {profile.city && <span className="me-meta-city"><MapPin size={12} aria-hidden="true" /> <span className="ellipsis">{profile.city}</span></span>}
           </div>
           <div className="row gap-xs wrap mt-xs">
             {identityStatus === 'verified' && <IdVerified label explain name={name} />}

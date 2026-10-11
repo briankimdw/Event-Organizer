@@ -127,7 +127,7 @@ export function Row({ label, value, bold, muted, style }: { label: ReactNode; va
   return (
     <View style={[s.row, style]}>
       {typeof label === 'string' ? <Text variant="small" weight={w} muted={muted} style={s.shrink}>{label}</Text> : label}
-      {typeof value === 'string' ? <Text variant="small" weight={w} muted={muted}>{value}</Text> : value}
+      {typeof value === 'string' ? <Text variant="small" weight={w} muted={muted} style={s.value}>{value}</Text> : value}
     </View>
   )
 }
@@ -174,7 +174,7 @@ export function PersonRow({ person, sub, right }: { person: PersonLike; sub?: st
         <ChevronRight size={16} color={c.muted} />
       </Pressable>
       </InA11yGroup>
-      {right}
+      {right != null && <View style={s.personRight}>{right}</View>}
     </View>
   )
 }
@@ -242,10 +242,14 @@ const useStyles = makeStyles((t) => ({
   policyRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: t.c.line },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 3 },
   shrink: { flexShrink: 1 },
+  value: { flexShrink: 0, textAlign: 'right' }, // amounts never break; the label wraps instead
   section: { paddingHorizontal: t.space.lg, paddingTop: t.space.lg },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  person: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: t.space.lg, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: t.c.line },
-  personLink: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
+  // The status pill sits at the end of the row; when the name + badges + pill don't fit (long
+  // names, small phones, big text) the pill wraps to its own line instead of squeezing the name to nothing.
+  person: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 8, paddingHorizontal: t.space.lg, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: t.c.line },
+  personLink: { flexGrow: 1, flexShrink: 1, flexBasis: 220, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
+  personRight: { marginLeft: 'auto', flexShrink: 0 },
   personText: { flex: 1, minWidth: 0 },
   personName: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   callout: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: t.radius.lg, backgroundColor: t.c.soft, marginTop: 12, gap: 2 },

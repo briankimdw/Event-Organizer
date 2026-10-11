@@ -87,7 +87,7 @@ const useStyles = makeStyles((t) => ({
     flexDirection: 'column', alignItems: 'stretch', padding: 14, paddingBottom: 10, borderRadius: 18,
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2,
   },
-  input: { flex: 1, fontSize: 14.5, lineHeight: 20, color: t.c.ink, paddingVertical: 6, maxHeight: 120 },
+  input: { flex: 1, minWidth: 0, fontSize: 14.5, lineHeight: 20, color: t.c.ink, paddingVertical: 6, maxHeight: 120 },
   inputHero: { flex: 0, fontSize: 16, minHeight: 72, maxHeight: 220, textAlignVertical: 'top' },
   send: { width: 36, height: 36, borderRadius: 18, alignSelf: 'flex-end', backgroundColor: t.c.ink, alignItems: 'center', justifyContent: 'center' },
   sendOff: { backgroundColor: t.scheme === 'dark' ? '#3f3f46' : '#cfcfcf' },

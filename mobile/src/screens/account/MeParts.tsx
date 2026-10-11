@@ -87,7 +87,7 @@ export function ProfileHero({ provider }: { provider: any }) {
         <View style={s.grow}>
           <Text variant="h2" numberOfLines={2}>{name}</Text>
           <View style={s.inline}>
-            <Text variant="small" muted onPress={() => router.push({ pathname: '/u/[id]', params: { id: profile.username || profile.id } })} accessibilityRole="link" accessibilityLabel="View your public profile">
+            <Text variant="small" muted numberOfLines={1} style={s.handle} onPress={() => router.push({ pathname: '/u/[id]', params: { id: profile.username || profile.id } })} accessibilityRole="link" accessibilityLabel="View your public profile">
               @{profile.username}
             </Text>
             {!!profile.city && (
@@ -360,6 +360,7 @@ const useStyles = makeStyles((t) => ({
   padX: { paddingHorizontal: t.space.lg },
   grow: { flex: 1, minWidth: 0 },
   shrink: { flexShrink: 1 },
+  handle: { flexShrink: 0, maxWidth: '65%' }, // the @handle keeps most of its room; the city ellipsizes first
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   inline: { flexDirection: 'row', alignItems: 'center' },
   signedOut: { padding: t.space.lg, gap: 10, alignItems: 'center' },

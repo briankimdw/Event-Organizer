@@ -23,7 +23,7 @@ import { deckVerticals, verticalsWithPosts } from '../../api/home.js'
 import { getVertical } from '../../verticals/catalog.js'
 
 const THRESHOLD = 90
-const BATCH = 20 // cards per feed request (signed in: small batches so ranking keeps up with swipes)
+const BATCH = 8 // cards per feed request (signed in: small batches so ranking keeps up with swipes; services/ml/eval: 8 vs 20 roughly triples early like rate)
 const BATCH_SIGNED_OUT = 50 // signed out the feed doesn't change, so take as much as it gives
 const LOW_WATER = 3 // fetch more when fewer cards than this are left
 const signInLink = `/sign-in?next=${encodeURIComponent('/discover')}`

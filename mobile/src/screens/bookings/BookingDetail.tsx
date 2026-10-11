@@ -170,9 +170,9 @@ function Detail({ b, reload }: { b: Booking; reload: () => void }) {
 
         <View style={[s.actions, s.mt]}>
           {!!b.conversationId && (
-            <Button title={`Message ${first}`} icon={MessageCircle} variant="ghost" grow onPress={() => router.push({ pathname: '/inbox/[id]', params: { id: b.conversationId! } })} />
+            <Button title={`Message ${first}`} icon={MessageCircle} variant="ghost" grow style={s.actionBtn} onPress={() => router.push({ pathname: '/inbox/[id]', params: { id: b.conversationId! } })} />
           )}
-          {CANCELLABLE.includes(b.status) && <Button title={cancelTitle} variant="danger" grow onPress={() => setSheet('cancel')} />}
+          {CANCELLABLE.includes(b.status) && <Button title={cancelTitle} variant="danger" grow style={s.actionBtn} onPress={() => setSheet('cancel')} />}
         </View>
       </View>
 
@@ -203,7 +203,7 @@ function Detail({ b, reload }: { b: Booking; reload: () => void }) {
             keyboardType="decimal-pad"
             placeholder="Total price"
             placeholderTextColor={c.faint}
-            style={[s.moneyText, s.grow]}
+            style={[s.moneyText, s.grow, { minWidth: 0 }]}
             accessibilityLabel="Total price"
           />
         </View>
@@ -445,7 +445,10 @@ const useStyles = makeStyles((t) => ({
   mtSm: { marginTop: 8 },
   mt: { marginTop: 16 },
   sectionTitle: { marginTop: 24, marginBottom: 10 },
-  actions: { flexDirection: 'row', gap: 8 },
+  // Each button as wide as its label; when "Message <long business name>" and "Cancel request"
+  // can't share a line, Cancel moves to its own line instead of both labels wrapping.
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  actionBtn: { flexBasis: 'auto' },
   wrap: { flexWrap: 'wrap' },
   moneyInput: { flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: t.c.line, paddingBottom: 6 },
   moneyText: { fontSize: 22, fontWeight: '700', color: t.c.ink, paddingVertical: 4 },

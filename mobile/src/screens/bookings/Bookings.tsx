@@ -226,7 +226,7 @@ function AttentionCard({ b }: { b: Booking }) {
       accessibilityLabel={`${a.title}. ${a.cta}`}
     >
       <Avatar uri={b.provider.avatar} name={b.provider.name} size={44} />
-      <View style={s.grow}>
+      <View style={s.attText}>
         <Text variant="small" weight="700">{a.title}</Text>
         <Text variant="tiny" muted numberOfLines={2}>{b.packageName} with {callOf(b.provider as any)} · {b.date}</Text>
       </View>
@@ -319,10 +319,13 @@ const useStyles = makeStyles((t) => {
     segWrap: { marginTop: 22, marginBottom: 12 },
     monthLabel: { marginTop: 4, marginBottom: 8, fontSize: 11.5, fontWeight: '700' },
     attention: {
-      flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, marginBottom: 8, borderRadius: 16,
+      // Narrow phones / big text: the button drops under the text (right-aligned) instead of
+      // squeezing the title to three lines.
+      flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 10, padding: 12, marginBottom: 8, borderRadius: 16,
       backgroundColor: t.c.accentSoft, borderWidth: 1, borderColor: dark ? '#5a2a1c' : '#ffd2c4',
     },
-    attCta: { backgroundColor: t.c.accent, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 10 },
+    attText: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 0 },
+    attCta: { marginLeft: 'auto', backgroundColor: t.c.accent, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 10 },
     attCtaText: { color: t.c.onAccent, fontSize: 12, fontWeight: '700' },
     pressed: { opacity: 0.8 },
     item: { flexDirection: 'row', gap: 12, marginBottom: 12 },

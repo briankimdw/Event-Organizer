@@ -27,7 +27,8 @@ export default function MapPreview({ radiusKm, avatar, name, tint, onPress }: Ma
 }
 
 const useStyles = makeStyles((t) => ({
-  wrap: { height: 150, borderRadius: t.radius.lg, backgroundColor: t.c.soft, marginTop: 10, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  // Bottom padding keeps the "Travels up to" line clear of the Open map pill (large text).
+  wrap: { minHeight: 150, paddingTop: 12, paddingBottom: 40, paddingHorizontal: 12, borderRadius: t.radius.lg, backgroundColor: t.c.soft, marginTop: 10, alignItems: 'center', justifyContent: 'center', gap: 8 },
   ring: { width: 86, height: 86, borderRadius: 43, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   pin: { borderWidth: 3, borderRadius: 999, backgroundColor: '#fff' },
   open: {

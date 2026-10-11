@@ -454,9 +454,9 @@ const useStyles = makeStyles((t) => ({
     borderTopWidth: 1, borderTopColor: t.c.line, backgroundColor: t.c.bg,
   },
   input: {
-    flex: 1, minHeight: 40, maxHeight: 120, backgroundColor: t.c.soft, borderRadius: 20, paddingHorizontal: 14,
+    flex: 1, minWidth: 0, minHeight: 40, maxHeight: 120, backgroundColor: t.c.soft, borderRadius: 20, paddingHorizontal: 14,
     paddingTop: 10, paddingBottom: 10, fontSize: 15, color: t.c.ink,
   },
-  send: { width: 40, height: 40, borderRadius: 20, backgroundColor: t.c.accent, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 40, height: 40, flexShrink: 0, borderRadius: 20, backgroundColor: t.c.accent, alignItems: 'center', justifyContent: 'center' },
   sendOff: { opacity: 0.35 },
 }))

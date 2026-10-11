@@ -24,7 +24,7 @@
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
-body { background: #e9e7e3; }
+body { background: #e9e7e3; overflow-wrap: break-word; } /* long links / handles break instead of running out of their box */
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 button:disabled { opacity: 0.4; cursor: default; }
 a { color: inherit; text-decoration: none; }
@@ -33,7 +33,7 @@ h2, h3, h4, p { margin: 0; }
 h2 { font-size: 20px; }
 h3 { font-size: 17px; }
 h4 { font-size: 15px; }
-p { line-height: 1.45; }
+p { line-height: 1.45; overflow-wrap: anywhere; } /* user prose: an unbroken link can't widen a centred/flex paragraph past the screen */
 img { display: block; }
 
 /* ---------- Phone frame ---------- */
@@ -75,6 +75,12 @@ img { display: block; }
 .left-text { text-align: left; }
 .center-col { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
 .inline-icon { display: inline-flex; align-items: center; gap: 4px; }
+.inline-icon > svg, .row > svg { flex-shrink: 0; } /* icons keep their size next to long text */
+/* "@username · 📍 City": the city moves to the next line as a whole (ellipsized if huge) instead of
+   breaking word by word next to a long handle. */
+.me-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.me-meta .tap-text { overflow-wrap: anywhere; min-width: 0; }
+.me-meta-city { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 .accent-text { color: var(--accent-ink); }
 .ok { color: var(--ok); }
 .warn { color: #b45309; margin-top: 8px; }
@@ -105,6 +111,7 @@ img { display: block; }
 .topbar-title { text-align: center; font-weight: 700; min-width: 0; }
 .topbar-title { margin: 0; font-size: inherit; }
 .topbar-title > div, .topbar-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-name > .profile-link { display: block; overflow: hidden; text-overflow: ellipsis; max-width: 100%; } /* a chat's name links to the profile */
 .topbar-title small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; font-size: 11.5px; color: var(--muted); }
 
 .icon-btn { display: inline-grid; place-items: center; padding: 6px; border-radius: 999px; }
@@ -138,7 +145,9 @@ img { display: block; }
 /* Equal widths when both fit; never narrower than the one-line label; when they can't share
    a line the second button moves to its own full-width line instead of overflowing. */
 .row:has(> .btn.grow), .row:has(> [style*="contents"] > .btn.grow) { flex-wrap: wrap; }
-.row > .btn.grow, .row > [style*="contents"] > .btn.grow { white-space: nowrap; min-width: max-content; }
+/* fit-content = the one-line width, but never wider than the row: a label longer than the whole row
+   ("Message <very long business name>") wraps inside its own full-width button instead of running off-screen. */
+.row > .btn.grow, .row > [style*="contents"] > .btn.grow { min-width: fit-content; }
 @media (max-width: 359px) {
   .row > .btn.grow { padding-left: 10px; padding-right: 10px; font-size: 13.5px; gap: 5px; }
 }
@@ -171,6 +180,9 @@ img { display: block; }
 .chips.scroll-x { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .chips.scroll-x::-webkit-scrollbar { display: none; }
 .chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 11px; border-radius: 999px; background: var(--soft); font-size: 12.5px; white-space: nowrap; }
+/* In a wrapping chip list, a chip longer than the whole row wraps inside itself instead of running
+   off-screen (rails, .scroll-x, keep one line and scroll). */
+.chips:not(.scroll-x) > .chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .chip.solid { background: var(--ink); color: #fff; }
 .chip.auto { background: #f1f0ff; color: #5b4bd6; }
 .chip.toggle { border: 1px solid var(--line); background: #fff; }
@@ -191,6 +203,8 @@ img { display: block; }
 .callout.danger { background: var(--danger-soft); }
 .link-callout { flex-direction: row; align-items: center; gap: 10px; color: var(--ink); }
 .link-callout > svg:first-child { color: var(--danger); }
+.bk-body > .row.between { gap: 8px; align-items: flex-start; }
+.bk-body > .row.between > b { min-width: 0; }
 .info-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
 /* "Availability · next 2 weeks"  |  "Boyle Heights + 60 km radius": both top-aligned, the right one right-aligned */
 .info-card > .row.between { align-items: flex-start; gap: 10px; }
@@ -216,8 +230,11 @@ img { display: block; }
 .stars { display: inline-flex; gap: 1px; color: #d4d4d4; }
 .stars .on { color: var(--star); }
 
-.person-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; }
-.person-link { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+/* The right-hand extra (a booking's status pill) drops to its own line, right-aligned, when it
+   would otherwise squeeze a long name onto three lines. */
+.person-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 16px; }
+.person-link { display: flex; align-items: center; gap: 10px; flex: 1 1 220px; min-width: 0; }
+.person-row > .person-link ~ * { margin-left: auto; }
 .person-text { min-width: 0; }
 .person-name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
@@ -538,7 +555,9 @@ input[type=date].filter { width: 130px; }
 .role small { display: block; font-size: 11px; }
 .role.on, .role.on b { color: #fff; }
 .role.on small { color: rgba(255,255,255,.7); }
-.role-dot { position: absolute; top: 6px; right: 8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent-fill); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+/* On the corner, like an app badge, so it never sits on top of the label ("Photographer" at 320px). */
+.role > div { min-width: 0; }
+.role-dot { position: absolute; top: -5px; right: -2px; box-shadow: 0 0 0 2px var(--bg); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent-fill); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
 
 .mode-body { animation: fade .25s; padding-bottom: 16px; }
 .stat-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 16px 0; }
@@ -592,7 +611,11 @@ input[type=date].filter { width: 130px; }
 .mini-booking { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--soft); }
 .bk-cal-jump { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; margin-top: 8px; padding: 9px; border-radius: 12px; background: var(--soft); font-size: 12.5px; font-weight: 600; color: var(--muted); }
 
-.attention-card { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 8px; border-radius: 16px; background: var(--accent-soft); border: 1px solid #ffd2c4; }
+/* Narrow phones / long names: the button drops under the text (right-aligned) instead of
+   squeezing the title into a one-word-wide column. */
+.attention-card { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px; margin-bottom: 8px; border-radius: 16px; background: var(--accent-soft); border: 1px solid #ffd2c4; }
+.attention-card > .grow { flex: 1 1 150px; }
+.attention-card > .att-cta { margin-left: auto; }
 .attention-img { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
 .att-cta { background: var(--accent-fill); color: #fff; font-size: 12px; font-weight: 700; padding: 7px 10px; border-radius: 10px; white-space: nowrap; }
 

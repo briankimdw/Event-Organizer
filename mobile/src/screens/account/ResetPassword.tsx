@@ -2,22 +2,20 @@
 // from a "reset your password" email (the link opens the app here and signs you in
 // for this one step; see authLink.ts) or from Settings while signed in.
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { Eye, EyeOff } from 'lucide-react-native'
+import { CircleAlert, CircleCheck, KeyRound, Link2Off } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native'
+import { ActivityIndicator, ScrollView, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Button, KeyboardView, Text, TextField, TopBar } from '@/components'
+import { MIN_PASSWORD } from '@shared/components/auth/authKit.js'
+import { KeyboardView, Text, TopBar } from '@/components'
 import { supabase } from '@/lib/supabase'
+import { AuthButton, AuthMessage, Badge, PasswordField } from '@/screens/auth/AuthUI'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
-import { TOGGLE_ROLE } from '@/lib/a11y'
 import { makeStyles, useTheme } from '@/theme'
 import { useIncomingUrl } from './AuthCallback'
 import { completeAuthFromUrl } from './authLink'
-import { FormError } from './ui'
-
-const MIN_PASSWORD = 8
 
 export default function ResetPassword() {
   const s = useStyles()
@@ -67,12 +65,16 @@ export default function ResetPassword() {
         <TopBar title="New password" />
         <View style={s.center}>
           {(loading || !waited) && !linkError ? (
-            <ActivityIndicator size="large" color={c.ink} />
+            <>
+              <ActivityIndicator size="large" color={c.ink} />
+              <Text muted accessibilityLiveRegion="polite">Checking your link…</Text>
+            </>
           ) : (
             <>
-              <Text variant="h3" center>That reset link didn’t work</Text>
-              <Text variant="small" muted center>{linkError ? `${linkError.replace(/\.?$/, '.')} ` : ''}It may have expired or already been used. Request a new one from the log-in screen.</Text>
-              <Button title="Back to log in" onPress={() => router.replace('/sign-in')} style={s.btn} />
+              <Badge icon={Link2Off} />
+              <Text variant="h2" center>That reset link didn’t work</Text>
+              <Text muted center>{linkError ? `${linkError.replace(/\.?$/, '.')} ` : ''}It may have expired or already been used. Request a new one from the log-in screen.</Text>
+              <AuthButton title="Back to log in" onPress={() => router.replace('/sign-in')} style={s.btn} />
             </>
           )}
         </View>
@@ -80,45 +82,53 @@ export default function ResetPassword() {
     )
   }
 
-  const eye = (
-    <Pressable onPress={() => setShow((v) => !v)} hitSlop={14} accessibilityRole={TOGGLE_ROLE} accessibilityLabel="Show password" accessibilityState={{ checked: show }}>
-      {show ? <EyeOff size={16} color={c.muted} /> : <Eye size={16} color={c.muted} />}
-    </Pressable>
-  )
+  const matches = confirm.length > 0 && confirm === password
+  const mismatch = confirm.length >= password.length && confirm.length > 0 && confirm !== password
   return (
     <SafeAreaView style={s.root} edges={['top']}>
       <TopBar title="New password" />
       <KeyboardView bottomInset={insets.bottom}>
         <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
-          <Text variant="small" muted>
-            Choose a password for <Text variant="small" weight="700">{user.email}</Text>. You’ll use it to log in from now on.
+          <Badge icon={KeyRound} />
+          <Text variant="h1" style={s.title}>Choose a new password</Text>
+          <Text muted>
+            For <Text weight="700">{user.email}</Text>. You’ll use it to log in from now on.
           </Text>
-          <TextField
-            label="New password"
-            secureTextEntry={!show}
-            autoCapitalize="none"
-            autoComplete="new-password"
-            textContentType="newPassword"
-            placeholder={`At least ${MIN_PASSWORD} characters`}
-            value={password}
-            onChangeText={setPassword}
-            autoFocus
-            right={eye}
-            containerStyle={s.mt}
-          />
-          <TextField
-            label="Confirm password"
-            secureTextEntry={!show}
-            autoCapitalize="none"
-            autoComplete="new-password"
-            textContentType="newPassword"
-            value={confirm}
-            onChangeText={setConfirm}
-            onSubmitEditing={save}
-            containerStyle={s.mtSm}
-          />
-          {!!error && <FormError>{error}</FormError>}
-          <Button title={busy ? 'Saving…' : 'Save password'} block disabled={busy || !password || !confirm} onPress={save} style={s.mt} />
+          <View style={s.form}>
+            <PasswordField
+              label="New password"
+              show={show}
+              onToggleShow={() => setShow((v) => !v)}
+              meter
+              autoComplete="new-password"
+              textContentType="newPassword"
+              passwordRules={`minlength: ${MIN_PASSWORD};`}
+              value={password}
+              onChangeText={(v) => { setPassword(v); if (error) setError('') }}
+              autoFocus
+              returnKeyType="next"
+            />
+            <PasswordField
+              label="Confirm password"
+              show={show}
+              toggle={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              value={confirm}
+              onChangeText={(v) => { setConfirm(v); if (error) setError('') }}
+              onSubmitEditing={save}
+              returnKeyType="done"
+              invalid={mismatch}
+            />
+            {(matches || mismatch) && (
+              <View style={s.status} accessible accessibilityLiveRegion="polite">
+                {matches ? <CircleCheck size={15} color={c.ok} /> : <CircleAlert size={15} color={c.danger} />}
+                <Text variant="small" color={matches ? 'ok' : 'danger'}>{matches ? 'Passwords match' : 'The passwords don’t match yet'}</Text>
+              </View>
+            )}
+            {!!error && <AuthMessage>{error}</AuthMessage>}
+            <AuthButton title={busy ? 'Saving…' : 'Save password'} loading={busy} disabled={!password || !confirm} onPress={save} />
+          </View>
         </ScrollView>
       </KeyboardView>
     </SafeAreaView>
@@ -128,8 +138,9 @@ export default function ResetPassword() {
 const useStyles = makeStyles((t) => ({
   root: { flex: 1, backgroundColor: t.c.bg },
   center: { alignItems: 'center', gap: 12, paddingTop: 80, paddingHorizontal: t.space.xl },
-  body: { padding: t.space.lg },
-  btn: { alignSelf: 'center' },
-  mt: { marginTop: t.space.lg },
-  mtSm: { marginTop: t.space.sm },
+  body: { paddingHorizontal: 24, paddingTop: t.space.xl, paddingBottom: t.space.xxl, gap: 8 },
+  title: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
+  btn: { alignSelf: 'stretch', marginTop: t.space.sm },
+  form: { gap: 14, marginTop: 18 },
+  status: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -6 },
 }))

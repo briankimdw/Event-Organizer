@@ -190,10 +190,10 @@ export default function Profile() {
             </Pressable>
           )}
           {!!person.city && (
-            <Pressable onPress={openMap} disabled={!openMap} style={s.inline} accessibilityRole={openMap ? 'link' : undefined}
+            <Pressable onPress={openMap} disabled={!openMap} style={[s.inline, s.city]} accessibilityRole={openMap ? 'link' : undefined}
               accessibilityLabel={openMap ? `${person.city}: see ${firstName} on the map` : person.city}>
               <MapPin size={13} color={c.muted} />
-              <Text variant="small" muted style={openMap ? s.underline : undefined}>{person.city}</Text>
+              <Text variant="small" muted style={[s.cityText, openMap && s.underline]}>{person.city}</Text>
             </Pressable>
           )}
         </View>
@@ -247,12 +247,13 @@ export default function Profile() {
               <Button title={following.has(provider.id) ? 'Following' : 'Follow'} variant={following.has(provider.id) ? 'ghost' : 'primary'} grow onPress={() => toggleFollow(provider.id)} />
               <Button title={contacting ? 'Opening…' : 'Ask a question'} icon={MessageCircle} variant="ghost" grow disabled={contacting} onPress={contact} />
             </View>
-            <View style={s.row}>
-              <AddToEventButton provider={provider} variant="button" />
+            <View style={[s.row, s.wrapRow]}>
+              <AddToEventButton provider={provider} variant="button" style={s.fitBtn} />
               <Button
                 title={`Book ${firstName}`}
                 variant="accent"
                 grow
+                style={s.fitBtn}
                 onPress={() => router.push({ pathname: '/book/[providerId]', params: { providerId: provider.id, ...datesQuery } })}
               />
             </View>
@@ -463,12 +464,18 @@ const useStyles = makeStyles((t) => ({
   headOverCover: { marginTop: -58 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 },
   inline: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'center' },
+  // A long city / service area wraps under the vertical tag instead of running off-screen.
+  city: { maxWidth: '100%', flexWrap: 'nowrap' },
+  cityText: { flexShrink: 1 },
   vtag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginRight: 4 },
   underline: { textDecorationLine: 'underline' },
   bio: { marginTop: t.space.sm },
-  centerChips: { justifyContent: 'center', marginTop: 10 },
+  centerChips: { justifyContent: 'center', marginTop: 10, alignSelf: 'stretch' }, // full width, so a long specialty ellipsizes instead of widening the row
   actions: { alignSelf: 'stretch', marginTop: t.space.lg, gap: t.space.sm },
   row: { flexDirection: 'row', gap: t.space.sm },
+  // "Book <long business name>" gets its own full-width line (like the web) instead of wrapping.
+  wrapRow: { flexWrap: 'wrap' },
+  fitBtn: { flexBasis: 'auto' },
   padX: { paddingHorizontal: t.space.lg, marginBottom: t.space.sm },
   infoCard: { borderWidth: 1, borderColor: t.c.line, borderRadius: t.radius.lg, padding: 12 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },

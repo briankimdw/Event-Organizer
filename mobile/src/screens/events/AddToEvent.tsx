@@ -6,7 +6,7 @@
 import { usePathname, useRouter } from 'expo-router'
 import { CalendarPlus, Check, DatabaseZap, Plus } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, View } from 'react-native'
+import { Pressable, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { SETUP_MESSAGE, addCandidate, eventError, eventsWithCandidate, isSetupError, listUpcomingEvents, whenLabel } from '@shared/api/events.js'
 import { fromKey } from '@shared/lib/dates.js'
@@ -118,7 +118,7 @@ export function AddToEventSheet({ open, onClose, provider }: { open: boolean; on
 }
 
 // variant 'icon' (round button over a photo) or 'button' (a ghost button).
-export function AddToEventButton({ provider, variant = 'icon' }: { provider: Vendor | null | undefined; variant?: 'icon' | 'button' }) {
+export function AddToEventButton({ provider, variant = 'icon', style }: { provider: Vendor | null | undefined; variant?: 'icon' | 'button'; style?: StyleProp<ViewStyle> }) {
   const s = useStyles()
   const { c } = useTheme()
   const { user } = useAuth()
@@ -133,7 +133,7 @@ export function AddToEventButton({ provider, variant = 'icon' }: { provider: Ven
   return (
     <>
       {variant === 'button' ? (
-        <Button title="Add to event" icon={CalendarPlus} variant="ghost" grow onPress={press} />
+        <Button title="Add to event" icon={CalendarPlus} variant="ghost" grow style={style} onPress={press} />
       ) : (
         <Pressable onPress={press} hitSlop={6} style={({ pressed }) => [s.fab, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`Add ${provider.name} to an event`}>
           <CalendarPlus size={16} color={c.ink} />

@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Eye, EyeOff, Mail, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, KeyRound, Mail, MailCheck, X } from 'lucide-react'
 import { supabase } from '../lib/supabase.js'
 import { safeNext, useAuth } from '../auth.jsx'
 import Segmented from '../components/Segmented.jsx'
 import useQuery from '../lib/useQuery.js'
 import { listProviders } from '../api/catalog.js'
+import { CODE_LENGTH, MIN_PASSWORD, coverMix } from '../components/auth/authKit.js'
+import PasswordField from '../components/auth/PasswordField.jsx'
+import CodeInput from '../components/auth/CodeInput.jsx'
+import '../components/auth/auth.css'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const MIN_PASSWORD = 8
 const RESEND_SECONDS = 30
 
 // Turn Supabase auth errors into something a person can act on.
@@ -31,28 +34,34 @@ const friendly = (error) => {
   return error?.message || 'Something went wrong. Please try again.'
 }
 
+// Steps: start (Google / email) -> email -> password (log in or create) -> done,
+// with side trips: code (email link + 6-digit code), confirm (new account must confirm),
+// forgot -> forgot-sent.
 export default function SignIn() {
   const navigate = useNavigate()
   const location = useLocation()
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
   const { user, profile, needsWelcome } = useAuth()
-  // Decorative collage: recent album covers from photographers on the app.
+  // Decorative collage: recent album covers from vendors on the app.
   const { data: providers } = useQuery(() => listProviders(), [])
-  const collage = coverMix(providers)
+  const collage = coverMix(providers, 6)
 
   const [mode, setMode] = useState(params.get('mode') === 'signup' ? 'signup' : 'login')
-  // form | code (email link/code sent) | confirm (new account must confirm) | forgot | forgot-sent
-  const [step, setStep] = useState('form')
+  // The way back: each step pushes; the back arrow pops.
+  const [trail, setTrail] = useState(['start'])
+  const step = trail[trail.length - 1]
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [googleBusy, setGoogleBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [resendIn, setResendIn] = useState(0)
   const [googleEnabled, setGoogleEnabled] = useState(null) // null = checking
+  const headingRef = useRef(null)
 
   // Signed in (or just finished): move on.
   useEffect(() => {
@@ -76,12 +85,30 @@ export default function SignIn() {
     return () => clearTimeout(t)
   }, [resendIn])
 
+  // Steps without a text field get focus on their heading, so keyboard and screen-reader
+  // users land on the new content (the others autofocus their field).
+  useEffect(() => {
+    if (['confirm', 'forgot-sent'].includes(step)) headingRef.current?.focus()
+  }, [step])
+
   // Built on demand (only ever runs in the browser).
   const callbackUrl = () => `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
   const cleanEmail = email.trim().toLowerCase()
 
   const go = (nextStep) => {
-    setStep(nextStep)
+    setTrail((t) => (nextStep === 'start' ? ['start'] : [...t, nextStep]))
+    setError('')
+    setNotice('')
+  }
+  // Jump to a step with a known way back (e.g. "Use a different email").
+  const jump = (newTrail) => {
+    setTrail(newTrail)
+    setError('')
+    setNotice('')
+  }
+  const back = () => jump(trail.length > 1 ? trail.slice(0, -1) : ['start'])
+  const switchMode = (m) => {
+    setMode(m)
     setError('')
     setNotice('')
   }
@@ -95,6 +122,7 @@ export default function SignIn() {
   }
 
   const run = async (fn) => {
+    if (busy) return // buttons stay enabled while busy (so focus isn't dropped); ignore repeats
     setBusy(true)
     setError('')
     setNotice('')
@@ -103,6 +131,13 @@ export default function SignIn() {
     } finally {
       setBusy(false)
     }
+  }
+
+  // ---- Email step: just check the address, then ask for the password ----
+  const submitEmail = (e) => {
+    e.preventDefault()
+    if (!checkEmail()) return
+    go('password')
   }
 
   // ---- Log in with email + password ----
@@ -155,6 +190,7 @@ export default function SignIn() {
       else {
         setNotice('Sent again. Check your inbox (and spam).')
         setResendIn(RESEND_SECONDS)
+        headingRef.current?.focus()
       }
     })
 
@@ -172,16 +208,25 @@ export default function SignIn() {
         return
       }
       setCode('')
-      go('code')
+      if (step !== 'code') go('code')
+      else {
+        setNotice('New code sent. Check your inbox (and spam).')
+        document.getElementById('signin-code')?.focus()
+      }
       setResendIn(RESEND_SECONDS)
     })
   }
 
-  const verifyCode = (e) => {
-    e.preventDefault()
+  // `token` lets the code boxes submit the moment the last digit lands.
+  const verifyCode = (e, token = code) => {
+    e?.preventDefault()
+    if (busy || token.length < CODE_LENGTH) return
     run(async () => {
-      const { error: err } = await supabase.auth.verifyOtp({ email: cleanEmail, token: code.trim(), type: 'email' })
-      if (err) setError(friendly(err))
+      const { error: err } = await supabase.auth.verifyOtp({ email: cleanEmail, token: token.trim(), type: 'email' })
+      if (err) {
+        setError(friendly(err))
+        setCode('')
+      }
     })
   }
 
@@ -200,171 +245,275 @@ export default function SignIn() {
 
   const google = async () => {
     setError('')
+    setGoogleBusy(true)
     const { error: err } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: callbackUrl() } })
-    if (err) setError(friendly(err))
+    if (err) {
+      setError(friendly(err))
+      setGoogleBusy(false)
+    }
   }
 
-  const BackLink = ({ label = 'Back' }) => (
-    <button className="link-btn small muted" onClick={() => go('form')}>
-      <ArrowLeft size={14} aria-hidden="true" /> {label}
-    </button>
+  const close = () => (location.key === 'default' ? navigate('/') : navigate(-1))
+  const errId = error ? 'signin-error' : undefined
+
+  // Messages sit right above the step's main button, where people are looking.
+  const messages = (
+    <>
+      {notice && <div className="au-notice" role="status">{notice}</div>}
+      {error && <div className="au-error" role="alert" id="signin-error">{error}</div>}
+    </>
+  )
+  const legal = (
+    <p className="au-legal">
+      By continuing, you agree to our <b>Terms of Service</b> and <b>Privacy Policy</b>.
+    </p>
+  )
+  const emailChip = (
+    <div className="au-chip">
+      <Mail size={16} aria-hidden="true" />
+      <span className="au-chip-text">{cleanEmail}</span>
+      <button type="button" className="au-link" onClick={() => jump(['start', 'email'])}>
+        Change<span className="sr-only"> email</span>
+      </button>
+    </div>
   )
 
-  return (
-    <div className="signin">
-      <div className="signin-hero">
-        <div className="signin-collage">
-          {Array.from({ length: 6 }, (_, i) =>
-            collage[i] ? <img key={i} src={collage[i]} alt="" className={`c${i}`} /> : <span key={i} className={`signin-tile c${i}`} />,
-          )}
+  if (step === 'start') {
+    return (
+      <div className="au">
+        <div className="au-hero" aria-hidden="true">
+          <div className="au-collage">
+            {Array.from({ length: 6 }, (_, i) =>
+              collage[i] ? <img key={i} src={collage[i]} alt="" className={`c${i}`} /> : <span key={i} className={`au-tile c${i}`} />,
+            )}
+          </div>
         </div>
-        <button className="icon-btn signin-close" onClick={() => (location.key === 'default' ? navigate('/') : navigate(-1))} aria-label="Close">
-          <X size={22} aria-hidden="true" />
+        <button className="au-close" onClick={close} aria-label="Close">
+          <X size={20} aria-hidden="true" />
+        </button>
+
+        <div className="au-start">
+          <div className="wordmark">photomatch</div>
+          <h1 className="au-headline">Plan any event. Book trusted vendors.</h1>
+          <p className="au-sub">Photographers, caterers, venues, DJs and more, all in one place.</p>
+
+          <div className="au-actions">
+            <button className="au-btn au-btn-google" onClick={google} disabled={googleEnabled === false || googleBusy}
+              aria-describedby={googleEnabled === false ? 'google-off' : errId}>
+              {googleBusy ? <span className="au-spin" aria-hidden="true" /> : <GoogleLogo />}
+              {googleBusy ? 'Opening Google…' : 'Continue with Google'}
+            </button>
+            {googleEnabled === false && (
+              <p className="au-hint center" id="google-off">Google sign-in isn’t switched on for this project yet.</p>
+            )}
+            <button className="au-btn au-btn-primary" onClick={() => go('email')}>
+              <Mail size={18} aria-hidden="true" /> Continue with email
+            </button>
+          </div>
+          {messages}
+
+          <p className="au-switch">
+            New here?{' '}
+            <button type="button" className="au-link strong" onClick={() => { switchMode('signup'); go('email') }}>
+              Create an account
+            </button>
+          </p>
+          {legal}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="au au-flow">
+      <div className="au-bar">
+        <button className="au-icon-btn" onClick={back} aria-label="Back">
+          <ArrowLeft size={20} aria-hidden="true" />
+        </button>
+        <div className="wordmark au-bar-mark" aria-hidden="true">photomatch</div>
+        <button className="au-icon-btn" onClick={close} aria-label="Close">
+          <X size={20} aria-hidden="true" />
         </button>
       </div>
 
-      <div className="signin-body">
-        {step === 'form' && (
+      <div className="au-step" key={step}>
+        {step === 'email' && (
           <>
-            <div className="wordmark">photomatch</div>
-            <h1 className="signin-title">{mode === 'login' ? 'Welcome back' : 'Find and book vendors you’ll love'}</h1>
-
-            <button className="btn-google mt-sm" onClick={google} disabled={googleEnabled === false}>
-              <GoogleLogo /> Continue with Google
-            </button>
-            {googleEnabled === false && (
-              <div className="tiny muted center-text mt-xs">Google sign-in isn’t switched on for this project yet.</div>
-            )}
-
-            <div className="divider"><span>or</span></div>
-
             <Segmented
+              className="au-seg"
               options={[
                 { value: 'login', label: 'Log in' },
-                { value: 'signup', label: 'Create account' },
+                { value: 'signup', label: 'Sign up' },
               ]}
               value={mode}
-              label="Log in or create an account"
-              onChange={(m) => { setMode(m); setError(''); setNotice('') }}
+              label="Log in or sign up"
+              onChange={switchMode}
             />
-
-            <form onSubmit={mode === 'login' ? logIn : signUp} noValidate className="mt">
-              <label className="field">
-                <span>Email</span>
-                <input className="input" type="email" inputMode="email" autoComplete="email"
-                  placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)}
-                  aria-describedby={error ? 'signin-error' : undefined} />
-              </label>
-              {/* Not a wrapping <label>: it holds two buttons, which would end up in the field's name. */}
-              <div className="field mt-sm">
-                <span className="row between">
-                  <label htmlFor="signin-password">Password</label>
-                  {mode === 'login' && (
-                    <button type="button" className="link-btn tiny" onClick={() => go('forgot')}>Forgot password?</button>
-                  )}
-                </span>
-                <div className="input-prefix">
-                  <input id="signin-password" type={showPassword ? 'text' : 'password'}
-                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    placeholder={mode === 'signup' ? `At least ${MIN_PASSWORD} characters` : ''}
-                    aria-describedby={[mode === 'signup' && 'signin-pw-hint', error && 'signin-error'].filter(Boolean).join(' ') || undefined}
-                    value={password} onChange={(e) => setPassword(e.target.value)} />
-                  <button type="button" className="icon-btn" onClick={() => setShowPassword((v) => !v)}
-                    aria-label="Show password" aria-pressed={showPassword}>
-                    {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
-                  </button>
+            <h1 className="au-title">{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
+            <p className="au-lede">
+              {mode === 'login' ? 'Log in with the email you signed up with.' : 'Free, and it takes less than a minute.'}
+            </p>
+            <form onSubmit={submitEmail} noValidate className="au-form">
+              <div className="au-field">
+                <div className="au-label-row"><label htmlFor="signin-email">Email</label></div>
+                <div className={`au-input-wrap${error ? ' invalid' : ''}`}>
+                  <input id="signin-email" className="au-input" type="email" inputMode="email" autoComplete="email"
+                    autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next"
+                    placeholder="you@example.com" value={email} onChange={(e) => { setEmail(e.target.value); if (error) setError('') }}
+                    aria-invalid={error ? true : undefined} aria-describedby={errId} autoFocus />
                 </div>
-                {mode === 'signup' && <span id="signin-pw-hint" className="sr-only">At least {MIN_PASSWORD} characters</span>}
               </div>
-              <button className="btn block mt" disabled={busy || !email.trim() || !password}>
-                {busy ? 'One moment…' : mode === 'login' ? 'Log in' : 'Create account'}
+              {messages}
+              <button className="au-btn au-btn-primary" disabled={!email.trim()}>Continue</button>
+            </form>
+          </>
+        )}
+
+        {step === 'password' && (
+          <>
+            <h1 className="au-title">{mode === 'login' ? 'Enter your password' : 'Create a password'}</h1>
+            {emailChip}
+            <form onSubmit={mode === 'login' ? logIn : signUp} noValidate className="au-form">
+              {/* For password managers: the account this password belongs to. */}
+              <input type="email" name="email" autoComplete="username" value={cleanEmail} readOnly hidden />
+              <PasswordField
+                id="signin-password"
+                label={mode === 'login' ? 'Password' : 'New password'}
+                value={password}
+                onChange={(v) => { setPassword(v); if (error) setError('') }}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                show={showPassword}
+                onToggleShow={() => setShowPassword((v) => !v)}
+                meter={mode === 'signup'}
+                invalid={!!error}
+                describedBy={errId}
+                enterKeyHint="go"
+                autoFocus
+                labelRight={mode === 'login' && (
+                  <button type="button" className="au-link small" onClick={() => go('forgot')}>Forgot password?</button>
+                )}
+              />
+              {messages}
+              {mode === 'login' && error === 'Wrong email or password.' && (
+                <p className="au-hint">
+                  New here?{' '}
+                  <button type="button" className="au-link strong" onClick={() => switchMode('signup')}>Create an account instead</button>
+                </p>
+              )}
+              <button className="au-btn au-btn-primary" disabled={!password} aria-busy={busy || undefined}>
+                {busy && <span className="au-spin" aria-hidden="true" />}
+                {busy ? (mode === 'login' ? 'Logging in…' : 'Creating account…') : mode === 'login' ? 'Log in' : 'Create account'}
               </button>
             </form>
-
-            <button className="link-btn small mt center-self" onClick={sendLink} disabled={busy}>
-              <Mail size={14} aria-hidden="true" /> Email me a sign-in link instead
+            <div className="au-divider"><span>or</span></div>
+            <button className="au-btn au-btn-ghost" onClick={sendLink} disabled={busy}>
+              <KeyRound size={18} aria-hidden="true" /> Email me a code instead
             </button>
           </>
         )}
 
         {step === 'code' && (
           <>
-            <BackLink label="Use a different email" />
-            <h1 className="signin-title mt-sm">Check your email</h1>
-            <p className="muted small">
-              We sent a sign-in link to <b className="ink">{cleanEmail}</b>. Tap it on this device, or enter the code from the email.
+            <div className="au-badge" aria-hidden="true"><MailCheck size={26} /></div>
+            <h1 className="au-title">Check your email</h1>
+            <p className="au-lede">
+              We sent a {CODE_LENGTH}-digit code to <b className="au-ink">{cleanEmail}</b>. Enter it below, or tap the link in the email on this device.
             </p>
-            <form onSubmit={verifyCode} className="mt">
-              <input className="input code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={10}
-                placeholder="••••••" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                aria-label="Sign-in code" aria-describedby={error ? 'signin-error' : undefined} autoFocus />
-              <button className="btn block mt-sm" disabled={busy || code.length < 6}>{busy ? 'Checking…' : 'Sign in'}</button>
+            <form onSubmit={verifyCode} className="au-form">
+              <CodeInput
+                id="signin-code"
+                label={`${CODE_LENGTH}-digit code`}
+                value={code}
+                onChange={(v) => { setCode(v); if (error) setError('') }}
+                onComplete={(v) => verifyCode(null, v)}
+                invalid={!!error}
+                describedBy={errId}
+                autoFocus
+              />
+              {messages}
+              <button className="au-btn au-btn-primary" disabled={!busy && code.length < CODE_LENGTH} aria-busy={busy || undefined}>
+                {busy && <span className="au-spin" aria-hidden="true" />}
+                {busy ? 'Checking…' : 'Verify and continue'}
+              </button>
             </form>
-            <button className="link-btn small mt" disabled={resendIn > 0 || busy} onClick={sendLink}>
-              {resendIn > 0 ? `Resend email in ${resendIn}s` : 'Resend email'}
-            </button>
+            <p className="au-hint center">
+              Didn’t get it?{' '}
+              {resendIn > 0 ? (
+                <span className="au-ink" role="timer" aria-live="off">Resend in {resendIn}s</span>
+              ) : (
+                <button type="button" className="au-link strong" onClick={sendLink} disabled={busy}>Resend code</button>
+              )}
+              {' · '}
+              <button type="button" className="au-link strong" onClick={() => jump(['start', 'email'])}>Use a different email</button>
+            </p>
           </>
         )}
 
         {step === 'confirm' && (
           <>
-            <BackLink />
-            <h1 className="signin-title mt-sm">Confirm your email</h1>
-            <p className="muted small">
-              We sent a confirmation link to <b className="ink">{cleanEmail}</b>. Open it to finish creating your account. After that you can log in with your email and password any time.
+            <div className="au-badge" aria-hidden="true"><MailCheck size={26} /></div>
+            <h1 className="au-title" tabIndex={-1} ref={headingRef}>Confirm your email</h1>
+            <p className="au-lede">
+              We sent a confirmation link to <b className="au-ink">{cleanEmail}</b>. Open it to finish creating your account. After that you can log in with your email and password any time.
             </p>
-            <button className="btn ghost block mt" disabled={resendIn > 0 || busy} onClick={resendConfirmation}>
-              {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend confirmation email'}
-            </button>
-            <button className="link-btn small mt center-self" onClick={() => { setMode('login'); go('form') }}>
-              Already confirmed? Log in
-            </button>
+            <div className="au-form">
+              {messages}
+              <button className="au-btn au-btn-primary" onClick={() => { setMode('login'); jump(['start', 'email', 'password']) }}>
+                I’ve confirmed, log me in
+              </button>
+            </div>
+            <p className="au-hint center">
+              Didn’t get it?{' '}
+              {resendIn > 0 ? (
+                <span className="au-ink" role="timer" aria-live="off">Resend in {resendIn}s</span>
+              ) : (
+                <button type="button" className="au-link strong" onClick={resendConfirmation} disabled={busy}>Resend confirmation email</button>
+              )}
+            </p>
           </>
         )}
 
         {step === 'forgot' && (
           <>
-            <BackLink label="Back to log in" />
-            <h1 className="signin-title mt-sm">Reset your password</h1>
-            <p className="muted small">Enter your account email and we’ll send a link to choose a new password.</p>
-            <form onSubmit={sendReset} noValidate className="mt">
-              <input className="input" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
-                aria-label="Email" aria-describedby={error ? 'signin-error' : undefined}
-                value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
-              <button className="btn block mt-sm" disabled={busy || !email.trim()}>{busy ? 'Sending…' : 'Send reset link'}</button>
+            <h1 className="au-title">Reset your password</h1>
+            <p className="au-lede">Enter your account email and we’ll send a link to choose a new password.</p>
+            <form onSubmit={sendReset} noValidate className="au-form">
+              <div className="au-field">
+                <div className="au-label-row"><label htmlFor="forgot-email">Email</label></div>
+                <div className={`au-input-wrap${error ? ' invalid' : ''}`}>
+                  <input id="forgot-email" className="au-input" type="email" inputMode="email" autoComplete="email"
+                    autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="send" placeholder="you@example.com"
+                    aria-invalid={error ? true : undefined} aria-describedby={errId}
+                    value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+                </div>
+              </div>
+              {messages}
+              <button className="au-btn au-btn-primary" disabled={!email.trim()} aria-busy={busy || undefined}>
+                {busy && <span className="au-spin" aria-hidden="true" />}
+                {busy ? 'Sending…' : 'Send reset link'}
+              </button>
             </form>
           </>
         )}
 
         {step === 'forgot-sent' && (
           <>
-            <BackLink label="Back to log in" />
-            <h1 className="signin-title mt-sm">Check your email</h1>
-            <p className="muted small">
-              If <b className="ink">{cleanEmail}</b> has an account, a password reset link is on its way. It works once and expires after an hour.
+            <div className="au-badge ok" aria-hidden="true"><MailCheck size={26} /></div>
+            <h1 className="au-title" tabIndex={-1} ref={headingRef}>Check your email</h1>
+            <p className="au-lede">
+              If <b className="au-ink">{cleanEmail}</b> has an account, a password reset link is on its way. It works once and expires after an hour.
             </p>
+            <div className="au-form">
+              <button className="au-btn au-btn-primary" onClick={() => { setMode('login'); jump(['start', 'email', 'password']) }}>
+                Back to log in
+              </button>
+            </div>
           </>
         )}
-
-        {notice && <div className="form-notice mt-sm" role="status">{notice}</div>}
-        {error && <div className="form-error mt-sm" role="alert" id="signin-error">{error}</div>}
-
-        <p className="tiny muted signin-legal">
-          By continuing you agree to the <Link to="#">Terms</Link> and <Link to="#">Privacy Policy</Link>.
-        </p>
       </div>
+      {legal}
     </div>
   )
-}
-
-// Round-robin over photographers so the collage isn't all one person's work: up to 6 cover URLs.
-function coverMix(providers = []) {
-  const out = []
-  const lists = providers.map((p) => p.covers || [])
-  for (let round = 0; out.length < 6 && lists.some((l) => l.length > round); round++) {
-    for (const l of lists) if (l[round] && out.length < 6) out.push(l[round])
-  }
-  return out
 }
 
 function GoogleLogo() {

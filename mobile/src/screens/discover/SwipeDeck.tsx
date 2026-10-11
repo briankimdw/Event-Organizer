@@ -28,7 +28,7 @@ import { BehindCard, SwipeCard, type TapZone } from './SwipeCard'
 import type { DeckCard, HistoryEntry, SwipeAction } from './types'
 import { VerticalPickerChip, VerticalPickerSheet, type PickableVertical } from './VerticalPicker'
 
-const BATCH = 20 // cards per feed request (signed in: small batches so ranking keeps up with swipes)
+const BATCH = 8 // cards per feed request (signed in: small batches so ranking keeps up with swipes; services/ml/eval: 8 vs 20 roughly triples early like rate)
 const BATCH_SIGNED_OUT = 50 // signed out the feed doesn't change, so take as much as it gives
 const LOW_WATER = 3 // fetch more when fewer cards than this are left
 

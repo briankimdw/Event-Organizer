@@ -6,9 +6,11 @@
 import * as Linking from 'expo-linking'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useState } from 'react'
+import { Link2Off } from 'lucide-react-native'
 import { ActivityIndicator, Platform, View } from 'react-native'
 
-import { Button, Screen, Text } from '@/components'
+import { Screen, Text } from '@/components'
+import { AuthButton, Badge } from '@/screens/auth/AuthUI'
 import { safeNext, useAuth } from '@/state/auth'
 import { makeStyles, useTheme } from '@/theme'
 import { completeAuthFromUrl } from './authLink'
@@ -53,11 +55,12 @@ export default function AuthCallback() {
     return (
       <Screen back={false} padded>
         <View style={s.center}>
-          <Text variant="h3" center>That sign-in link didn’t work</Text>
-          <Text variant="small" muted center>
+          <Badge icon={Link2Off} />
+          <Text variant="h2" center>That sign-in link didn’t work</Text>
+          <Text muted center>
             {error ? error.replace(/\.?$/, '.') : 'It may have expired or already been used.'} Links work once and expire after an hour.
           </Text>
-          <Button title="Try again" onPress={() => router.replace({ pathname: '/sign-in', params: { next } })} style={s.btn} />
+          <AuthButton title="Try again" onPress={() => router.replace({ pathname: '/sign-in', params: { next } })} style={s.btn} />
         </View>
       </Screen>
     )
@@ -65,8 +68,9 @@ export default function AuthCallback() {
   return (
     <Screen back={false} padded>
       <View style={s.center}>
-        <ActivityIndicator size="large" color={c.ink} />
-        <Text variant="small" muted>Signing you in…</Text>
+        <Text variant="display">Event Organizer<Text variant="display" color="accent" accessibilityRole="none">.</Text></Text>
+        <ActivityIndicator size="large" color={c.ink} style={s.spinner} />
+        <Text muted accessibilityLiveRegion="polite">Signing you in…</Text>
       </View>
     </Screen>
   )
@@ -74,5 +78,6 @@ export default function AuthCallback() {
 
 const useStyles = makeStyles((t) => ({
   center: { alignItems: 'center', gap: 12, paddingTop: 96, paddingHorizontal: t.space.lg },
-  btn: { alignSelf: 'center' },
+  btn: { alignSelf: 'stretch', marginTop: t.space.sm },
+  spinner: { marginTop: t.space.lg },
 }))

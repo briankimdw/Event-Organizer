@@ -29,8 +29,9 @@ export function PillButton({ icon: Icon, label, text, onPress, filled }: { icon:
 }
 
 const useStyles = makeStyles((t) => ({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: t.space.lg, paddingTop: 4, paddingBottom: 2 },
-  right: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Big text on a small phone: the action pills wrap under the tabs instead of pushing off-screen.
+  header: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 4, alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: t.space.lg, paddingTop: 4, paddingBottom: 2 },
+  right: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 40, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: t.c.line, backgroundColor: t.c.bg },
   round: { width: 40, paddingHorizontal: 0, justifyContent: 'center' },
 }))

@@ -53,6 +53,6 @@ const useStyles = makeStyles((t) => ({
   mark: { width: 36, height: 36, borderRadius: 18, backgroundColor: t.c.accent, alignItems: 'center', justifyContent: 'center' },
   grow: { flex: 1, gap: 2 },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: t.c.bg, borderRadius: t.radius.md, paddingLeft: 12, paddingRight: 6, paddingVertical: 5 },
-  input: { flex: 1, fontSize: 14, color: t.c.ink, paddingVertical: 6 },
-  send: { width: 30, height: 30, borderRadius: 15, backgroundColor: t.c.ink, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, minWidth: 0, fontSize: 14, color: t.c.ink, paddingVertical: 6 },
+  send: { width: 30, height: 30, flexShrink: 0, borderRadius: 15, backgroundColor: t.c.ink, alignItems: 'center', justifyContent: 'center' },
 }))
