@@ -2,6 +2,7 @@
 
     python -m app.worker            # keep running, check every 30 seconds
     python -m app.worker --once     # process what's waiting, then exit
+    python -m app.worker --retag    # re-analyse EVERY photo (after changing app/tags.py), then exit
 """
 from __future__ import annotations
 
@@ -22,6 +23,20 @@ _failed: set[str] = set()
 def run_once(engine: SigLIP, store: Store, batch_size: int = config.BATCH_SIZE) -> int:
     """Analyse one batch of waiting photos. Returns how many were saved."""
     pending = [p for p in store.pending_photos(batch_size + len(_failed)) if p["photo_id"] not in _failed][:batch_size]
+    return _analyse(engine, store, pending)
+
+
+def retag_all(engine: SigLIP, store: Store, batch_size: int = config.BATCH_SIZE) -> int:
+    """Re-analyse every photo (new auto-tags; same embedding with the same model).
+    The feed keeps working meanwhile: rows are updated in place, never deleted."""
+    total, offset = 0, 0
+    while page := store.all_photos(offset, batch_size):
+        total += _analyse(engine, store, page)
+        offset += len(page)
+    return total
+
+
+def _analyse(engine: SigLIP, store: Store, pending: list[dict]) -> int:
     if not pending:
         return 0
 
@@ -50,6 +65,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Analyse new photos with SigLIP.")
     parser.add_argument("--once", action="store_true", help="process what's waiting, then exit")
     parser.add_argument("--interval", type=int, default=30, help="seconds between checks")
+    parser.add_argument("--retag", action="store_true", help="re-analyse every photo (after changing the tags), then exit")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -57,6 +73,10 @@ def main() -> None:
     log.info("loading %s ...", config.MODEL_ID)
     engine = SigLIP()
     log.info("ready on %s", engine.device)
+
+    if args.retag:
+        log.info("re-tagged %d photo(s)", retag_all(engine, store))
+        return
 
     while True:
         total = 0

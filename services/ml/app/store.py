@@ -27,6 +27,13 @@ class Store:
         r.raise_for_status()
         return r.json()
 
+    def all_photos(self, offset: int, limit: int) -> list[dict]:
+        """[{photo_id, display_path}] for every photo, oldest first (for re-tagging)."""
+        r = self.http.get(f"{self.url}/rest/v1/photos", params={
+            "select": "id,display_path", "order": "created_at,id", "offset": offset, "limit": limit})
+        r.raise_for_status()
+        return [{"photo_id": row["id"], "display_path": row["display_path"]} for row in r.json()]
+
     def download(self, display_path: str) -> Image.Image:
         path = quote(display_path, safe="/")
         r = self.http.get(f"{self.url}/storage/v1/object/public/{config.PORTFOLIO_BUCKET}/{path}")

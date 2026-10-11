@@ -11,8 +11,9 @@ nothing special applies, e.g. ordinary daylight, so they don't get a wrong tag.
 Black & white is measured from the pixels instead (see siglip.py): the model is
 unreliable at it, and "no color" is trivial to detect directly.
 
-Thresholds were tuned on a small sample set; re-check with scripts/try_images.py
-after changing prompts.
+Thresholds and prompts were checked on the labeled evaluation set (632 CC photos in
+19 style/content groups): `python eval/tags_eval.py <workdir>` prints precision and
+recall per tag (results in eval/REPORT.md). Re-run it after changing prompts.
 """
 
 # group -> (max tags from this group, min within-group probability, {tag: prompt})
@@ -25,15 +26,17 @@ TAG_GROUPS: dict[str, tuple[int, float, dict[str, str]]] = {
         "_natural": "a photo with natural everyday colors",
     }),
     "light": (1, 0.6, {
-        "golden hour": "a photo taken at golden hour sunset light",
+        "golden hour": "a photo taken at golden hour, warm low sunlight",
         "blue hour": "a photo taken at blue hour twilight after sunset",
-        "night": "a photo taken at night",
+        "night": "a photo taken outdoors at night",
         "soft natural light": "a photo in soft natural window light",
-        "studio lighting": "a studio photo with professional lighting",
+        "studio lighting": "a studio portrait on a plain backdrop",
         "backlit": "a backlit photo with the sun behind the subject",
         "_daylight": "a photo taken in ordinary bright daylight",
+        # Dim restaurants, bars and halls otherwise read as "night".
+        "_indoor": "a photo taken indoors under artificial light",
     }),
-    "mood": (1, 0.85, {
+    "mood": (1, 0.65, {
         "moody": "a dark moody photo",
         "bright and airy": "a bright and airy photo",
         "dramatic": "a dramatic photo",
@@ -70,6 +73,22 @@ TAG_GROUPS: dict[str, tuple[int, float, dict[str, str]]] = {
         "party": "a photo of a party or concert",
         "animals": "a photo of an animal",
         "flowers": "a photo of flowers",
+    }),
+    # What the event verticals post (catering, bakery, bar, florist, decor, venues,
+    # DJs, musicians, kids' entertainment). "_other" soaks up everything else.
+    "event": (1, 0.7, {
+        "plated dish": "a photo of a plated restaurant dish",
+        "buffet": "a photo of a catering buffet table",
+        "cake": "a photo of a whole decorated layer cake",
+        "cocktails": "a photo of cocktails or drinks at a bar",
+        "floral arrangement": "a photo of a flower arrangement or bouquet",
+        "table setting": "a photo of a set dinner table",
+        "event venue": "a photo of a banquet hall or event room interior",
+        "dance floor": "a photo of a crowded dance floor with party lights",
+        "live music": "a photo of musicians performing on stage",
+        "kids party": "a photo of a children's birthday party",
+        "ceremony": "a photo of a wedding ceremony at the altar",
+        "_other": "a photo",
     }),
 }
 

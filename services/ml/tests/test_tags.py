@@ -45,3 +45,20 @@ def test_black_and_white_detection():
     red = Image.new("RGB", (100, 100), (200, 40, 40))
     assert siglip.is_black_and_white(gray) and not siglip.is_black_and_white(red)
     assert siglip.to_pgvector([0.5, -0.25]) == "[0.500000,-0.250000]"
+
+
+def test_event_vertical_tags():
+    """Content tags for the event verticals live in their own group with a neutral option."""
+    limit, minimum, tags = TAG_GROUPS["event"]
+    assert limit == 1 and "_other" in tags
+    for tag in ("plated dish", "buffet", "cake", "cocktails", "floral arrangement", "table setting",
+                "event venue", "dance floor", "live music", "kids party", "ceremony"):
+        assert tag in tags
+    assert select_tags({"event": {"buffet": 0.9, "_other": 0.1}}) == ["buffet"]
+    assert select_tags({"event": {"buffet": 0.5, "cake": 0.4, "_other": 0.1}}) == []  # not a clear winner
+    assert select_tags({"event": {"_other": 0.95, "cake": 0.05}}) == []
+
+
+def test_indoor_light_is_neutral():
+    """Dim indoor photos (restaurants, bars) go to the neutral '_indoor' option, not 'night'."""
+    assert select_tags({"light": {"_indoor": 0.8, "night": 0.2}}) == []

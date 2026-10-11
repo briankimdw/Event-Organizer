@@ -18,8 +18,9 @@ photographer posts ─► Supabase Storage + photos table
 
 user swipes in Discover ─► swipes table
 Discover asks for cards ─► discover_feed()  (SQL in Postgres, no Python involved)
-                           taste = average of liked photos, nudged away from passes;
-                           ranks unseen photos by similarity + ~15% "something new"
+                           taste = up to 3 groups of recent likes (centred SigLIP space),
+                           pushed away from passes; ranks unseen photos by best match
+                           + ~15% "something new" (details: Tuning, eval/REPORT.md)
 ```
 
 **This service is only needed when new photos arrive.** The feed itself runs inside the
@@ -45,9 +46,11 @@ settings, never in the frontend or in Git.
 |---|---|
 | `python -m app.worker --once` | Analyse every waiting photo, then exit |
 | `python -m app.worker` | Keep running; check for new photos every 30 s |
+| `python -m app.worker --retag` | Re-analyse every photo (after changing `app/tags.py`), then exit |
 | `uvicorn app.main:app --port 8000` | HTTP API (`/health`, `/analyze`, `/process-pending`, `/embed-text`) |
 | `python scripts/try_images.py <folder> --query "moody wedding"` | Try the model on local photos (no database needed) |
 | `python -m pytest tests` | Fast tests (no model download) |
+| `python eval/simulate.py <folder>` | Offline evaluation of the Discover feed (see Tuning) |
 
 The first run downloads the model (~800 MB) into the Hugging Face cache. On a normal CPU
 a photo takes a fraction of a second. A GPU isn't needed; to use one, install a CUDA
@@ -71,9 +74,58 @@ Supabase **Database Webhook** (Database → Webhooks → on insert into `photos`
 
 ## Tuning
 
-- **Tags:** the vocabulary and thresholds are in `app/tags.py`. Re-check with `scripts/try_images.py` after edits.
+Everything here is measured with the offline evaluation in `eval/`: 632 hand-checked Creative
+Commons photos in 19 style/content groups, and simulated users swiping through the feed.
+Results and what each change is worth: `eval/REPORT.md`. The photos are downloaded outside the
+repo; only `eval/manifest.csv` is committed.
+
+```bash
+W=<folder outside the repo>
+.venv/Scripts/python -I eval/dataset.py fetch $W     # download the labeled photos (~35 MB)
+.venv/Scripts/python -I eval/embed.py $W             # embed them (cached)
+.venv/Scripts/python -I eval/simulate.py $W --algos oracle,v1,v2   # how fast the feed learns a taste
+.venv/Scripts/python -I eval/tune.py $W --set ablation             # compare ranking variants
+.venv/Scripts/python -I eval/tags_eval.py $W         # auto-tag precision / recall
+```
+
+- **Feed ranking (v2, `supabase/migrations/20261012000100_feed_v2.sql`).** Its knobs are
+  constants at the top of `taste_profile()` and `discover_feed()`, mirrored by `V2_DEFAULTS`
+  in `eval/feeds.py`:
+
+  | Knob | Value | What it does |
+  |---|---|---|
+  | Centring | on | Every similarity uses embedding minus the catalog average. SigLIP vectors share a big common part; without centring everything looks ~0.6 similar. |
+  | Learning starts | first like | With passes only, the feed steers away from them. |
+  | Half-life | 40 swipes | How fast old swipes fade. |
+  | Save weight | 2 | A save counts as two likes. |
+  | Pass weight (gamma) | 0.5 | How hard each taste is pushed away from passes. |
+  | Tastes | up to 3 | A like joins a taste at centred cosine >= 0.35. |
+  | Stale rule | 2:1 | A taste is dropped when nearby passes outweigh its likes 2:1. |
+  | Category scope | on | With a category filter, the taste comes from that category's likes. |
+  | Photographer penalty | 0.03 | Per extra album from the same photographer. |
+  | Exploration | 15% | Share of cards picked at random from lower down. |
+  | Cold start | 200 newest | With no swipes, farthest-point picks among the 200 newest albums. |
+
+  If you change the SQL, change `FeedV2` too. Then run the parity check in `eval/sql/`: it
+  replays the Python scenarios against the SQL in PGlite.
+- **Tags:** the vocabulary and thresholds are in `app/tags.py`. Each group is a softmax over
+  its tags plus a neutral option (`_daylight`, `_indoor`, `_other`...) that absorbs ordinary
+  photos. The `event` group covers the event verticals: plated dish, buffet, cake, cocktails,
+  floral arrangement, table setting, event venue, dance floor, live music, kids party,
+  ceremony.
+  - After editing, re-check with `eval/tags_eval.py`. To compare with an older copy, pass
+    `--tags-file`.
+  - Then push the new tags to existing photos with `python -m app.worker --retag`. It updates
+    rows in place; the feed keeps working.
 - **Black & white** is detected from pixel saturation (`is_black_and_white` in `app/siglip.py`), not by the model.
-- **Changing the model:** the embedding size must stay 768, or the `photo_embeddings.embedding` column must change too. Re-analyse everything afterwards: `delete from photo_embeddings;` then run the worker.
+- **Changing the model:** the embedding size must stay 768, or the `photo_embeddings.embedding` column must change too.
+  - Measured options:
+    - `google/siglip2-base-patch16-224` is a 768-d drop-in with small, mixed gains.
+    - `siglip-so400m` is 1152-d and 5x slower on CPU, no better.
+    - Neither is worth switching to yet.
+  - After a switch, re-analyse everything (`delete from photo_embeddings;`, then run the
+    worker). Re-calibrate `normalise_style` in `app/planner/finders/base.py`, because its
+    text-score scale is model-specific.
 
 ## AI planner (`POST /plan`)
 
