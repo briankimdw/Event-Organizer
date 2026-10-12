@@ -11,31 +11,9 @@ import { invalidate } from './catalog.js'
 // Points
 // ---------------------------------------------------------------------------
 
-// A geography point from PostgREST (EWKB/WKB hex, GeoJSON, or WKT) as
-// { lat, lng }, or null when missing or unreadable.
-export function parsePoint(value) {
-  if (!value) return null
-  if (typeof value === 'object') {
-    const [lng, lat] = value.coordinates || []
-    return valid(lat, lng)
-  }
-  if (typeof value !== 'string') return null
-  const wkt = value.match(/POINT\s*\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)/i)
-  if (wkt) return valid(Number(wkt[2]), Number(wkt[1]))
-  if (!/^[0-9a-f]+$/i.test(value) || value.length < 42) return null
-  const bytes = new Uint8Array(value.length / 2)
-  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(value.substr(i * 2, 2), 16)
-  const view = new DataView(bytes.buffer)
-  const little = bytes[0] === 1
-  const type = view.getUint32(1, little)
-  if ((type & 0xff) !== 1) return null // not a point
-  const offset = type & 0x20000000 ? 9 : 5 // skip the SRID when present
-  if (bytes.length < offset + 16) return null
-  return valid(view.getFloat64(offset + 8, little), view.getFloat64(offset, little))
-}
-
-const valid = (lat, lng) =>
-  Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null
+// parsePoint lives in lib/geo.js (catalog.js needs it without importing this file).
+import { parsePoint, valid } from '../lib/geo.js'
+export { parsePoint }
 
 // { lat, lng } -> 'SRID=4326;POINT(lng lat)' for inserts/updates.
 export const toEWKT = ({ lat, lng }) => `SRID=4326;POINT(${lng.toFixed(6)} ${lat.toFixed(6)})`

@@ -24,7 +24,7 @@ import { supabase } from '../lib/supabase.js'
 import { avatarUrl, callName, dollars, photoUrl, policyFromRules, toPackage } from '../lib/format.js'
 import { toKey } from '../lib/dates.js'
 import { VERTICALS, verticalMeta, verticalOfService } from '../verticals/index.js'
-import { parsePoint } from './locations.js'
+import { parsePoint } from '../lib/geo.js'
 
 const must = ({ data, error }) => {
   if (error) throw error
