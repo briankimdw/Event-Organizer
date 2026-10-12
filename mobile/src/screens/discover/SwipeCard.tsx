@@ -2,6 +2,8 @@
 // reanimated: drag right = like, left = pass, up = shortlist; past THRESHOLD it flies out.
 // Taps are routed by where they land: the left / right 30% flip photos, the middle opens
 // the details sheet, the thumbs-down corner opens "Not into this", the name opens the profile.
+// Vendor cards (verticals without posts) have the same gestures and a different face
+// (VendorFace.tsx): their covers on top (edges flip them), the name below opens the profile.
 // Remount it per card (key={card.id}) so every card starts from the center.
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -11,11 +13,17 @@ import { StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { interpolate, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 
-import { money, startingPrice } from '@shared/lib/format.js'
-import { Avatar, IdVerified, InA11yGroup, Photo, ProBadge, Text, ratingLabel } from '@/components'
+import { cardWords } from '@shared/api/discover.js'
+import { fromPriceText } from '@/components/PriceLabel'
+import { Avatar, IdVerified, InA11yGroup, Photo, ProBadge, Text } from '@/components'
 import { useFocusOnShow } from '@/lib/a11y'
 import { makeStyles } from '@/theme'
+import { cardA11yLabel } from './cards'
 import type { DeckCard, SwipeAction } from './types'
+import { VendorFace, useNextFree } from './VendorFace'
+
+// Vendor cards: the top 46% is the cover (VendorFace), the name row sits right under it.
+const VENDOR_COVER = 0.46
 
 export const THRESHOLD = 90
 const FLY_MS = 260
@@ -117,12 +125,20 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
       }
     })
 
+  const vendor = card.kind === 'vendor'
+  const flips = card.photos.length > 1
   const tap = Gesture.Tap()
     .enabled(!disabled)
     .maxDistance(8)
     .onEnd((e) => {
+      const cover = h * VENDOR_COVER
       const zone: TapZone =
         e.y < 64 && e.x > w - 64 ? 'correct'
+        : vendor
+          ? (e.y > cover && e.y < cover + 72 ? 'profile'
+            : e.y < cover && flips && e.x < w * 0.3 ? 'prev'
+            : e.y < cover && flips && e.x > w * 0.7 ? 'next'
+            : 'details')
         : e.y > h - 96 && e.x < w * 0.72 ? 'profile'
         : e.x < w * 0.3 ? 'prev'
         : e.x > w * 0.7 ? 'next'
@@ -140,19 +156,11 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
   const passStyle = useAnimatedStyle(() => ({ opacity: interpolate(-tx.value, [0, THRESHOLD], [0, 1], 'clamp') }))
   const saveStyle = useAnimatedStyle(() => ({ opacity: interpolate(-ty.value, [0, THRESHOLD], [0, 1], 'clamp') * (Math.abs(tx.value) < THRESHOLD ? 1 : 0) }))
 
-  const from = startingPrice(p)
-  const meta = [card.category, from != null && `from ${money(from)}`].filter(Boolean).map((x) => `· ${x}`).join(' ')
-  const a11yLabel = [
-    `${card.title || 'Photo'} by ${p.name}`,
-    card.photos.length > 1 && `photo ${shot + 1} of ${card.photos.length}`,
-    card.category,
-    p.idVerified && 'identity verified',
-    p.pro && 'Verified Pro',
-    ratingLabel(p.rating),
-    from != null && `from ${money(from)}`,
-    match != null && `${match}% taste match`,
-    card.reason,
-  ].filter(Boolean).join(', ')
+  const from = fromPriceText(p)
+  const meta = [card.category, from].filter(Boolean).map((x) => `· ${x}`).join(' ')
+  const nextFree = useNextFree(card.authorId, card.kind === 'vendor')
+  const a11yLabel = [cardA11yLabel(card, shot, match), nextFree].filter(Boolean).join(', ')
+  const actions = flips ? A11Y_ACTIONS : A11Y_ACTIONS.filter((a) => a.name !== 'next' && a.name !== 'prev')
 
   return (
     <GestureDetector gesture={gesture}>
@@ -164,7 +172,7 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
         accessibilityRole="image"
         accessibilityLabel={a11yLabel}
         accessibilityHint="Double-tap for details. Swipe up or down for Like, Pass, Shortlist and more."
-        accessibilityActions={A11Y_ACTIONS}
+        accessibilityActions={actions}
         onAccessibilityAction={(e) => {
           const name = e.nativeEvent.actionName
           if (name === 'activate') onTap('details')
@@ -173,6 +181,15 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
         }}
       >
         <InA11yGroup value>
+        {vendor ? (
+          <>
+            <VendorFace card={card} shot={shot} match={match} nextFree={nextFree} />
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Stamps likeStyle={likeStyle} passStyle={passStyle} saveStyle={saveStyle} />
+            </View>
+          </>
+        ) : (
+        <>
         {/* pointerEvents none: on the web target an <img> would start a native image drag (pointercancel) */}
         <View style={StyleSheet.absoluteFill} pointerEvents="none"><Photo uri={photo?.src} style={StyleSheet.absoluteFill} /></View>
 
@@ -198,13 +215,11 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
 
           {showHint && card.photos.length > 1 && (
             <View style={s.hint}>
-              <Text maxFontSizeMultiplier={1.4} variant="tiny" weight="600" style={s.white}>Tap the edges for {card.photos.length} photos · swipe to like or pass</Text>
+              <Text maxFontSizeMultiplier={1.4} variant="tiny" weight="600" style={s.white}>Tap the edges for {card.photos.length} {(cardWords(card) as { things: string }).things} · swipe to like or pass</Text>
             </View>
           )}
 
-          <Animated.View style={[s.stamp, s.like, likeStyle]}><Text maxFontSizeMultiplier={1.4} style={[s.stampText, { color: '#22c55e' }]}>LIKE</Text></Animated.View>
-          <Animated.View style={[s.stamp, s.pass, passStyle]}><Text maxFontSizeMultiplier={1.4} style={[s.stampText, { color: '#ef4444' }]}>PASS</Text></Animated.View>
-          <Animated.View style={[s.stamp, s.save, saveStyle]}><Text maxFontSizeMultiplier={1.4} style={[s.stampText, { color: '#3b82f6' }]}>SHORTLIST</Text></Animated.View>
+          <Stamps likeStyle={likeStyle} passStyle={passStyle} saveStyle={saveStyle} />
 
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.78)']} style={s.foot}>
             <View style={s.footRow}>
@@ -235,11 +250,26 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
               )}
             </View>
             {!!card.exif && <Text maxFontSizeMultiplier={1.4} variant="tiny" style={s.exif} numberOfLines={1}>{card.exif}</Text>}
+            {!!photo?.credit && <Text maxFontSizeMultiplier={1.4} variant="caption" style={s.credit} numberOfLines={1}>{photo.credit}</Text>}
           </LinearGradient>
         </View>
+        </>
+        )}
         </InA11yGroup>
       </Animated.View>
     </GestureDetector>
+  )
+}
+
+// LIKE / PASS / SHORTLIST stamps, faded in by the drag.
+function Stamps({ likeStyle, passStyle, saveStyle }: { likeStyle: any; passStyle: any; saveStyle: any }) {
+  const s = useStyles()
+  return (
+    <>
+      <Animated.View style={[s.stamp, s.like, likeStyle]}><Text maxFontSizeMultiplier={1.4} style={[s.stampText, { color: '#22c55e' }]}>LIKE</Text></Animated.View>
+      <Animated.View style={[s.stamp, s.pass, passStyle]}><Text maxFontSizeMultiplier={1.4} style={[s.stampText, { color: '#ef4444' }]}>PASS</Text></Animated.View>
+      <Animated.View style={[s.stamp, s.save, saveStyle]}><Text maxFontSizeMultiplier={1.4} style={[s.stampText, { color: '#3b82f6' }]}>SHORTLIST</Text></Animated.View>
+    </>
   )
 }
 
@@ -252,7 +282,7 @@ export function BehindCard({ card, progress }: { card: DeckCard; progress: Share
   }))
   return (
     <Animated.View style={[s.card, s.behind, style]} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-      <Photo uri={card.photos[0]?.src} style={StyleSheet.absoluteFill} />
+      {card.kind === 'vendor' ? <VendorFace card={card} shot={0} match={null} /> : <Photo uri={card.photos[0]?.src} style={StyleSheet.absoluteFill} />}
     </Animated.View>
   )
 }
@@ -290,4 +320,5 @@ const useStyles = makeStyles((t) => ({
   dim: { color: 'rgba(255,255,255,0.8)' },
   match: { alignItems: 'center' },
   exif: { color: 'rgba(255,255,255,0.75)', marginTop: 8, fontFamily: 'monospace', fontSize: 11 },
+  credit: { color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: '500' },
 }))

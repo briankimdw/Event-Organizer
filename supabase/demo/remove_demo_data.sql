@@ -4,6 +4,10 @@
 -- clients) + Brian's demo bookings.
 -- Run this before deleting the test users (bookings block deleting a user).
 -- Albums, photos, the accounts and their listings themselves are left alone.
+-- The vendors' demo posts (Creative Commons photos) come from
+-- frontend/scripts/seed-vendor-photos.mjs; remove those with
+-- `node scripts/seed-vendor-photos.mjs --remove`, which also deletes their Storage
+-- files (SQL can't), before deleting the vendor accounts.
 
 with people as (
   select id from public.profiles

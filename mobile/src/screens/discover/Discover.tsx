@@ -1,8 +1,9 @@
 // Discover tab: native port of frontend/src/screens/Discover.jsx. Two modes, switched
 // with big text tabs in the header (kept in the route params, like the web's ?mode=):
-//   For you  - the SigLIP-ranked swipe deck (one vertical at a time)   SwipeDeck.tsx
+//   For you  - the swipe deck: every vertical mixed, or one at a time  SwipeDeck.tsx
+//              (photo cards where vendors posted, vendor cards where they haven't)
 //   Explore  - a masonry grid of real work across every vertical       Explore.tsx
-// ?v= starts the deck on a vertical (and filters Explore); ?s= a service (Explore).
+// ?v= (a vertical or 'all'), ?s= (a service) and ?o= (an occasion) are shared by both modes.
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Pressable, View } from 'react-native'
 
@@ -16,17 +17,18 @@ const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v)
 
 export default function Discover() {
   const router = useRouter()
-  const params = useLocalSearchParams<{ mode?: string; v?: string; s?: string }>()
+  const params = useLocalSearchParams<{ mode?: string; v?: string; s?: string; o?: string }>()
   const mode: Mode = one(params.mode) === 'explore' ? 'explore' : 'foryou'
   const setMode = (next: Mode) => {
     if (next === mode) return
-    router.setParams({ mode: next === 'explore' ? 'explore' : undefined, v: undefined, s: undefined } as any)
+    // Keep what's being browsed (vertical, service, occasion) across the switch, like the web.
+    router.setParams({ mode: next === 'explore' ? 'explore' : undefined } as any)
   }
   const tabs = <DiscoverTabs value={mode} onChange={setMode} />
   return mode === 'explore' ? (
-    <Explore tabs={tabs} vertical={one(params.v) || null} service={one(params.s) || null} />
+    <Explore tabs={tabs} vertical={one(params.v) || null} service={one(params.s) || null} occasion={one(params.o) || null} />
   ) : (
-    <SwipeDeck tabs={tabs} initialVertical={one(params.v)} />
+    <SwipeDeck tabs={tabs} initialVertical={one(params.v)} initialService={one(params.s)} initialOccasion={one(params.o)} />
   )
 }
 

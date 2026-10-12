@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase.js'
 import { fromPriceLabel, money, photoUrl, startingPrice } from '../lib/format.js'
 import { addDays, toKey, today } from '../lib/dates.js'
 import { cached, listProviders, searchProviders, withMatches } from './catalog.js'
-import { OCCASIONS, VERTICALS, getVertical } from '../verticals/catalog.js'
+import { GROUPS, OCCASIONS, VERTICALS, getVertical } from '../verticals/catalog.js'
 
 const must = ({ data, error }) => {
   if (error) throw error
@@ -32,13 +32,13 @@ export async function weekendAvailability(vertical = null) {
 }
 
 // Portfolio photos for the Explore grid, newest posts first. Each:
-// { id, src, width, height, albumId, title, providerId, serviceSlug, serviceName }
+// { id, src, width, height, albumId, title, providerId, serviceSlug, serviceName, occasion (slug|null) }
 export const listExplorePhotos = ({ limit = 120 } = {}) =>
   cached(`home:explore:${limit}`, async () => {
     const rows = must(
       await supabase
         .from('photos')
-        .select('id, display_path, width, height, pair_role, position, album:albums!photos_album_id_fkey!inner(id, title, kind, status, provider_id, created_at, category:service_categories(slug, name))')
+        .select('id, display_path, width, height, pair_role, position, album:albums!photos_album_id_fkey!inner(id, title, kind, status, provider_id, created_at, category:service_categories(slug, name), album_tags(tag:tags(slug)))')
         .eq('album.status', 'published')
         .order('created_at', { ascending: false })
         .limit(limit),
@@ -57,8 +57,62 @@ export const listExplorePhotos = ({ limit = 120 } = {}) =>
         providerId: r.album.provider_id,
         serviceSlug: r.album.category?.slug ?? null,
         serviceName: r.album.category?.name ?? null,
+        occasion: occasionOfTags(r.album.album_tags),
       }))
   })
+
+// The occasion slug stored on a post as an album tag 'occasion-<slug>', or null.
+export const occasionOfTags = (albumTags = []) => {
+  const slug = (albumTags || []).map((t) => t.tag?.slug).find((x) => x?.startsWith('occasion-'))
+  return slug ? slug.slice('occasion-'.length) : null
+}
+
+// Every published post (album) by an active provider, newest first: the index the
+// Discover deck, its picker counts and the occasion chips work from. Cached a minute.
+// Each: { albumId, providerId, vertical, service, serviceName, occasion, title, createdAt, coverPhotoId, coverSrc }
+export const listPostIndex = () =>
+  cached('home:post-index', async () => {
+    const rows = must(
+      await supabase
+        .from('albums')
+        .select('id, title, created_at, cover_photo_id, category:service_categories(slug, name), cover:photos!albums_cover_photo_fk(display_path), provider:providers!albums_provider_id_fkey!inner(id, status, vertical:service_categories!providers_vertical_id_fkey(slug)), album_tags(tag:tags(slug))')
+        .eq('status', 'published')
+        .eq('provider.status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(2000),
+    )
+    return rows.map((r) => ({
+      albumId: r.id,
+      providerId: r.provider?.id,
+      vertical: r.provider?.vertical?.slug ?? null,
+      service: r.category?.slug ?? null,
+      serviceName: r.category?.name ?? null,
+      occasion: occasionOfTags(r.album_tags),
+      title: r.title,
+      createdAt: r.created_at,
+      coverPhotoId: r.cover_photo_id ?? null,
+      coverSrc: photoUrl(r.cover?.display_path),
+    }))
+  })
+
+// Post counts within a scope, for chips and the picker.
+//   posts: listPostIndex(); vertical / service: optional scope ('all' or null = every vertical).
+// Returns { total, verticals: { slug: n }, services: { slug: n }, occasions: { slug: n }, providers: Set<providerId> }
+// (verticals and providers ignore the scope: they count every post).
+export function postFacets(posts = [], { vertical = null, service = null } = {}) {
+  const all = !vertical || vertical === 'all'
+  const out = { total: 0, verticals: {}, services: {}, occasions: {}, providers: new Set() }
+  for (const p of posts) {
+    out.verticals[p.vertical] = (out.verticals[p.vertical] || 0) + 1
+    out.providers.add(p.providerId)
+    if (!all && p.vertical !== vertical) continue
+    if (p.service) out.services[p.service] = (out.services[p.service] || 0) + 1
+    if (service && p.service !== service) continue
+    out.total++
+    if (p.occasion) out.occasions[p.occasion] = (out.occasions[p.occasion] || 0) + 1
+  }
+  return out
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -276,12 +330,13 @@ export function writeCovered(storage, occasionSlug, set) {
 
 // Photos joined to their providers, interleaved so one provider doesn't fill the
 // top of the grid (round-robin by provider, newest first within each).
-//   vertical / service: optional filters.
-export function buildExploreTiles({ photos = [], providers = [], vertical = null, service = null }) {
+//   vertical / service / occasion: optional filters (vertical 'all' = every vertical).
+export function buildExploreTiles({ photos = [], providers = [], vertical = null, service = null, occasion = null }) {
+  if (vertical === 'all') vertical = null
   const byId = new Map(providers.map((p) => [p.id, p]))
   const tiles = photos
-    .map((ph) => ({ ...ph, provider: byId.get(ph.providerId) }))
-    .filter((t) => t.provider && (!vertical || t.provider.vertical === vertical) && (!service || t.serviceSlug === service))
+    .map((ph) => ({ ...ph, kind: 'photo', provider: byId.get(ph.providerId) }))
+    .filter((t) => t.provider && (!vertical || t.provider.vertical === vertical) && (!service || t.serviceSlug === service) && (!occasion || t.occasion === occasion))
   const queues = new Map()
   for (const t of tiles) {
     if (!queues.has(t.providerId)) queues.set(t.providerId, [])
@@ -300,12 +355,18 @@ export function buildExploreTiles({ photos = [], providers = [], vertical = null
 }
 const CROPS = [1.25, 1, 1.4, 1.15, 0.85, 1.3, 1.05]
 
-// Filter chips for Explore: verticals that have photos, and the services
-// (album categories) present for the current vertical.
-export function exploreFilters({ photos = [], providers = [], vertical = null }) {
+// Filter chips for Explore.
+//   verticals:    verticals that have photos (as before)
+//   allVerticals: every vertical with photos or vendors, those with photos first:
+//                 [{ ...vertical, photos (count), vendors (count) }]
+//   services:     services (album categories) present for the current vertical: [{ slug, name, n }]
+//   occasions:    occasions tagged on photos in the current vertical / service: [{ ...occasion, n }]
+export function exploreFilters({ photos = [], providers = [], vertical = null, service = null }) {
+  if (vertical === 'all') vertical = null
   const byId = new Map(providers.map((p) => [p.id, p]))
   const vCounts = new Map()
   const sCounts = new Map()
+  const oCounts = new Map()
   for (const ph of photos) {
     const p = byId.get(ph.providerId)
     if (!p) continue
@@ -315,11 +376,52 @@ export function exploreFilters({ photos = [], providers = [], vertical = null })
       s.n++
       sCounts.set(ph.serviceSlug, s)
     }
+    if ((!vertical || p.vertical === vertical) && (!service || ph.serviceSlug === service) && ph.occasion) {
+      oCounts.set(ph.occasion, (oCounts.get(ph.occasion) || 0) + 1)
+    }
   }
+  const vendors = countByVertical(providers)
   return {
     verticals: VERTICALS.filter((v) => vCounts.get(v.slug)),
+    allVerticals: VERTICALS.map((v) => ({ ...v, photos: vCounts.get(v.slug) || 0, vendors: vendors.get(v.slug) || 0 }))
+      .filter((v) => v.photos || v.vendors || v.slug === vertical)
+      .sort((a, b) => (b.photos > 0) - (a.photos > 0)),
     services: [...sCounts.values()].sort((a, b) => b.n - a.n),
+    occasions: OCCASIONS.filter((o) => oCounts.get(o.slug)).map((o) => ({ ...o, n: oCounts.get(o.slug) })),
   }
+}
+
+// Vendor tiles for Explore: vendors who haven't posted (so the grid has no photos of
+// theirs), best rated first. vertical: a slug or null / 'all'. service: only vendors offering it.
+// Each: { kind: 'vendor', id: 'v:<providerId>', providerId, provider, ratio }
+export function exploreVendorTiles({ photos = [], providers = [], vertical = null, service = null }) {
+  if (vertical === 'all') vertical = null
+  const posted = new Set(photos.map((ph) => ph.providerId))
+  const list = providers
+    .filter((p) => !posted.has(p.id) && (!vertical || p.vertical === vertical) && (!service || (p.categorySlugs || []).includes(service)))
+    .sort(byRating)
+  // Alternate verticals when showing every vertical.
+  const queues = new Map()
+  for (const p of list) {
+    if (!queues.has(p.vertical)) queues.set(p.vertical, [])
+    queues.get(p.vertical).push(p)
+  }
+  const out = []
+  const lists = [...queues.values()]
+  for (let i = 0; out.length < list.length; i++) for (const q of lists) if (q[i]) out.push(q[i])
+  return out.map((p, i) => ({ kind: 'vendor', id: `v:${p.id}`, providerId: p.id, provider: p, ratio: [1.2, 1.05, 1.3][i % 3] }))
+}
+
+// Photo tiles with a vendor tile after every `every` photos (vendor tiles fill in when photos run out).
+export function mixExploreTiles(photoTiles = [], vendorTiles = [], every = 6) {
+  if (!photoTiles.length) return vendorTiles
+  const out = []
+  let j = 0
+  photoTiles.forEach((t, i) => {
+    out.push(t)
+    if ((i + 1) % every === 0 && j < vendorTiles.length) out.push(vendorTiles[j++])
+  })
+  return out
 }
 
 // Split tiles into columns for a masonry grid, each tile going to the shortest
@@ -335,10 +437,8 @@ export function masonry(tiles, columns = 2) {
 }
 
 // Verticals the swipe deck can show: those with visual portfolios, each with
-// `count` (active providers). counts: { slug: n } from countProvidersByVertical().
-// withPosts: Set of vertical slugs that have published posts (verticalsWithPosts());
-// a vertical whose vendors haven't posted yet would give an empty deck, so it
-// counts as 0 ("coming soon"). Until that loads, provider counts alone decide.
+// `count` (active providers). Deprecated (photo-only); use deckChoices(), which
+// lists every vertical. Kept so older callers keep working.
 export function deckVerticals(counts = {}, withPosts = null) {
   return VERTICALS.filter((v) => v.visual).map((v) => ({
     ...v,
@@ -346,16 +446,27 @@ export function deckVerticals(counts = {}, withPosts = null) {
   }))
 }
 
+// The swipe deck's picker: "Everything" plus all 18 verticals grouped like catalog GROUPS.
+//   counts: { slug: providers } (countProvidersByVertical())   posts: listPostIndex() (or null while loading)
+// Returns { everything: { slug: 'all', name, count, posts }, groups: [{ slug, name, verticals: [v] }] }
+// where each v is a catalog vertical plus { count (vendors), posts (published posts),
+// mode: 'photos' (swipe their work) | 'vendors' (swipe vendor cards) | 'empty' (nobody yet) }.
+export function deckChoices(counts = {}, posts = null) {
+  const byVertical = postFacets(posts || []).verticals
+  const decorate = (v) => {
+    const count = counts?.[v.slug] || 0
+    const n = byVertical[v.slug] || 0
+    return { ...v, count, posts: n, mode: n ? 'photos' : count ? 'vendors' : 'empty' }
+  }
+  const all = VERTICALS.map(decorate)
+  return {
+    everything: {
+      slug: 'all', name: 'Everything', noun: 'vendor', plural: 'Vendors', icon: 'Sparkles', tint: '#334155',
+      count: all.reduce((n, v) => n + v.count, 0), posts: all.reduce((n, v) => n + v.posts, 0),
+    },
+    groups: GROUPS.map((g) => ({ ...g, verticals: all.filter((v) => v.group === g.slug) })).filter((g) => g.verticals.length),
+  }
+}
+
 // Slugs of the verticals that have at least one published post: Set<string>.
-export const verticalsWithPosts = () =>
-  cached('home:post-verticals', async () => {
-    const rows = must(
-      await supabase
-        .from('albums')
-        .select('provider:providers!albums_provider_id_fkey!inner(status, vertical:service_categories!providers_vertical_id_fkey(slug))')
-        .eq('status', 'published')
-        .eq('provider.status', 'active')
-        .limit(1000),
-    )
-    return new Set(rows.map((r) => r.provider?.vertical?.slug).filter(Boolean))
-  })
+export const verticalsWithPosts = async () => new Set((await listPostIndex()).map((p) => p.vertical).filter(Boolean))

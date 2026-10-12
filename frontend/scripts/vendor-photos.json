@@ -1,0 +1,1176 @@
+{
+  "about": "Demo portfolio posts for the test vendors in docs/test-users.json, created by frontend/scripts/seed-vendor-photos.mjs. Photo ids are rows of services/ml/eval/manifest.csv: hand-checked Creative Commons photos from Flickr (creator, license and source page come from there). Keys are vendor usernames; category is one of the vendor's services; occasion is an OCCASIONS slug or null; credits tag other test vendors (album_credits). excluded: manifest photos that must never be posted (another business's watermark, logo or signature).",
+  "vendors": {
+    "ana.films": [
+      {
+        "title": "Chapel wedding: vows to recessional",
+        "category": "wedding-film",
+        "occasion": "wedding",
+        "photos": [
+          "06c1c927-13b4-400b-98f2-31e96fcbd522",
+          "1879295a-a991-455a-aeea-00b5bdb7d83a",
+          "df7f2fbb-95f9-4ae7-9125-05d1d5630de2",
+          "30486a44-acb5-4b45-9b93-051310625b33"
+        ]
+      },
+      {
+        "title": "Registry office wedding in spring",
+        "category": "wedding-film",
+        "occasion": "wedding",
+        "photos": [
+          "007820d8-95e0-4a68-a2de-eb65715bb9a2",
+          "1a6914c3-2c7c-4d3a-aa66-05e376e24e8b",
+          "1fa381fd-d00e-4a60-8b88-88ab44f9e744",
+          "81960ffd-5a57-4b89-800d-2c57febd257b"
+        ]
+      },
+      {
+        "title": "Behind the camera at a city wedding",
+        "category": "event-recap",
+        "occasion": "wedding",
+        "photos": [
+          "48df452d-1e8f-4273-b4c9-569ed30c5430",
+          "fdb5e383-d52b-46da-a302-06cea4480245",
+          "93c8d5c1-8733-4dc7-95c2-bb2149cd33f7"
+        ]
+      }
+    ],
+    "northbound.media": [
+      {
+        "title": "Music video shoot: neon stage",
+        "category": "music-video",
+        "occasion": null,
+        "photos": [
+          "c36788bf-f6e5-4222-8f10-417481913044",
+          "53a075bc-57c8-41ea-8f95-6ad7a3db7d18",
+          "1e1c3df4-a954-4f7b-b0fc-7150b3531afa",
+          "f9b58c54-5e3e-4955-8381-c7f8a6966292",
+          "fa40e95a-21ca-459b-82f1-4f9151034680",
+          "cac9eeb4-e517-428b-a427-31e26cfaa460"
+        ]
+      },
+      {
+        "title": "Festival recap reel",
+        "category": "event-recap",
+        "occasion": "corporate",
+        "photos": [
+          "158f5d39-c9b7-4421-a56c-3e61e9cc67e3",
+          "2b84445e-db4e-4625-aed5-36b07ccae7fc",
+          "7bc49924-bbc7-442b-a9cf-edce19c984e6",
+          "b13ccddb-c78d-4f75-9720-53db43d8008e",
+          "d5073740-a7d3-4c59-affc-147b7860124e",
+          "50eed562-243c-4459-9e96-9efb71cfff1d"
+        ]
+      },
+      {
+        "title": "Drone: coastline and cliffs",
+        "category": "drone",
+        "occasion": null,
+        "photos": [
+          "0e64fd11-9839-4c77-9b0d-654eed36d2bc",
+          "91473684-9e3d-4d00-b3ca-4a1fc14f7106",
+          "8368f78e-b4a3-4889-8d9c-26396b13e288",
+          "9e2f62e9-0b4e-4f5c-bb25-4bf3e5541e01",
+          "52197afc-3624-48f2-9c49-c7e7879a4f1d",
+          "1c8469a5-a1c2-4ea9-a87e-e2263e0fd98a"
+        ]
+      },
+      {
+        "title": "Night timelapse for social",
+        "category": "social-reels",
+        "occasion": null,
+        "photos": [
+          "a83bcb8f-a3a6-45a0-ac92-901dd4d569ee",
+          "8d581516-f811-4741-b0f1-5c2cc0763127",
+          "17945b7b-4410-4264-8fa3-9835cc83bfe6",
+          "7bd0e527-f96d-4638-b1f1-730c519e76da"
+        ]
+      }
+    ],
+    "glasshouse.dtla": [
+      {
+        "title": "Cocktail reception in the glass room",
+        "category": "party-space",
+        "occasion": "corporate",
+        "photos": [
+          "61fa69ac-a554-4946-9076-f461a1abee07",
+          "63b66e56-09c1-47bd-a1da-d4356ecdb8bf",
+          "7cedb5bd-ccf5-4c5b-b159-4424cfbfe48c",
+          "0594f9e9-fb32-4f4f-8bd5-272a1978ce22",
+          "b6341d0c-a4c0-46cb-883c-4e4d3d6ad867"
+        ]
+      },
+      {
+        "title": "Lower-level lounge and bar",
+        "category": "party-space",
+        "occasion": "birthday",
+        "photos": [
+          "6293f31a-72f5-4bd6-bc4e-cc22cf31bac7",
+          "8daa2c9d-9bb0-4681-a572-7f9d05fcd54b",
+          "ca68bfe3-e91f-4d19-bf93-6069d222f443",
+          "c3ca0249-e1c2-436a-a4d5-56068104b1ea"
+        ]
+      }
+    ],
+    "rancholasflores": [
+      {
+        "title": "Hacienda hall, set for dinner",
+        "category": "wedding-venue",
+        "occasion": "quinceanera",
+        "photos": [
+          "87d2ddc5-ee03-4918-9743-d3770fa032d1",
+          "4ef33e5f-44bf-433e-9ebb-1a97cb3d068d",
+          "a0975715-313e-41c2-b447-8014130fd707",
+          "a608de53-dd65-4e27-8a93-52bebc702d96"
+        ],
+        "credits": [
+          {
+            "vendor": "wildflower.co",
+            "role": "Florals"
+          },
+          {
+            "vendor": "goldenspoon",
+            "role": "Catering"
+          }
+        ]
+      },
+      {
+        "title": "Golden hour on the grounds",
+        "category": "garden-estate",
+        "occasion": "engagement",
+        "photos": [
+          "594a6945-d7e3-4b13-bb0b-552e3acc089c",
+          "f7063673-1476-498c-b5d3-2c55948e7d06",
+          "77907db8-2915-4a67-8ab2-c9d93e41d11c",
+          "baf1e3f4-2df7-4e41-bd82-6d5a78626f24"
+        ]
+      }
+    ],
+    "goldenspoon": [
+      {
+        "title": "Wedding buffet for 150",
+        "category": "buffet",
+        "occasion": "wedding",
+        "photos": [
+          "20d9cafd-910c-4319-8f93-fed38fce0135",
+          "63deb437-6825-4912-9044-42d90037314a",
+          "3cc9c87c-825f-4707-8fb9-7d2ac158100f",
+          "f29707e4-e509-444e-80db-83a9e5d88f68",
+          "c9668c50-1d00-46b5-88d3-9e44ac873990"
+        ]
+      },
+      {
+        "title": "Carved fruit display",
+        "category": "full-service-catering",
+        "occasion": "quinceanera",
+        "photos": [
+          "1cec3aba-aa4c-454f-abab-0b2766882105",
+          "c956fea0-564b-46b5-a6c0-68c6d50f513d",
+          "76f94c4f-da3b-4a6e-912f-92b116df12d5",
+          "fcb91283-48a0-4c84-b8e0-213c32115e9b"
+        ]
+      },
+      {
+        "title": "Plated dinner: steak, short rib and lobster",
+        "category": "plated-dinner",
+        "occasion": "wedding",
+        "photos": [
+          "74e0e3b7-6e03-4916-9e4a-0150369ad6ec",
+          "bcbfd87e-5aa3-41fe-9f82-ec8952029230",
+          "e9d0b766-f3fd-4921-9e2a-7866b526336d",
+          "3816329f-66fa-43c9-a7c7-f3fd10507b8d",
+          "5688adcd-2ae5-4319-b0f7-46a01d6373cb",
+          "0d65e2f8-0c48-473c-87b5-f764f964aeaa"
+        ]
+      }
+    ],
+    "seoulfood.truck": [
+      {
+        "title": "Office lunch drop-off: wraps and sliders",
+        "category": "drop-off-catering",
+        "occasion": "corporate",
+        "photos": [
+          "4ad46039-89dd-4154-a06e-e2456148b780",
+          "5cec9d46-71c3-49c1-9aac-f48e8cecc0be",
+          "734075d7-befe-40de-a7b9-685dc9ca68f1",
+          "216aa931-87d3-4ced-976c-fb371da9218b",
+          "4ff107b8-4baa-48b2-879b-810afc93c0d3"
+        ]
+      },
+      {
+        "title": "Weekend brunch spread",
+        "category": "brunch",
+        "occasion": "baby-shower",
+        "photos": [
+          "65736090-8893-4d90-8710-47c3caf2c08f",
+          "b0dcdcb6-1caf-468a-820b-c18274439630",
+          "b0f31f35-4719-4619-a8a7-76265619f9e3",
+          "bc8201cf-d797-4f0f-be25-c0b37f8731b4",
+          "24ed34ed-f892-4ca1-9a82-a871b7395bfe"
+        ]
+      },
+      {
+        "title": "Rice bowls and tacos from the truck",
+        "category": "food-truck",
+        "occasion": "birthday",
+        "photos": [
+          "381377e7-0164-40a9-ac7d-c7415e0940ac",
+          "fdb0f419-46ee-47cf-b4f2-6ba9332da7f9",
+          "6d252946-4d4f-4f13-8c67-eafdcb8d4317",
+          "cf977e00-d29e-437f-b3f6-e430e2758671"
+        ]
+      }
+    ],
+    "chef.julien": [
+      {
+        "title": "Spring tasting menu, six courses",
+        "category": "tasting-menu",
+        "occasion": "dinner-party",
+        "photos": [
+          "28562a52-50fc-4806-af8e-5778e788a2fc",
+          "74c2f117-caf4-41d5-b647-e68dd721d906",
+          "ca2838f8-f650-4bc8-9c96-3d1bc409d177",
+          "7eeaeecd-4aed-45a2-8b4d-673572075f4a",
+          "b017bcd1-cb84-48d1-9192-d9d33f9c3ebf",
+          "4b3af3c9-fe3a-4df4-be59-aac6d7f6a918"
+        ]
+      },
+      {
+        "title": "New Year’s Eve dessert course",
+        "category": "chef-dinner",
+        "occasion": "holiday-party",
+        "photos": [
+          "c162a7ed-321f-451e-b5ec-ff2afbef2edc",
+          "ed4cb4c4-04a2-4e3e-982a-bd482907702f",
+          "ac4106e7-8c80-4e36-94bb-d37c206161ce",
+          "1d55f785-fabb-493d-aaaa-687b1267b6f7",
+          "efa569c8-bf89-4206-9441-883effff5329"
+        ]
+      },
+      {
+        "title": "Dinner party at home",
+        "category": "chef-dinner",
+        "occasion": "dinner-party",
+        "photos": [
+          "536dec9e-ed15-4b5c-9472-43a18cc13753",
+          "ad59c0ca-742b-4a79-92a5-2b201e692270",
+          "cbb156fa-fcaa-4d35-a8e6-49c14ff81485",
+          "d4528443-7666-444e-a1be-f3a2110324a8"
+        ]
+      },
+      {
+        "title": "Cheese course for two",
+        "category": "tasting-menu",
+        "occasion": "engagement",
+        "photos": [
+          "15a5c3e6-92f0-4036-8327-2cfaa4033e89",
+          "1ff2d67e-381b-4464-a5c2-6335854c1389",
+          "40ecc73c-0796-4ed2-a518-0db4a9569127",
+          "d2c235da-41a4-4af7-ad5e-bc638fa47827"
+        ]
+      }
+    ],
+    "chef.priyanka": [
+      {
+        "title": "Prawn curry dinner party",
+        "category": "chef-dinner",
+        "occasion": "dinner-party",
+        "photos": [
+          "d1c37ff9-40bc-428b-bd1b-29f64444f6f9",
+          "988d6494-ab18-4993-bc02-850a5f905f8b",
+          "a87b8949-5fb7-4dfa-aa25-950f85868731",
+          "645ba76f-44b8-43d9-9099-b4de1c72ff46"
+        ]
+      },
+      {
+        "title": "Cooking class: street-food night",
+        "category": "cooking-class",
+        "occasion": "bachelor",
+        "photos": [
+          "194aa79d-7c94-4e54-a23a-2b26584ae383",
+          "e3979c4a-da9a-456d-8e78-689f4025a549",
+          "e1c91a5d-4f63-4001-a4a9-d6e11c068975",
+          "00485af9-74d9-4ccc-b247-e2cb347ff23d"
+        ]
+      },
+      {
+        "title": "Meal-prep week: salmon, risotto, kofta",
+        "category": "meal-prep",
+        "occasion": null,
+        "photos": [
+          "51f0d742-a04b-4af0-9981-9427c489fef1",
+          "089fc548-34cc-4f7e-a392-a06607aa6d94",
+          "cb29fa4c-42f9-4090-bb7b-7778eac0b5de",
+          "cb9e22f9-d920-4ed9-84cf-ed6b7b609c3a"
+        ]
+      }
+    ],
+    "sugarbloom": [
+      {
+        "title": "Hand-painted garden wedding cake",
+        "category": "wedding-cake",
+        "occasion": "wedding",
+        "photos": [
+          "52781a2c-700c-40b5-a680-5b6171a63893",
+          "605ddf10-6d5e-4284-a138-ef8c8eba2a82",
+          "6222af70-539d-438a-bcc1-aeac0e698a0f",
+          "fdb7932c-e7c9-428e-8d13-73c43f5a9138"
+        ]
+      },
+      {
+        "title": "Fresh-flower buttercream tiers",
+        "category": "wedding-cake",
+        "occasion": "wedding",
+        "photos": [
+          "53407021-a953-4e37-99d0-de2842fb9c85",
+          "579f27c8-a782-45dd-913c-b95896685371",
+          "a59f111f-5522-4c3b-a158-531af96cf3e1",
+          "2c46824b-18d8-451c-8940-dcb6794c83b0",
+          "9187084b-27e4-4c65-8eb3-3c6ae5eb71a3"
+        ]
+      },
+      {
+        "title": "Dessert table with sparklers",
+        "category": "dessert-table",
+        "occasion": "wedding",
+        "photos": [
+          "bce0dd29-564f-4858-aae3-bfcca288681b",
+          "9bdc8708-9237-47fe-b7ee-09a69313aa18",
+          "ad53fa0a-d608-4d08-88b5-773df8be2eba",
+          "4ed22000-838b-4159-8c99-ba611f241784"
+        ],
+        "credits": [
+          {
+            "vendor": "everly.events",
+            "role": "Planning"
+          }
+        ]
+      }
+    ],
+    "crumbclub": [
+      {
+        "title": "Ballpark-themed wedding cake",
+        "category": "celebration-cake",
+        "occasion": "wedding",
+        "photos": [
+          "0c627beb-4ea5-4269-9999-b5de70eca00b",
+          "c3c0d046-223d-4728-b0a1-1102ac062def",
+          "434606a6-181d-42c4-a376-b450520c7ed1",
+          "f0dda50b-3164-47e3-94dc-23c039b005be"
+        ]
+      },
+      {
+        "title": "Birthday cakes and treats",
+        "category": "celebration-cake",
+        "occasion": "birthday",
+        "photos": [
+          "97f35ce2-c438-4340-9512-f856d906b483",
+          "bf5de6c2-4a83-4fe9-b140-74426505b916",
+          "ffcfd26d-8a0b-45ec-b639-5d058216b701",
+          "c3d8f4bc-a5f8-47d0-9081-d1bdffcb08c7"
+        ]
+      },
+      {
+        "title": "Baby shower sweets",
+        "category": "cupcakes-cookies",
+        "occasion": "baby-shower",
+        "photos": [
+          "3a746592-71e9-48b5-8cf8-d4bdc68eef37",
+          "b81b600d-50df-45ef-a192-a86b0bd12aa5",
+          "1d4c6c68-ee55-4f2a-972f-92d1d65232dc"
+        ]
+      }
+    ],
+    "shakenstirred": [
+      {
+        "title": "New Year’s Eve champagne bar",
+        "category": "mobile-bar",
+        "occasion": "holiday-party",
+        "photos": [
+          "012778a0-49ef-4858-87c7-b5843e17ad13",
+          "171b3c37-abd5-4905-a3b1-fcb6ea4fa533",
+          "2a1e18a3-4394-42bf-80f6-63c93f6bac98",
+          "50b51260-7693-4fc9-93d0-0e33d4e89779",
+          "70568275-1eca-4ea2-8bb6-dff4b652a746",
+          "9e7d6089-773d-4d15-afce-7c17872e8825"
+        ]
+      },
+      {
+        "title": "Spritz season on the patio",
+        "category": "mixology",
+        "occasion": "bachelor",
+        "photos": [
+          "8dd97afa-1871-4a9c-b31f-936b04797c10",
+          "9c386584-bcbd-4c77-aa4d-bfd466f03a6b",
+          "9f43edea-4125-4b50-881d-53ad75913a53",
+          "f01e0b60-28cf-4278-b6f8-55a368f564bc",
+          "1b551369-d6c0-4374-a0ae-3a8f54f536c8"
+        ]
+      },
+      {
+        "title": "Signature cocktail menu",
+        "category": "mixology",
+        "occasion": "wedding",
+        "photos": [
+          "c38b6efe-46d4-4fb5-a7d8-149b974d28db",
+          "e745711d-4e6a-4cfa-b2eb-c17f1765fcb8",
+          "712e3478-1a85-4fd4-bb5f-ecc7442c0ff7",
+          "8c7860fa-7549-4836-9412-be27e6de6996",
+          "e6189050-4fb8-4b4d-8ddc-bb2c09fd5e33",
+          "457d1c0f-f6d3-4f00-b1a3-f75e821382f5"
+        ]
+      }
+    ],
+    "beanthere.cart": [
+      {
+        "title": "Agua fresca and lemonade station",
+        "category": "coffee-cart",
+        "occasion": "wedding",
+        "photos": [
+          "c962a3cb-48c1-476c-88a3-43e388557922",
+          "edf55400-f2e7-43f3-9f84-802c2430a3db",
+          "8fd48344-b397-44db-becb-3e9309ca0468",
+          "589c1bef-75bf-441c-9ec4-1a9d785446d7"
+        ]
+      },
+      {
+        "title": "Brunch add-on: mimosas and juice",
+        "category": "coffee-cart",
+        "occasion": "baby-shower",
+        "photos": [
+          "9f492c65-96a5-4a84-b828-8948bef1d9e4",
+          "fefa2326-1a5c-41a3-b7fa-b810a611a9a1",
+          "c4cc10e3-7a0f-4006-8eb3-08fb9eee360b",
+          "acd3d89b-ef24-4c21-be8b-d8c248564e82"
+        ]
+      },
+      {
+        "title": "Coffee and dessert pairing",
+        "category": "coffee-cart",
+        "occasion": "corporate",
+        "photos": [
+          "640b2f59-bbfa-46db-8bd6-be6d5102cc2e",
+          "59903a0b-bce5-4446-8d17-647f58afac6c",
+          "56554c93-9aa7-4af7-af36-e0ff0b38444c",
+          "44257aed-c043-4d3e-91bc-c530bdf2850d"
+        ]
+      }
+    ],
+    "djnova": [
+      {
+        "title": "First dance, then the floor opens",
+        "category": "dj",
+        "occasion": "wedding",
+        "photos": [
+          "60c6a653-c816-4662-9efc-07ad5dd78354",
+          "8699ce36-5c0b-4450-a68a-73b51b343905",
+          "baae8624-c09f-4149-acd0-97127dd0bbae"
+        ],
+        "credits": [
+          {
+            "vendor": "everly.events",
+            "role": "Planning"
+          }
+        ]
+      },
+      {
+        "title": "Rain-dance after-party",
+        "category": "dj",
+        "occasion": "birthday",
+        "photos": [
+          "2db57d74-bb4f-4dbd-a67d-9386b6f45b4c",
+          "6acf73d6-f5e5-4960-a3f9-97f04baa518c",
+          "7a07eef6-6545-49df-995a-880e2d1da830",
+          "9aea9c4d-b058-4332-853d-5d0260592bc8",
+          "dc579b45-676d-46f7-948f-7bc02fe3184e"
+        ]
+      },
+      {
+        "title": "Club night: hands up",
+        "category": "dj",
+        "occasion": "bachelor",
+        "photos": [
+          "347469fb-4e59-4dac-a13a-550b4081c35f",
+          "83c93fa1-2632-4861-9d76-d7ac52db209f",
+          "90e891a5-4613-42e9-9397-8e61ebc9f86a",
+          "56e43e2b-79a8-44e2-b257-da876422734f"
+        ]
+      }
+    ],
+    "velvetstrings": [
+      {
+        "title": "Cocktail-hour acoustic sets",
+        "category": "solo-musician",
+        "occasion": "wedding",
+        "photos": [
+          "3cd43857-bf04-4c88-afc7-57fb67d765be",
+          "6fef19b8-e0f7-4e27-bb80-36b9f01d9b6d",
+          "b9109713-10d7-43c2-b1a9-83855c807529",
+          "638134c6-99e6-4e72-8f7f-5ad91daf9dc1"
+        ]
+      },
+      {
+        "title": "Jazz trio for a gala",
+        "category": "solo-musician",
+        "occasion": "corporate",
+        "photos": [
+          "2a2ec79c-14f9-47ac-a74a-cf784b78b301",
+          "2ba7e91a-bf5f-431b-815f-d56b2a7b92ab",
+          "6b475a10-2da3-4728-b350-07c9aa8450b1",
+          "4e8b949c-54d7-4746-8f85-2ec74821e972"
+        ]
+      },
+      {
+        "title": "Chapel ceremony music",
+        "category": "string-quartet",
+        "occasion": "wedding",
+        "photos": [
+          "06738384-30f5-4ca9-aa88-7f49313fc47d",
+          "95f7aaad-222e-4c44-9d4f-9b4e9c8e1f37",
+          "ad3fd09f-131d-4fdb-bc1f-105b0eaa1faa"
+        ]
+      }
+    ],
+    "snaphappy.booth": [
+      {
+        "title": "Headshot booth at a conference",
+        "category": "photo-booth",
+        "occasion": "corporate",
+        "photos": [
+          "08ab093d-fe20-4d08-a78f-2ecfdf8167c0",
+          "12b817dc-e14a-4477-b8fb-48d0273fc15b",
+          "2cf10fe2-18bd-4af2-9384-11ca233aac79",
+          "40dd5755-29cc-4627-b995-e49c208476ce",
+          "b31ec171-f61a-4f34-a8ca-e52a55b19a16"
+        ]
+      },
+      {
+        "title": "Group shots under the truss",
+        "category": "photo-booth",
+        "occasion": "birthday",
+        "photos": [
+          "179871d0-6160-4023-92fa-d0a177eeea24",
+          "23e7ca5e-70c8-4f6a-8c27-26c2099bca32",
+          "3ae19ebc-0866-48e3-9387-cee462466c93",
+          "9a43c474-9725-40c7-bec2-37a1714e8997"
+        ]
+      }
+    ],
+    "marvelous.max": [
+      {
+        "title": "Kids birthday show",
+        "category": "kids-entertainer",
+        "occasion": "birthday",
+        "photos": [
+          "70458622-d2da-4861-98b1-51c70ea1c7d3",
+          "b64aedc5-7f86-449c-b728-10e16f77f4a6",
+          "d490ca0e-3f26-46fe-abad-3e4c5f8a0a77",
+          "761bd7a1-a4a2-41e2-9000-a62520d1436e",
+          "83394b01-9c42-4047-badb-ba81978a4a9d"
+        ]
+      },
+      {
+        "title": "Front-row giggles",
+        "category": "kids-entertainer",
+        "occasion": "birthday",
+        "photos": [
+          "19080392-ba5b-4e59-aef1-669a613753da",
+          "3025cdd3-4406-40d2-b943-365f8b2e02f7",
+          "78913baa-0b83-4a06-809a-cb413d2db4cc",
+          "2d9b6b98-4c79-4795-8715-998ae0f2cd09"
+        ]
+      }
+    ],
+    "wildflower.co": [
+      {
+        "title": "Garden-style arrangements, local stems",
+        "category": "centerpieces",
+        "occasion": "dinner-party",
+        "photos": [
+          "4953da1b-4237-4746-bac8-8c2af2335c63",
+          "cf5154b3-80d1-402e-8f25-a29f3c076c96",
+          "cd68319b-4dc6-40bf-9e71-52296d2b7b23",
+          "4f52f6cc-5a2a-4e4e-a23e-0063e5625606",
+          "e2718a64-2d1d-473b-9dd1-3a9e096354cc",
+          "f49c8620-675e-4bb9-8a6e-6fb48f350102"
+        ]
+      },
+      {
+        "title": "Reception centerpieces",
+        "category": "centerpieces",
+        "occasion": "wedding",
+        "photos": [
+          "59d493a9-e765-4513-aa38-3178a64281d1",
+          "c1f500db-64f9-43c2-807a-12758c70f6e5",
+          "fbd00f59-64a4-4782-9176-222b942a3833",
+          "2d067d40-7669-42c6-9951-ec7655eb3c76"
+        ]
+      },
+      {
+        "title": "Bouquets and a garden arch",
+        "category": "ceremony-florals",
+        "occasion": "wedding",
+        "photos": [
+          "3eea3240-41d0-4323-ad2e-75ff5ff3ce4c",
+          "2cd0925d-2a7a-46f3-92e1-9682a486df7e",
+          "7fe6fdf9-1085-4fe6-829c-997a2e9e7c84",
+          "1b9d68db-0581-43c3-905f-bafbfaaab634"
+        ]
+      }
+    ],
+    "stemstudio": [
+      {
+        "title": "Sculptural installations",
+        "category": "floral-installation",
+        "occasion": "corporate",
+        "photos": [
+          "3c33c065-81e9-43ed-9ccd-df194b01f01d",
+          "4dd13c3a-3df5-4bb7-ab6a-2853677e9a6a",
+          "96b3f550-2e47-413e-aa6a-d112a51c81ec"
+        ]
+      },
+      {
+        "title": "Modern ikebana-inspired pieces",
+        "category": "centerpieces",
+        "occasion": "dinner-party",
+        "photos": [
+          "3abce83a-528c-4691-8269-29836d26592c",
+          "8bb3bcd9-b998-4754-b28b-7e4eebf07150",
+          "28514d5c-0518-4edf-9bdf-4c2195696616",
+          "c83408c3-5887-46d5-8d8e-7894f3f7d2c9"
+        ]
+      }
+    ],
+    "popparty": [
+      {
+        "title": "First-birthday cake smash setup",
+        "category": "backdrops",
+        "occasion": "birthday",
+        "photos": [
+          "0ab91da8-14cf-4414-9985-eb1c5deb9645",
+          "2af3cb3c-3feb-4ccc-834a-1a43d0cdfdeb",
+          "7077d3a5-e46b-4126-9fa7-6278c10778ce",
+          "2887c201-a57c-4bb5-80ac-572fb96cb752"
+        ]
+      },
+      {
+        "title": "Holiday table theme",
+        "category": "themed-decor",
+        "occasion": "holiday-party",
+        "photos": [
+          "75731730-6a54-4079-afc0-66fd73164a57",
+          "898a1620-d862-46b0-9ba5-ac35ed54fecd",
+          "8c01d60e-ffbc-473c-abfd-b5ce0362f0bf",
+          "b522cdd8-1955-4c3d-a9a6-1c76f244a211",
+          "cebe72bd-ae22-4ef3-b70b-3f8463400310"
+        ]
+      }
+    ],
+    "lumen.design": [
+      {
+        "title": "Candlelit dinner tables",
+        "category": "tablescapes",
+        "occasion": "dinner-party",
+        "photos": [
+          "7e34881f-1b59-4355-99d6-098539e5870c",
+          "80bca782-e359-47d0-93ac-8f86e148b47c",
+          "a0ab801a-6976-4573-b4c0-7f3f4b4e7e7b",
+          "f7e5e4d1-9efa-4005-ae97-3069756bccb0",
+          "09f3c566-2560-4df6-be73-826f43aa2b68"
+        ]
+      },
+      {
+        "title": "Chandelier-lit banquet",
+        "category": "lighting-design",
+        "occasion": "corporate",
+        "photos": [
+          "5812eae8-eb1d-4d20-8053-3fc8709d56af",
+          "72c3c3f9-d55d-4b4a-83d8-8ee1c32e31aa",
+          "8320d460-42c5-4575-9f86-0233bff74656",
+          "fe78a04f-6f94-4d12-b2d9-3c4819d2e759",
+          "b9aa36ca-195e-4d98-9aef-5f2433a8dbbd"
+        ]
+      }
+    ],
+    "glowbymina": [
+      {
+        "title": "Lakeside bridal glam",
+        "category": "bridal-makeup",
+        "occasion": "wedding",
+        "photos": [
+          "15eefe7d-ca45-4e5f-bc0e-b5b618ba22c9",
+          "21845587-082d-47f9-8285-e06db0f12207",
+          "fe97dfec-e30a-4501-9a32-20805ec939f3",
+          "ffd46daf-3473-448b-93dd-dd0c286c4623",
+          "1a13f325-0a82-4241-820b-653f8fdef5b5"
+        ]
+      },
+      {
+        "title": "The veil moment",
+        "category": "bridal-makeup",
+        "occasion": "wedding",
+        "photos": [
+          "69fb7353-1fed-4ae7-8e9f-9648bcbfdd73",
+          "ac12d69a-0d35-4a21-80db-2ea23f9fd984",
+          "f12635fb-464f-4eb0-93f7-fa9aa2e3810c",
+          "c4a278bb-6e1a-4093-be98-3725891638dd",
+          "167892cc-5152-4d2f-a7c6-7d12c2217b47"
+        ]
+      },
+      {
+        "title": "Getting ready",
+        "category": "event-makeup",
+        "occasion": "wedding",
+        "photos": [
+          "56f55800-70d0-4d09-b1f1-45651b49e6fe",
+          "a6dcc9da-8fb6-4e80-a09c-14a66ebc5418",
+          "31e88588-84fd-4044-885a-6c9e46e01a14",
+          "e348bcb8-1eee-45ae-9c44-bae3b41f362a"
+        ]
+      }
+    ],
+    "studio.rizos": [
+      {
+        "title": "Headshot-ready glam",
+        "category": "event-makeup",
+        "occasion": "graduation",
+        "photos": [
+          "247d2c7b-abd7-47ab-8d73-f0903bca1b3f",
+          "8e00130f-cc19-430b-a518-a24c3576633b",
+          "df2a8c38-c687-4f85-b053-8ed775324c34",
+          "621b7f31-f3db-40d6-862c-2c558eda6da4"
+        ]
+      },
+      {
+        "title": "Bridal party hair",
+        "category": "hair-styling",
+        "occasion": "wedding",
+        "photos": [
+          "a9ddabd5-35b6-4c29-9086-95933bb88e72",
+          "248e240b-7cec-4116-a19c-f9b5d3938f12",
+          "1c00e505-97ac-4ae7-8fa3-0a1c21ed353d"
+        ]
+      },
+      {
+        "title": "Editorial: curls in black and white",
+        "category": "hair-styling",
+        "occasion": null,
+        "photos": [
+          "03ac03ba-d727-4f07-ac8a-4e53f4fc277d",
+          "3e9148e5-c79b-4c41-b462-4fd911477868",
+          "4bc275b0-ab97-4940-81f3-ef186ce348c4",
+          "5b6d42e4-59ab-44cc-9587-4ceab4e16096"
+        ]
+      }
+    ],
+    "socalrentals": [
+      {
+        "title": "Linens and place settings",
+        "category": "linens",
+        "occasion": "wedding",
+        "photos": [
+          "0ac7669e-83d9-4686-bde7-3d3f92eefc0e",
+          "0f18d172-1b3e-47bd-aa1e-deb4f264bb71",
+          "2705c2f6-1875-4c99-be0b-3b2f8219e31b",
+          "8f7ecf12-1708-4161-ad74-d8bedf3f9154"
+        ]
+      },
+      {
+        "title": "Birthday party tables and chairs",
+        "category": "tables-chairs",
+        "occasion": "birthday",
+        "photos": [
+          "982882e2-66cd-4006-b664-0a3a9a15ad36",
+          "a603cafc-328a-490b-b029-1d22cd287be7",
+          "f105c214-b834-4421-85fa-48eeb1974e81",
+          "1c3fa6c6-e302-4a2a-832c-a9767efb5ebd"
+        ]
+      }
+    ],
+    "amplify.av": [
+      {
+        "title": "Laser and LED stage build",
+        "category": "av-equipment",
+        "occasion": "corporate",
+        "photos": [
+          "300a9061-e48e-42d2-b96f-096d010085b4",
+          "37f61e2e-b3a1-404d-88fd-eebce2b503a6",
+          "49943fb6-45eb-4f50-b140-7eeac6096047",
+          "b556949b-5261-481b-9cc7-9809e6df555d",
+          "dfad1e76-8188-400e-ba91-48199c39a758",
+          "ef0566a1-8bf9-4e61-a6b8-973002a65adf"
+        ]
+      },
+      {
+        "title": "Concert sound and lights",
+        "category": "av-equipment",
+        "occasion": null,
+        "photos": [
+          "fea8e1bc-5c7a-4832-90ba-667b7361390d",
+          "b58f3058-740f-45bb-8d3e-89ed83630989",
+          "43d30644-6340-4f5a-92d3-c8d1c3dff2c2",
+          "8b9bc8c9-5b2c-4201-935a-d1541b70a80f",
+          "6251e347-3632-47e0-9bfd-1708efabab33"
+        ]
+      }
+    ],
+    "everly.events": [
+      {
+        "title": "Proposals people said yes to",
+        "category": "proposal-planning",
+        "occasion": "engagement",
+        "photos": [
+          "c568fa5f-44ec-47d1-a0e2-13a86bd89e9d",
+          "71913a37-a578-4443-8766-c81e1800c6e0",
+          "b5c39ab2-734e-40a1-b767-a8c50aa5bd91",
+          "7aaceb4a-ff50-45e5-a4fd-4cac7dba4caf"
+        ]
+      },
+      {
+        "title": "Church steps send-off",
+        "category": "day-of-coordination",
+        "occasion": "wedding",
+        "photos": [
+          "082919e8-34ab-40ee-bca3-eeaa905af352",
+          "23eb22ca-2e1c-482c-a18e-8af00b872abf",
+          "baa62e96-817d-4523-b29b-78682c059615",
+          "eea1ae49-0d1e-4a52-a5f4-128f874acdf9"
+        ]
+      },
+      {
+        "title": "Reception details",
+        "category": "full-planning",
+        "occasion": "wedding",
+        "photos": [
+          "2c2831e6-37fe-4360-b4ad-3fe1226308d5",
+          "8cb2634c-08a9-4927-a5dc-fe7aef5cf4cd",
+          "d867919c-dc6b-43f4-8641-68c2553b4623",
+          "1375d1f6-a9a9-4069-9559-4c1dc56d1355"
+        ],
+        "credits": [
+          {
+            "vendor": "wildflower.co",
+            "role": "Florals"
+          },
+          {
+            "vendor": "lumen.design",
+            "role": "Lighting"
+          }
+        ]
+      }
+    ],
+    "agenda.collective": [
+      {
+        "title": "Offsite meeting rooms",
+        "category": "corporate-planning",
+        "occasion": "corporate",
+        "photos": [
+          "5c6fd974-1b04-42ee-bc4d-a49197ade348",
+          "82b4e28e-6106-4196-bf04-3e9acf497d9e",
+          "95b60c12-860d-406b-8dd5-f6aeb70b94dd",
+          "bd9c3922-8259-427a-b2f2-d09992ead2d0"
+        ]
+      },
+      {
+        "title": "Awards dinner and keynote",
+        "category": "corporate-planning",
+        "occasion": "corporate",
+        "photos": [
+          "8fe11e80-dc0b-4c26-a540-388ce3ab5c15",
+          "5a7bae32-dd52-42d4-a4e3-343d4d8246b3",
+          "65779294-6795-4752-87fc-79263eeb5cdd",
+          "da3e2ca2-0545-4830-b39c-02845236300c"
+        ],
+        "credits": [
+          {
+            "vendor": "amplify.av",
+            "role": "Sound & AV"
+          }
+        ]
+      },
+      {
+        "title": "Cocktail-hour canapés",
+        "category": "corporate-planning",
+        "occasion": "holiday-party",
+        "photos": [
+          "b1266c1c-f20b-4b67-a169-7de73fb08dbe",
+          "bb7d4035-329c-412a-b7e0-e322a942ebc7",
+          "bf815b1b-5771-42b5-9ce2-35027cd5741f",
+          "ff1db8dd-3cad-452c-98fa-017407e2e480",
+          "0967e772-4ea2-4492-bc89-914e084fe7b1"
+        ]
+      }
+    ],
+    "rev.sam": [
+      {
+        "title": "Chapel vows and rings",
+        "category": "wedding-officiant",
+        "occasion": "wedding",
+        "photos": [
+          "7c86a71a-98fd-43c3-b0b3-b283af150230",
+          "a814a577-804d-4218-a34f-ad9b0b4d0cf9",
+          "f5e35e0e-593e-4d31-a9a3-f577b4b0491b"
+        ]
+      }
+    ],
+    "lena.celebrant": [
+      {
+        "title": "Beach and clifftop ceremonies",
+        "category": "elopement-officiant",
+        "occasion": "wedding",
+        "photos": [
+          "cbb10d61-e231-464b-aeb6-fbcd2e27cd2e",
+          "ec20d964-7e63-401e-9eaf-d3a37e7a11fe",
+          "5a34f6aa-fee1-44a5-a84f-4b14516cf0d8",
+          "2bc724a8-8f0e-46ba-be27-9afdfc04acf7"
+        ]
+      }
+    ],
+    "starline.limo": [
+      {
+        "title": "Holiday lights limo tour",
+        "category": "limo",
+        "occasion": "holiday-party",
+        "photos": [
+          "80d13eb9-c60c-4790-a082-01dfc66d7bdd",
+          "623cab63-dcb4-4e15-a818-04d3a0979b96",
+          "c2b597da-7bea-4ee8-8e66-fdf89c03073f",
+          "a57277fa-024c-40e8-81a0-589321d7a5f9"
+        ]
+      }
+    ],
+    "coastclassics": [
+      {
+        "title": "Getaway drive up the coast",
+        "category": "classic-car",
+        "occasion": "wedding",
+        "photos": [
+          "221d6ecc-fb89-48de-b1d4-1f29999f4811",
+          "33882601-c9c1-42ed-bcbc-1df2b670b0d7",
+          "dfdf161d-f5fb-4326-82dd-1fe3dfbd558b",
+          "bcbb5e59-018e-411f-aef9-bb1c6beea580"
+        ]
+      }
+    ],
+    "servicepros": [
+      {
+        "title": "Buffet service for a company lunch",
+        "category": "servers",
+        "occasion": "corporate",
+        "photos": [
+          "99415a16-6954-4a59-81e3-faffb2fcf5b7",
+          "2faee5cf-7ada-4687-8eab-879d058c9067",
+          "0be2585c-5c0a-414c-bc9c-2dba14545691",
+          "a8622d83-ff3b-4b7e-9caf-5310b7597bf1"
+        ]
+      }
+    ],
+    "sunriseflow": [
+      {
+        "title": "Sunrise sessions on the sand",
+        "category": "yoga",
+        "occasion": null,
+        "photos": [
+          "74e4d0d0-a25e-448d-9d43-6518f8a78e7e",
+          "83a6b0f1-0eeb-4df2-8bec-01516b10a16f",
+          "a1681299-5357-40c1-a379-cbcd603464be",
+          "c763a1d2-0a98-41aa-85ab-69672354e802"
+        ]
+      }
+    ]
+  },
+  "excluded": [
+    {
+      "id": "0a440cc9-dd3c-4658-b301-0e47c108ad8c",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "32eb80be-72c3-4c93-85eb-8ea731156d30",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "37791c29-1f48-4bf2-b784-13da6236c2df",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "659e79be-1bcf-4d47-85fa-49e4a7f711d4",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "68164c3f-0248-4ce0-ac3f-dd8213f80192",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "7784ae83-efbb-457d-a1d7-5b96ceabb031",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "9d402839-5cc5-42f2-b745-f524094e327a",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "bf2a9f1a-482a-4554-bb6b-61bae193b88b",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "ca849bfe-170f-44b0-9070-214914e4b433",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "dbe407e4-c9d2-4912-ab55-abdefcf8f317",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "e4a208da-ed05-4577-a2a9-08d7a9825941",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "ea4d6a9a-0b9f-4956-a430-1cfda073330c",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "f02d991e-d95e-495e-8fef-b4542742c33d",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "f9804fa0-4723-493b-b9d7-a3cec9b9bcd4",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "fc9be2b9-f67a-4e90-9820-f7c1f3d227ad",
+      "reason": "\"DG Event\" business watermark (www.dgevent.in) on this balloon-decor series"
+    },
+    {
+      "id": "41639283-8967-4379-9f07-d2727a09fa36",
+      "reason": "\"FAIAZPIXELS Photography\" watermark"
+    },
+    {
+      "id": "55f9a0d0-89f4-4492-a731-12d5580ae046",
+      "reason": "\"FAIAZPIXELS Photography\" watermark"
+    },
+    {
+      "id": "90e51e35-8418-4f7b-a705-003348dd6956",
+      "reason": "\"FAIAZPIXELS Photography\" watermark"
+    },
+    {
+      "id": "3de40478-3361-444e-84ce-e6645c38e1fc",
+      "reason": "\"© Ray Best\" watermark"
+    },
+    {
+      "id": "78b26487-fced-4690-a90e-dbd4f2b15cd4",
+      "reason": "\"© Ray Best\" watermark"
+    },
+    {
+      "id": "20474880-17bf-4579-99f8-ec083a56de74",
+      "reason": "\"© Nelson L stories with soul\" watermark"
+    },
+    {
+      "id": "97743fe5-fbe2-4802-a47f-9c18acd08785",
+      "reason": "\"Photography - @laxmars\" watermark"
+    },
+    {
+      "id": "05b3d5a4-d989-4149-80af-15de5d6d824d",
+      "reason": "\"Seattle Yoga News\" logo watermark"
+    },
+    {
+      "id": "0b7b8260-c983-4d9a-952e-1b21d6cc4f00",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "1c9edf68-909e-4d9e-8283-d0c2b3726461",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "1d4a6064-4663-43a7-9ae0-b39c7c4cd28f",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "2995efd3-8285-4286-97ab-f9413d407ad2",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "3155b57a-f721-4344-ac84-104541d23d47",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "3bc4c99c-4439-41db-9eb8-ac8b2b893b00",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "41fb7322-3873-49d3-b89f-eeeccfb25a3a",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "547b3aa7-80ff-4ddd-8a12-c6f51db47aaf",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "603d4c6f-d03b-4609-a455-316b3b976ebc",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "74932ff4-4e8f-4ede-88bd-55c9e3741ca1",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "7e2dd3df-a666-4774-8727-31e430363503",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "a627520f-9bcd-4040-846e-44ff3bf5d5da",
+      "reason": "\"© Stefan-Mueller.pics\" watermark"
+    },
+    {
+      "id": "6b7fd8e3-f4e0-4c87-bb9b-2e52e2225a66",
+      "reason": "\"© Jorge Mejia Peralta\" watermark"
+    },
+    {
+      "id": "d6bd6335-912e-41c1-8d35-f0ff6d3f6351",
+      "reason": "\"© Jorge Mejia Peralta\" watermark"
+    },
+    {
+      "id": "5735548e-322a-41f7-ba16-a98c595e6c6a",
+      "reason": "band logo backdrop fills the stage"
+    },
+    {
+      "id": "c65a2159-4ca6-492a-9174-e9e1b1855e7d",
+      "reason": "\"LIDER FM\" and \"eu na internet\" logos"
+    },
+    {
+      "id": "ade20315-d520-462f-887d-2851e8b0af1a",
+      "reason": "\"social media Tulsa\" event branding on screen"
+    },
+    {
+      "id": "70987f36-1091-4aa2-aedd-d71c05ac6eae",
+      "reason": "large brand logos (Glico billboard, Mercedes star)"
+    },
+    {
+      "id": "bd7e8072-bd0f-4dd3-ae61-00399cc2bb0f",
+      "reason": "large brand logos (Glico billboard, Mercedes star)"
+    },
+    {
+      "id": "1c673c8f-2034-4bf2-b669-83f93bbfe0c2",
+      "reason": "brand logos (bar mat, Amtrak cup)"
+    },
+    {
+      "id": "b70af86e-1209-4182-8fd2-2c1af0587439",
+      "reason": "brand logos (bar mat, Amtrak cup)"
+    },
+    {
+      "id": "b9aab320-9f4e-44a5-b360-b119fbb17bc3",
+      "reason": "brand logos (bar mat, Amtrak cup)"
+    },
+    {
+      "id": "5be1234e-345a-4655-a489-17e9a55487f3",
+      "reason": "photographer signature watermark"
+    },
+    {
+      "id": "91165a76-c7be-46c6-941f-e588853e5752",
+      "reason": "photographer signature watermark"
+    },
+    {
+      "id": "fd956906-d31c-46df-bd53-4aa970f72e77",
+      "reason": "photographer signature watermark"
+    }
+  ]
+}

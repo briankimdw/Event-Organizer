@@ -5,7 +5,7 @@ import Explore from '../components/discover/Explore.jsx'
 import '../components/discover/discover.css'
 
 // Discover = get inspired. Two modes, switched in the header:
-//   For you  — the SigLIP-ranked swipe deck (one vertical at a time)
+//   For you  — the swipe deck: every vertical mixed, or one at a time (photo and vendor cards)
 //   Explore  — a masonry grid of real work across every vertical
 // The mode lives in the URL (?mode=explore) so Back returns to the same view.
 export default function Discover() {
@@ -15,6 +15,8 @@ export default function Discover() {
     if (next === mode) return
     const p = new URLSearchParams()
     if (next === 'explore') p.set('mode', 'explore')
+    // Keep what's being browsed (vertical, service, occasion) across the switch.
+    for (const k of ['v', 's', 'o']) if (params.get(k)) p.set(k, params.get(k))
     setParams(p, { replace: true })
     document.querySelector('.viewport')?.scrollTo({ top: 0 })
     // The other mode renders its own header: keep keyboard focus on the tab the user picked.
@@ -39,5 +41,5 @@ export default function Discover() {
     </>
   )
 
-  return mode === 'explore' ? <Explore tabs={tabs} /> : <SwipeDeck tabs={tabs} initialVertical={params.get('v') || undefined} />
+  return mode === 'explore' ? <Explore tabs={tabs} /> : <SwipeDeck tabs={tabs} />
 }

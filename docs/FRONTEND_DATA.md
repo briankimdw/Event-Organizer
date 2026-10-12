@@ -58,7 +58,7 @@ Prices: `priceLabel(pkg)` gives "$1,200", "$150/hr", "$65 / person", "$85 each" 
 
 **Album** (`toViewerAlbum(row)` on rows from `listAlbums(providerId)`): `{ id, providerId, title, caption, location, date, genre, type 'photo'|'beforeafter', cover, autoTags[], photos [{ id, src, beforeSrc?, exif, autoTags }] }`
 
-**Discover card** (`getFeed({ limit, category })`): `{ id/photoId, albumId, authorId, provider, title, category, photos [{id, src, exif}], tags[], reason, exploration, exif }`
+**Discover card** (`getDeck({ vertical: 'all'|slug, service, occasion, limit, exclude, seen })`, every vertical; the full API is listed at the top of `api/discover.js`): `{ kind: 'photo'|'vendor', id, photoId, albumId, authorId, providerId, provider, vertical, title, category, categorySlug, photos [{id, src, exif}], tags[], reason, exploration, score, exif }`. Photo cards (`getFeed({ limit, category, occasion })`, also `occasion {slug, name}`) come from `discover_feed`, then posts it can't rank yet. Vendor cards (`id` `'v:<providerId>'`, `photoId`/`albumId` null, `lines` = key attributes) are for vendors with no posts, ranked by `discover_vendors()` (migration `20261013000000_discover_all_verticals.sql`) or by `rankVendors()` in the browser until it's applied. Swiping one logs `swipes.provider_id` only. Picker data: `deckChoices(counts, listPostIndex())` (`api/home.js`).
 
 **Conversation** (`listConversations()`, `getConversation(id)`):
 `{ id, kind 'direct'|'group'|'booking'|'inquiry', isGroup, title, bookingId, booking, members [{id, profileId, name, avatar, username, isPhotographer, lastReadAt}], lastMessage {text, fromMe, at, senderId}, lastMessageAt, unread }`. `members` excludes me.

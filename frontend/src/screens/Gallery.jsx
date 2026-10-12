@@ -22,6 +22,27 @@ const shortExif = (e) => [e?.focal, e?.aperture, e?.shutter, e?.iso && `ISO ${e.
 const EXIF_FIELDS = ['body', 'lens', 'focal', 'aperture', 'shutter', 'iso', 'flash', 'date']
 const hasExif = (e) => !!e && EXIF_FIELDS.some((k) => e[k])
 const photoKey = (p) => p.id ?? p.seed
+const httpUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null)
+
+// Attribution for a photo that isn't the poster's own (photos.exif.credit: { by, license,
+// licenseUrl, url, source, demo }), e.g. the Creative Commons photos in the demo vendor posts.
+function PhotoCredit({ credit, label = '' }) {
+  if (!credit?.by) return null
+  const page = httpUrl(credit.url)
+  const license = httpUrl(credit.licenseUrl)
+  return (
+    <>
+      <h2 className="section-title h4">Photo credit{label}</h2>
+      <p className="small" style={{ overflowWrap: 'anywhere' }}>
+        {page ? <a href={page} target="_blank" rel="noopener noreferrer">{credit.by}</a> : credit.by}
+        {credit.license && <> · {license ? <a href={license} target="_blank" rel="noopener noreferrer">{credit.license}</a> : credit.license}</>}
+        {credit.source && ` · ${credit.source}`}
+        {credit.demo && <span className="muted"> · Demo photo, not this vendor’s own work</span>}
+      </p>
+    </>
+  )
+}
+
 const PAGE = 70 // px of drag needed to change album (vertical) or photo (horizontal)
 const EXIT = 90 // px of drag needed to close
 const HOLD_MS = 220 // press this long to hide the overlays
@@ -571,6 +592,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
             <ExifPanel exif={photo.exif} />
           </>
         )}
+        <PhotoCredit credit={photo.exif?.credit} label={album.photos.length > 1 ? ` · photo ${photoIndex + 1}` : ''} />
         {(album.genre || album.occasion || album.tags?.length > 0 || album.autoTags?.length > 0) && (
           <>
             <h2 className="section-title h4">Tags</h2>

@@ -20,6 +20,57 @@ These are throwaway logins for development. The repo is public, so anyone can se
 4. Paste `supabase/demo/demo_data.sql` into the SQL Editor and run it: packages, prices, locations, capacity, bookings and reviews for everyone.
 5. Then log in as anyone below with their email + password.
 6. Optional, SigLIP tags for the new photos: `cd services/ml` then `.venv/Scripts/python -m app.worker --once`.
+7. Optional, demo posts for the 34 vendors so Discover works in every vertical: see [Demo posts for vendors](#demo-posts-for-vendors).
+
+## Demo posts for vendors
+
+`frontend/scripts/seed-vendor-photos.mjs` gives the vendors (caterers, venues, DJs...) portfolio posts, so Discover's swipe deck and Explore grid have something to show in every vertical, not only photography.
+
+**What it adds:** 77 posts with 336 photos for 32 vendors (`frontend/scripts/vendor-photos.json`).
+- Every visual vendor gets 2 to 4 posts of 3 to 6 photos.
+- Each post has a realistic title ("Wedding buffet for 150", "Hand-painted garden wedding cake"), one of the vendor's services as its category, and usually an occasion tag.
+- A few posts credit other test vendors, for example a venue post tagging the florist and the caterer. Credits are skipped until the credits migration is applied.
+- Officiants, transportation, one staffing company and one wellness vendor get one post each. ParkRight Valet and Kneaded Bliss get none: no photo in the set suits them.
+- No photo is used twice.
+- No photo shows another business's watermark, logo or signature. Each photo was checked at full size. The ones that do (for example a balloon company's "DG Event" watermark, photographers' "©" signatures, radio-station logos) are listed under `excluded` in `vendor-photos.json`, and the script refuses to post them.
+
+**Where the photos come from (licensing):**
+- They are the hand-checked Creative Commons photos from `services/ml/eval/manifest.csv`: Flickr photos found through Openverse.
+  - 271 are CC BY 2.0.
+  - 61 have the Public Domain Mark.
+  - 4 are CC0.
+- They are **not the vendors' own work**. They are demo content for testing.
+- CC BY requires credit, so every photo keeps its own credit in `photos.exif.credit`: `{ by, license, licenseUrl, url, source: "Flickr", demo: true }`. No schema change was needed.
+- The post viewer's details sheet shows it as **Photo credit**: the creator links to the Flickr page and the license links to its deed. It's in `Gallery.jsx` on the web and `AlbumViewer.tsx` in the app.
+- Every caption starts with "Demo post: sample photos for testing the app, not this vendor's own work. Photos by ... (CC BY 2.0) ...".
+- The photos are uploaded unchanged. The script uses Flickr's 1024 px size (`_b`) and falls back to `_c`, then to the manifest's 320 px URL.
+- Before launch, delete these posts (`--remove`, below) along with the test users.
+
+**Run it** (after step 3 above, so the vendor listings exist):
+```
+cd frontend
+node scripts/seed-vendor-photos.mjs --dry-run           # print vendor -> posts -> photo credits; no key, no downloads
+node scripts/seed-vendor-photos.mjs --dry-run --check   # ...and check every photo URL answers (HEAD requests only)
+node scripts/seed-vendor-photos.mjs                     # create the posts (a few minutes: ~336 downloads + uploads)
+```
+- It uses the service role key from `services/ml/.env` (or `SUPABASE_SERVICE_ROLE_KEY`), just like `seed-test-users.mjs`, and never prints it.
+- It's safe to re-run: a post that already exists (same vendor and title) is skipped.
+- `--only=goldenspoon,djnova` limits it to some vendors.
+- Downloads go to a fresh temp folder, which is deleted at the end.
+
+**Embeddings and tags:** Discover only ranks photos that SigLIP has analysed.
+- At the end the script calls the ML service: `POST http://localhost:8000/process-pending` with the `X-ML-Secret` header. The secret is `ML_WEBHOOK_SECRET` from `services/ml/.env`. Set `ML_URL` to point the script at another address.
+- If the service isn't running, or the secret isn't set, the script prints the fallback instead: `cd services/ml` then `.venv/Scripts/python -m app.worker --once`.
+- `--no-ml` skips this step.
+
+**Remove them:**
+```
+cd frontend
+node scripts/seed-vendor-photos.mjs --remove
+```
+- This deletes the posts it created and their files in Storage. Their photos, embeddings, tags and credits go with them.
+- It only touches posts whose title is in the plan **and** whose caption starts with "Demo post", so a post someone wrote by hand is never deleted.
+- `supabase/demo/remove_demo_data.sql` leaves posts alone. Run `--remove` before deleting the vendor accounts: deleting a user removes their rows but leaves their files in Storage.
 
 ## Or: sign each one up by hand
 

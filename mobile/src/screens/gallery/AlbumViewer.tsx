@@ -7,6 +7,7 @@
 // "after" photo), owner edit/delete (ManagePost), collections picker (Save uses the default
 // collection), report/block sheet.
 import { LinearGradient } from 'expo-linear-gradient'
+import * as Linking from 'expo-linking'
 import { useRouter } from 'expo-router'
 import { Bookmark, Heart, Info, MapPin, Send, Sparkles, X, Camera, Aperture, CircleDot, Calendar, Gauge, Ruler, Timer, Zap } from 'lucide-react-native'
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -28,6 +29,11 @@ import { CreditChips } from '../provider/upload/Credits'
 type ViewerPhoto = { id: string; seed?: string; src: string; exif?: Record<string, any> | null }
 const photoKey = (p: ViewerPhoto) => p.id ?? p.seed
 const shortExif = (e?: Record<string, any> | null) => [e?.focal, e?.aperture, e?.shutter, e?.iso && `ISO ${e.iso}`].filter(Boolean).join('  ·  ')
+// Attribution for a photo that isn't the poster's own (photos.exif.credit: { by, license, licenseUrl,
+// url, source, demo }), e.g. the Creative Commons photos in the demo vendor posts.
+type PhotoCredit = { by: string; license?: string; licenseUrl?: string; url?: string; source?: string; demo?: boolean }
+const httpUrl = (u: unknown) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null)
+const photoCredit = (e?: Record<string, any> | null): PhotoCredit | null => (typeof e?.credit?.by === 'string' && e.credit.by ? e.credit : null)
 const EXIF_ROWS = [
   { key: 'body', label: 'Body', Icon: Camera },
   { key: 'lens', label: 'Lens', Icon: CircleDot },
@@ -140,6 +146,9 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
   const isSaved = saved.has(pid)
   const exif = shortExif(photo.exif)
   const exifRows = EXIF_ROWS.filter((r) => photo.exif?.[r.key])
+  const credit = photoCredit(photo.exif)
+  const creditPage = httpUrl(credit?.url)
+  const creditLicense = httpUrl(credit?.licenseUrl)
 
   return (
     <View style={s.root} onLayout={onLayout}>
@@ -272,6 +281,22 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
                 </View>
               ))}
             </View>
+          </>
+        )}
+        {!!credit && (
+          <>
+            <Text variant="h4" style={s.section}>Photo credit{album.photos.length > 1 ? ` · photo ${photoIndex + 1}` : ''}</Text>
+            <Text variant="small">
+              {creditPage
+                ? <Text variant="small" color="accentInk" accessibilityRole="link" onPress={() => Linking.openURL(creditPage)}>{credit.by}</Text>
+                : credit.by}
+              {!!credit.license && ' · '}
+              {!!credit.license && (creditLicense
+                ? <Text variant="small" color="accentInk" accessibilityRole="link" onPress={() => Linking.openURL(creditLicense)}>{credit.license}</Text>
+                : credit.license)}
+              {!!credit.source && ` · ${credit.source}`}
+            </Text>
+            {!!credit.demo && <Text variant="tiny" muted>Demo photo, not this vendor’s own work</Text>}
           </>
         )}
         {(!!album.genre || !!album.occasion || album.autoTags?.length > 0) && (
