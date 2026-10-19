@@ -263,7 +263,7 @@ export default function Profile() {
         )}
         {provider && isMine && (
           <div className="row gap-xs mt full">
-            <Link to="/upload" className="btn grow"><Plus size={16} /> Post photos</Link>
+            <Link to="/upload" className="btn grow"><Plus size={16} /> New post</Link>
             {provider.albumCount > 0 ? (
               <Link to="/my-work" className="btn ghost grow"><Images size={16} /> My work</Link>
             ) : (
@@ -331,7 +331,7 @@ export default function Profile() {
             <div className="pad">
               <EmptyState compact icon={Images} title="No albums yet"
                 text={isMine ? 'Post your first album and it will show up here.' : `${firstName} hasn’t posted any work yet.`}
-                action={isMine ? <Link to="/upload" className="btn sm">Post photos</Link> : null} />
+                action={isMine ? <Link to="/upload" className="btn sm">New post</Link> : null} />
             </div>
           )}
           {albums?.length > 0 && (

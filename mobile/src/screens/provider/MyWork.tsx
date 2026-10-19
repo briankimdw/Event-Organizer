@@ -1,8 +1,8 @@
 // /my-work: native port of frontend/src/screens/MyWork.jsx. Your own posts: a grid
-// to open, reorder (arrows) and manage them. /my-work?post=<album id> shows that
-// post with edit / delete (ManagePost). The web opens the full-screen AlbumViewer
-// from Gallery.jsx here; this is a simpler owner view of the same album.
-// TODO(port): reuse the Gallery album viewer once it's ported (mobile-browse).
+// to open, reorder (arrows) and manage them, with posts still uploading on top (the upload
+// queue; they resume here too). /my-work?post=<album id> shows that post's photos, editable
+// in place (upload/PostPhotos.tsx: re-edit, revert, replace, reorder, cover, remove; a before &
+// after shows its slider), plus details / delete (ManagePost).
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ArrowUpDown, ChevronLeft, ChevronRight, Copy, Ellipsis, ImagePlus, Plus } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
@@ -10,12 +10,15 @@ import { Pressable, View } from 'react-native'
 
 import { invalidate } from '@shared/api/catalog.js'
 import { getMyProvider, listMyAlbums, reorderAlbums, toViewerAlbum } from '@shared/api/portfolio.js'
-import { exifLine } from '@shared/lib/format.js'
 import { Button, Chip, ChipRow, EmptyState, ErrorState, IconButton, Loading, Photo, Screen, SignInPrompt, Text } from '@/components'
+import { BeforeAfterBadge } from '@/components/BeforeAfter'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
 import { makeStyles, useTheme } from '@/theme'
 import ManagePostSheets, { type ManageSheet, type ViewerAlbum } from './ManagePost'
+import { QueueBanner } from './upload/PostingStatus'
+import { PostPhotos } from './upload/PostPhotos'
+import { resumeJobs, useUploadJobs } from './upload/uploadQueue'
 
 const STATUS_LABEL: Record<string, string> = { processing: 'Processing', under_review: 'In review', hidden: 'Hidden' }
 
@@ -30,6 +33,12 @@ export default function MyWork() {
   const [error, setError] = useState<Error | null>(null)
   const [tick, setTick] = useState(0)
   const selectedId: string | null = myProvider?.id ?? null
+  // Posts still uploading: resume them, and reload the grid when one finishes.
+  const jobs = useUploadJobs(user?.id)
+  const doneCount = jobs.filter((j) => j.status === 'done').length
+  useEffect(() => {
+    if (user) resumeJobs(user.id)
+  }, [user])
 
   useEffect(() => {
     if (!user) return
@@ -45,7 +54,7 @@ export default function MyWork() {
       }
     })()
     return () => { live = false }
-  }, [user, tick, selectedId])
+  }, [user, tick, selectedId, doneCount])
 
   if (!loading && !user) return <Screen title="My work" back><SignInPrompt title="Sign in to see your work" /></Screen>
   if (error) return <Screen title="My work" back><ErrorState error={error} onRetry={() => setTick((t) => t + 1)} /></Screen>
@@ -56,6 +65,7 @@ export default function MyWork() {
     return (
       <PostView
         album={viewing}
+        userId={user!.id}
         vertical={data.provider?.vertical}
         onUpdated={(a) => setData((d) => d && { ...d, albums: d.albums.map((x) => (x.id === a.id ? a : x)) })}
         onDeleted={(id) => {
@@ -65,10 +75,10 @@ export default function MyWork() {
       />
     )
   }
-  return <WorkGrid data={data} setData={setData} />
+  return <WorkGrid data={data} setData={setData} jobs={jobs} />
 }
 
-function WorkGrid({ data, setData }: { data: Data; setData: React.Dispatch<React.SetStateAction<Data | null>> }) {
+function WorkGrid({ data, setData, jobs }: { data: Data; setData: React.Dispatch<React.SetStateAction<Data | null>>; jobs: ReturnType<typeof useUploadJobs> }) {
   const s = useStyles()
   const { c } = useTheme()
   const router = useRouter()
@@ -119,14 +129,17 @@ function WorkGrid({ data, setData }: { data: Data; setData: React.Dispatch<React
   const right = reordering ? (
     <Button title={saving ? 'Saving…' : 'Done'} variant="link" size="sm" onPress={saveOrder} disabled={saving} />
   ) : (
-    <IconButton icon={Plus} label="New post" onPress={() => router.push('/upload')} />
+    <Button title="New post" icon={Plus} variant="accent" size="sm" onPress={() => router.push('/upload')} />
   )
 
   return (
     <Screen title="My work" subtitle={albums.length ? `${albums.length} post${albums.length === 1 ? '' : 's'}` : undefined} back right={right}>
+      {jobs.some((j) => j.status !== 'done') && (
+        <View style={s.queue}><QueueBanner jobs={jobs} onOpen={() => router.push('/upload')} /></View>
+      )}
       {albums.length === 0 ? (
         <EmptyState icon={ImagePlus} title="Nothing posted yet" text="Post your first shoot. Albums, single photos and before / afters all show up here."
-          action={<Button title="Post photos" variant="accent" onPress={() => router.push('/upload')} />} />
+          action={<Button title="New post" icon={Plus} variant="accent" onPress={() => router.push('/upload')} />} />
       ) : (
         <>
           <View style={s.bar}>
@@ -143,7 +156,7 @@ function WorkGrid({ data, setData }: { data: Data; setData: React.Dispatch<React
                 <>
                   <Photo uri={a.cover} style={s.fill} />
                   {a.type === 'beforeafter' ? (
-                    <View style={s.count}><Text variant="caption" style={s.white}>B/A</Text></View>
+                    <BeforeAfterBadge compact style={s.baBadge} />
                   ) : a.photos.length > 1 ? (
                     <View style={s.count}><Copy size={11} color="#fff" /><Text variant="caption" style={s.white}>{a.photos.length}</Text></View>
                   ) : null}
@@ -186,12 +199,11 @@ function WorkGrid({ data, setData }: { data: Data; setData: React.Dispatch<React
   )
 }
 
-// One of my posts: its photos, details and the manage menu.
-function PostView({ album: a, vertical, onUpdated, onDeleted }: { album: ViewerAlbum; vertical?: string; onUpdated: (a: ViewerAlbum) => void; onDeleted: (id: string) => void }) {
+// One of my posts: its photos (editable in place), details and the manage menu.
+function PostView({ album: a, userId, vertical, onUpdated, onDeleted }: { album: ViewerAlbum; userId: string; vertical?: string; onUpdated: (a: ViewerAlbum) => void; onDeleted: (id: string) => void }) {
   const s = useStyles()
   const router = useRouter()
   const [sheet, setSheet] = useState<ManageSheet>(null)
-  const photos = a.photos as { id: string; src: string; beforeSrc?: string; exif?: Record<string, string> }[]
   return (
     <Screen title={a.title} subtitle={[a.genre, a.date].filter(Boolean).join(' · ') || undefined} back
       right={<IconButton icon={Ellipsis} label="Manage post" onPress={() => setSheet('menu')} />}>
@@ -201,27 +213,13 @@ function PostView({ album: a, vertical, onUpdated, onDeleted }: { album: ViewerA
           <Text variant="tiny" muted> · Not public yet. Tap for details.</Text>
         </Pressable>
       )}
-      {a.type === 'beforeafter' && photos[0] ? (
-        <View style={s.photos}>
-          <Text variant="label">Before</Text>
-          <Photo uri={photos[0].beforeSrc} style={s.photo} contentFit="contain" />
-          <Text variant="label">After</Text>
-          <Photo uri={photos[0].src} style={s.photo} contentFit="contain" />
-        </View>
-      ) : (
-        <View style={s.photos}>
-          {photos.map((p) => (
-            <View key={p.id}>
-              <Photo uri={p.src} style={s.photo} contentFit="contain" />
-              {!!exifLine(p.exif) && <Text variant="tiny" muted style={s.exif}>{exifLine(p.exif)}</Text>}
-            </View>
-          ))}
-        </View>
-      )}
+      <PostPhotos album={a} userId={userId} onUpdated={onUpdated} />
       <View style={s.meta}>
         {!!a.caption && <Text>{a.caption}</Text>}
         {!!a.location && <Text variant="small" muted>{a.location}</Text>}
         {a.autoTags?.length > 0 && <ChipRow>{a.autoTags.map((t: string) => <Chip key={t} label={t} />)}</ChipRow>}
+        <Button title="View as clients see it" variant="link" size="sm"
+          onPress={() => router.push({ pathname: '/gallery/[personId]', params: { personId: a.providerId, post: a.id } })} />
       </View>
       <ManagePostSheets album={a} vertical={vertical} sheet={sheet} setSheet={setSheet} onUpdated={onUpdated} onDeleted={onDeleted} />
     </Screen>
@@ -237,6 +235,8 @@ const useStyles = makeStyles((t) => ({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   tile: { width: '33.3333%', aspectRatio: 0.8, overflow: 'hidden', backgroundColor: t.c.soft, borderWidth: 1, borderColor: t.c.bg },
   tileReorder: { opacity: 0.95 },
+  baBadge: { position: 'absolute', top: 6, right: 6 },
+  queue: { paddingHorizontal: t.space.lg, paddingTop: t.space.sm },
   count: { position: 'absolute', top: 6, right: 6, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: t.c.overlay, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 },
   status: { position: 'absolute', top: 6, left: 6, backgroundColor: 'rgba(180,83,9,0.9)', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 },
   titleBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 6, backgroundColor: 'rgba(0,0,0,0.35)' },

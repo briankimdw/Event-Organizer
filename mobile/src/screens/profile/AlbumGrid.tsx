@@ -3,6 +3,7 @@ import { Copy } from 'lucide-react-native'
 import { Pressable, View, useWindowDimensions } from 'react-native'
 
 import type { toViewerAlbum } from '@shared/api/portfolio.js'
+import { BeforeAfterBadge } from '@/components/BeforeAfter'
 import { Photo, Text } from '@/components'
 import { makeStyles } from '@/theme'
 
@@ -18,9 +19,10 @@ export function AlbumGrid({ albums, onOpen }: { albums: Album[]; onOpen: (a: Alb
   return (
     <View style={s.grid}>
       {albums.map((a) => (
-        <Pressable key={a.id} onPress={() => onOpen(a)} style={({ pressed }) => [{ width: size, height: size }, pressed && s.pressed]} accessibilityRole="button" accessibilityLabel={a.title || 'Album'}>
+        <Pressable key={a.id} onPress={() => onOpen(a)} style={({ pressed }) => [{ width: size, height: size }, pressed && s.pressed]} accessibilityRole="button" accessibilityLabel={`${a.title || 'Album'}${a.type === 'beforeafter' ? ', before and after' : a.photos.length > 1 ? `, ${a.photos.length} photos` : ''}`}>
           <Photo uri={a.cover} style={{ width: size, height: size }} />
-          {a.photos.length > 1 && (
+          {a.type === 'beforeafter' && <BeforeAfterBadge compact style={s.ba} />}
+          {a.type !== 'beforeafter' && a.photos.length > 1 && (
             <View style={s.count}>
               <Copy size={11} color="#fff" />
               <Text style={s.overlayText}>{a.photos.length}</Text>
@@ -40,6 +42,7 @@ export function AlbumGrid({ albums, onOpen }: { albums: Album[]; onOpen: (a: Alb
 const useStyles = makeStyles((t) => ({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   pressed: { opacity: 0.8 },
+  ba: { position: 'absolute', top: 6, right: 6 },
   count: { position: 'absolute', top: 6, right: 6, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, backgroundColor: t.c.overlay },
   status: { position: 'absolute', left: 6, bottom: 6, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, backgroundColor: t.c.overlay },
   overlayText: { color: '#fff', fontSize: 11, fontWeight: '600' },

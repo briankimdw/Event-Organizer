@@ -1,22 +1,29 @@
-// The photos being prepared for a post: native port of the web's
-// components/upload/usePhotoItems.js. Photos come from expo-image-picker (assets
-// with uri / fileName / mimeType / fileSize / width / height / exif).
+// The photos being prepared for a post (native port of the web's components/upload/usePhotoItems.js,
+// grown for the native flow). Photos come from expo-image-picker (library or camera): assets with
+// uri / assetId / fileName / mimeType / fileSize / width / height / exif.
 //
 // item: { id, asset, name, size, status: 'loading' | 'ready', thumbUrl, width, height,
-//         lowRes, settings (camera settings from EXIF), processed: { width, height, size } | null }
+//         lowRes, huge, dupOf (id of the photo it looks like), settings (camera settings from EXIF),
+//         edit: { uri, width, height, recipe } | null (from the editor),
+//         sameOriginalAs (a before & after's "after" made from the "before" photo + its edit),
+//         processed: { width, height, size } | null (what clients will see) }
 //
-// Each added photo is checked (quickCheck), gets a small preview and its EXIF read
-// (never GPS). Then, one at a time in the background, prepareUpload(asset) builds
-// what the shared postAlbum() needs (the original as a Blob + the resized public
-// copy), so "Post" is fast and the picker can say what clients will see.
+// Each added photo is checked (quickCheck), HEIC is converted to JPEG (toCompatible), it gets a
+// small preview and its EXIF read (never GPS). Then, one at a time in the background, the public
+// copy is made (makeDisplayFile), so "Post" is quick. forQueue() hands everything to the upload queue.
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { LOW_RES_EDGE, MAX_PHOTOS, makePreview, prepareUpload, quickCheck, readCameraSettings, type PickedPhoto } from '@/shims/images'
+import {
+  LOW_RES_EDGE, MAX_PHOTOS, fileExtension, formatBytes, isHeic, makeDisplayFile, makePreview, quickCheck, readCameraSettings, toCompatible, type PickedPhoto,
+} from '@/shims/images'
+import type { NewPhoto } from './uploadQueue'
 
-export type Prepared = Awaited<ReturnType<typeof prepareUpload>>
+export type PickedAsset = PickedPhoto & { assetId?: string | null }
+export type PhotoEdit = { uri: string; width: number; height: number; recipe: unknown }
+type DisplayFile = { uri: string; width: number; height: number; size: number; from: string }
 export type PhotoItem = {
   id: string
-  asset: PickedPhoto
+  asset: PickedAsset
   name: string
   size: number
   status: 'loading' | 'ready'
@@ -24,21 +31,51 @@ export type PhotoItem = {
   width: number
   height: number
   lowRes: boolean
+  huge: boolean
+  dupOf: string | null
   settings: Record<string, string>
+  edit: PhotoEdit | null
+  sameOriginalAs?: string | null
   processed: { width: number; height: number; size: number } | null
 }
 export type Rejected = { id: string; name: string; reason: string }
 
+const HUGE_BYTES = 25 * 1024 * 1024
+const HUGE_PIXELS = 48e6
+
 let seq = 0
 const newId = () => `p${Date.now().toString(36)}${(++seq).toString(36)}`
 const nameOf = (a: PickedPhoto) => a.fileName || a.name || a.uri.split('/').pop() || 'photo.jpg'
+const sizeOf = (a: PickedPhoto) => a.fileSize ?? a.size ?? 0
 
 // EXIF "2024:05:01 14:03:22" -> "2024-05-01" (the web reads this as settings.taken_on).
-function takenOn(exif: Record<string, any> | null | undefined) {
+function takenAt(exif: Record<string, any> | null | undefined) {
   const e = exif || {}
-  const raw = e.DateTimeOriginal ?? e['{Exif}']?.DateTimeOriginal ?? e.DateTime ?? e['{TIFF}']?.DateTime
+  return e.DateTimeOriginal ?? e['{Exif}']?.DateTimeOriginal ?? e.DateTime ?? e['{TIFF}']?.DateTime ?? null
+}
+function takenOn(exif: Record<string, any> | null | undefined) {
+  const raw = takenAt(exif)
   const m = typeof raw === 'string' && raw.match(/^(\d{4})[:-](\d{2})[:-](\d{2})/)
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null
+}
+
+// Is `a` the same photo as `b`? Same library asset, or same name and size, or same pixel size
+// and the same capture time to the second.
+function sameShot(a: PickedAsset, b: PickedAsset) {
+  if (a.assetId && b.assetId) return a.assetId === b.assetId
+  if (sizeOf(a) && sizeOf(a) === sizeOf(b) && nameOf(a) === nameOf(b)) return true
+  const ta = takenAt(a.exif)
+  return !!ta && ta === takenAt(b.exif) && !!a.width && a.width === b.width && a.height === b.height
+}
+
+/** Short hints for a photo, worst first ("Looks like photo 2", "Low resolution", "Large file"). */
+export function hintsOf(item: PhotoItem, items: PhotoItem[]) {
+  const out: { key: 'dup' | 'low' | 'huge'; text: string }[] = []
+  const dupIdx = item.dupOf ? items.findIndex((x) => x.id === item.dupOf) : -1
+  if (dupIdx >= 0) out.push({ key: 'dup', text: `Looks like photo ${dupIdx + 1}` })
+  if (item.lowRes) out.push({ key: 'low', text: 'Low resolution · may look soft' })
+  if (item.huge) out.push({ key: 'huge', text: `Large file${item.size ? ` (${formatBytes(item.size)})` : ''} · slower on cellular` })
+  return out
 }
 
 export default function usePhotoItems() {
@@ -48,7 +85,7 @@ export default function usePhotoItems() {
   const itemsRef = useRef(items)
   itemsRef.current = items
 
-  const prepared = useRef(new Map<string, Promise<Prepared | null>>())
+  const displays = useRef(new Map<string, Promise<DisplayFile>>()) // `${id}|${source uri}` -> public copy
   const previewChain = useRef<Promise<unknown>>(Promise.resolve())
   const prepareChain = useRef<Promise<unknown>>(Promise.resolve())
   const alive = useRef(true)
@@ -61,25 +98,33 @@ export default function usePhotoItems() {
   }, [])
 
   const exists = (id: string) => itemsRef.current.some((i) => i.id === id)
-  const patch = (id: string, fields: Partial<PhotoItem>) => alive.current && setItems((list) => list.map((i) => (i.id === id ? { ...i, ...fields } : i)))
+  const commit = (next: PhotoItem[]) => {
+    itemsRef.current = next
+    setItems(next)
+  }
+  const patch = (id: string, fields: Partial<PhotoItem>) => {
+    if (!alive.current) return
+    commit(itemsRef.current.map((i) => (i.id === id ? { ...i, ...fields } : i)))
+  }
 
-  // What postAlbum needs for an item (starts making it if needed). Resolves null if the item was removed.
-  const prepare = useCallback((item: PhotoItem) => {
-    if (!prepared.current.has(item.id)) {
+  // The public copy of an item as it is now (its edit, or the photo itself). Starts it if needed.
+  const display = useCallback((item: PhotoItem): Promise<DisplayFile> => {
+    const src = item.edit ? { uri: item.edit.uri, width: item.edit.width, height: item.edit.height } : { uri: item.asset.uri, width: item.asset.width, height: item.asset.height }
+    const k = `${item.id}|${src.uri}`
+    if (!displays.current.has(k)) {
       const p = (prepareChain.current = prepareChain.current
         .catch(() => {})
         .then(async () => {
-          if (!exists(item.id)) return null
-          const ready = await prepareUpload(item.asset)
-          if (alive.current && exists(item.id)) {
-            patch(item.id, { processed: { width: ready.display.width, height: ready.display.height, size: ready.display.blob.size } })
-          }
-          return ready
-        })) as Promise<Prepared | null>
-      p.catch(() => {})
-      prepared.current.set(item.id, p)
+          const out = await makeDisplayFile(src)
+          const cur = itemsRef.current.find((i) => i.id === item.id)
+          const curSrc = cur?.edit?.uri ?? cur?.asset.uri
+          if (alive.current && cur && curSrc === src.uri) patch(item.id, { processed: { width: out.width, height: out.height, size: out.size } })
+          return { ...out, from: src.uri }
+        })) as Promise<DisplayFile>
+      p.catch(() => displays.current.delete(k))
+      displays.current.set(k, p)
     }
-    return prepared.current.get(item.id)!
+    return displays.current.get(k)!
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = (item: PhotoItem) => {
@@ -88,27 +133,42 @@ export default function usePhotoItems() {
       .then(async () => {
         if (!exists(item.id)) return
         try {
-          const [preview, settings] = await Promise.all([makePreview(item.asset), readCameraSettings(item.asset)])
+          const asset = await toCompatible(item.asset) // HEIC -> JPEG
+          const [preview, settings] = await Promise.all([makePreview(asset), readCameraSettings(asset)])
           if (!alive.current || !exists(item.id)) return
           const date = takenOn(item.asset.exif)
           const all = date ? { ...settings, taken_on: date } : settings
-          const lowRes = Math.max(preview.width, preview.height) < LOW_RES_EDGE
-          patch(item.id, { status: 'ready', thumbUrl: preview.thumbUrl, width: preview.width, height: preview.height, settings: all, lowRes })
-          prepare(item)
+          const w = preview.width || asset.width || 0
+          const h = preview.height || asset.height || 0
+          const size = sizeOf(asset) || item.size
+          const fields: Partial<PhotoItem> = {
+            asset: { ...asset, assetId: item.asset.assetId, exif: item.asset.exif }, name: nameOf(asset), size,
+            status: 'ready', thumbUrl: preview.thumbUrl, width: w, height: h, settings: all,
+            lowRes: Math.max(w, h) > 0 && Math.max(w, h) < LOW_RES_EDGE,
+            huge: size > HUGE_BYTES || w * h > HUGE_PIXELS,
+          }
+          patch(item.id, fields)
+          const now = itemsRef.current.find((i) => i.id === item.id)
+          if (now) display(now)
         } catch (err: any) {
           if (!alive.current) return
-          setItems((list) => list.filter((i) => i.id !== item.id))
-          setRejected((r) => [...r, { id: item.id, name: item.name, reason: err?.message || 'This photo couldn’t be read.' }])
+          commit(itemsRef.current.filter((i) => i.id !== item.id))
+          setRejected((r) => [...r, { id: item.id, name: item.name, reason: isHeic(item.asset) ? 'This HEIC photo couldn’t be converted. Try exporting it as a JPEG.' : err?.message || 'This photo couldn’t be read.' }])
         }
       })
   }
 
+  const fresh = (asset: PickedAsset): PhotoItem => ({
+    id: newId(), asset, name: nameOf(asset), size: sizeOf(asset), status: 'loading',
+    thumbUrl: null, width: asset.width ?? 0, height: asset.height ?? 0, lowRes: false, huge: false, dupOf: null, settings: {}, edit: null, processed: null,
+  })
+
   // Add picked photos. max: how many the post can hold. at: replace the item at this
   // index (before/after slots) instead of appending.
-  const add = (assets: PickedPhoto[], { max = MAX_PHOTOS, at }: { max?: number; at?: number | null } = {}) => {
+  const add = (assets: PickedAsset[], { max = MAX_PHOTOS, at }: { max?: number; at?: number | null } = {}) => {
     if (!assets.length) return
     const bad: Rejected[] = []
-    const good: PickedPhoto[] = []
+    const good: PickedAsset[] = []
     for (const a of assets) {
       const reason = quickCheck(a)
       if (reason) bad.push({ id: newId(), name: nameOf(a), reason })
@@ -127,30 +187,21 @@ export default function usePhotoItems() {
         : '',
     )
     setRejected((r) => [...r.filter((x) => !bad.some((b) => b.name === x.name)), ...bad])
-    const fresh: PhotoItem[] = taken.map((asset) => ({
-      id: newId(), asset, name: nameOf(asset), size: asset.fileSize ?? asset.size ?? 0, status: 'loading',
-      thumbUrl: null, width: asset.width ?? 0, height: asset.height ?? 0, lowRes: false, settings: {}, processed: null,
-    }))
-    if (!fresh.length) return
-    let next: PhotoItem[]
-    if (replacing) {
-      prepared.current.delete(current[at!].id)
-      next = current.map((it, i) => (i === at ? fresh[0] : it))
-    } else {
-      next = [...current, ...fresh]
+    const added: PhotoItem[] = []
+    for (const asset of taken) {
+      const it = fresh(asset)
+      const twin = [...current, ...added].find((x) => sameShot(x.asset, asset))
+      it.dupOf = twin?.id ?? null
+      added.push(it)
     }
+    if (!added.length) return
+    const next = replacing ? current.map((it, i) => (i === at ? added[0] : it)) : [...current, ...added]
     commit(next)
-    fresh.forEach(load)
-  }
-
-  const commit = (next: PhotoItem[]) => {
-    itemsRef.current = next
-    setItems(next)
+    added.forEach(load)
   }
 
   const remove = (id: string) => {
-    prepared.current.delete(id)
-    commit(itemsRef.current.filter((i) => i.id !== id))
+    commit(itemsRef.current.filter((i) => i.id !== id).map((i) => (i.dupOf === id ? { ...i, dupOf: null } : i.sameOriginalAs === id ? { ...i, sameOriginalAs: null } : i)))
     setNotice('')
   }
 
@@ -163,30 +214,66 @@ export default function usePhotoItems() {
     commit(list)
   }
 
+  // A new order by ids (drag to reorder).
+  const reorder = (ids: string[]) => {
+    const byId = new Map(itemsRef.current.map((i) => [i.id, i]))
+    const next = ids.map((id) => byId.get(id)).filter(Boolean) as PhotoItem[]
+    if (next.length === itemsRef.current.length) commit(next)
+  }
+
   const swapFirstTwo = () => {
     const list = itemsRef.current
     if (list.length >= 2) commit([list[1], list[0], ...list.slice(2)])
   }
 
+  const setEdit = (id: string, edit: PhotoEdit | null) => {
+    const it = itemsRef.current.find((i) => i.id === id)
+    if (!it) return
+    patch(id, { edit, processed: null })
+    display({ ...it, edit })
+  }
+
+  // A before & after from one photo and its edit: the untouched photo is "before", the edit "after"
+  // (both use the same uploaded original).
+  const setPairFrom = (item: PhotoItem, edit: PhotoEdit) => {
+    const before: PhotoItem = { ...item, id: newId(), edit: null, dupOf: null, sameOriginalAs: null }
+    const after: PhotoItem = { ...item, id: newId(), edit, dupOf: null, sameOriginalAs: before.id, processed: null }
+    commit([before, after])
+    setNotice('')
+    display(before)
+    display(after)
+  }
+
   const reset = () => {
-    prepared.current.clear()
+    displays.current.clear()
     commit([])
     setRejected([])
     setNotice('')
   }
 
-  // Everything postAlbum needs for these items ({ file, display, settings }), using the prepared copies.
-  const forUpload = async (list: PhotoItem[]) =>
-    Promise.all(
-      list.map(async (it) => {
-        const ready = (await prepare(it).catch(() => null)) || (await prepareUpload(it.asset))
-        return { ...ready, settings: it.settings }
-      }),
-    )
+  // Everything the upload queue needs for these items (the public copies are made if not ready).
+  const forQueue = async (list: PhotoItem[], kind: 'album' | 'before_after'): Promise<NewPhoto[]> => {
+    const out: NewPhoto[] = []
+    for (const [i, it] of list.entries()) {
+      const d = await display(it)
+      out.push({
+        key: it.id,
+        name: it.name,
+        thumb: it.edit?.uri ?? it.thumbUrl,
+        original: { uri: it.asset.uri, type: it.asset.mimeType || it.asset.type || 'image/jpeg', ext: fileExtension(it.asset), size: it.size },
+        sameOriginalAs: it.sameOriginalAs && list.some((x) => x.id === it.sameOriginalAs) ? it.sameOriginalAs : null,
+        display: { uri: d.uri, width: d.width, height: d.height, size: d.size },
+        exif: it.settings,
+        recipe: it.edit?.recipe ?? null,
+        pairRole: kind === 'before_after' ? (i === 0 ? 'before' : 'after') : null,
+      })
+    }
+    return out
+  }
 
   return {
     items, rejected, notice,
-    add, remove, move, swapFirstTwo, reset, forUpload,
+    add, remove, move, reorder, swapFirstTwo, setEdit, setPairFrom, reset, forQueue,
     dismissRejected: (id: string) => setRejected((r) => r.filter((x) => x.id !== id)),
     clearNotice: () => setNotice(''),
   }

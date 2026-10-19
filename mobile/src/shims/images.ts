@@ -9,6 +9,9 @@
 // through prepareUpload(asset) first: it returns { file, display, settings } where
 // file/display.blob are Blobs that the shared XHR upload code can send.
 //
+// Native extras (not in the web file): isHeic / toCompatible (HEIC -> JPEG before upload),
+// makeDisplayFile (the public copy as a file, for the persisted upload queue), blobOfUri.
+//
 // STATUS: written for the Upload screen port; not exercised yet. Verify on a device.
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 
@@ -103,6 +106,52 @@ export async function readCameraSettings(file: PickedPhoto) {
     iso: iso ? String(iso) : null,
   }
   return Object.fromEntries(Object.entries(settings).filter(([, v]) => v)) as Record<string, string>
+}
+
+// ---- native-only helpers (the Upload queue, the editor hand-off) ----
+
+export const isHeic = (f: PickedPhoto) => /image\/hei[cf]/i.test(typeOf(f)) || /\.hei[cf]$/i.test(nameOf(f))
+
+// HEIC / HEIF (the iPhone camera default) -> a full-size JPEG, so the original can be opened
+// anywhere (web, Android). EXIF stays on the asset object (read from the picker), the file
+// itself loses it, which also drops GPS. Other formats come back unchanged.
+export async function toCompatible(asset: PickedPhoto): Promise<PickedPhoto> {
+  if (!isHeic(asset)) return asset
+  const image = await ImageManipulator.manipulate(asset.uri).renderAsync()
+  const out = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.92 })
+  const base = nameOf(asset).replace(/\.[a-z0-9]+$/i, '')
+  let size = 0
+  try {
+    size = (await blobOf(out.uri)).size
+  } catch { /* size is only used for hints and progress */ }
+  return { ...asset, uri: out.uri, fileName: `${base}.jpg`, name: `${base}.jpg`, mimeType: 'image/jpeg', type: 'image/jpeg', fileSize: size || asset.fileSize, width: out.width, height: out.height }
+}
+
+// The public copy as a file (not a Blob): upright, at most MAX_EDGE px, JPEG, no metadata.
+// `uri` can be the original or an edited render from the editor.
+export async function makeDisplayFile(src: { uri: string; width?: number; height?: number }) {
+  const out = await resizeToJpeg(src as PickedPhoto, MAX_EDGE, QUALITY)
+  let size = 0
+  try {
+    size = (await blobOf(out.uri)).size
+  } catch { /* only for progress weighting */ }
+  return { uri: out.uri, width: out.width, height: out.height, size }
+}
+
+export const blobOfUri = blobOf
+
+// A local file as a Blob that looks like a browser File to the shared upload code
+// (.name for the extension, .type for the content type).
+export async function fileBlob(uri: string, name: string, type: string) {
+  const b: any = await blobOf(uri)
+  const named = (k: string, v: string) => {
+    try {
+      Object.defineProperty(b, k, { value: v, configurable: true, enumerable: true })
+    } catch { /* already right */ }
+  }
+  named('name', name)
+  if (!b.type && type) named('type', type)
+  return b as Blob & { name: string }
 }
 
 // Everything postAlbum() needs for one picked photo: { file, display, settings }.

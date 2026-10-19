@@ -74,7 +74,7 @@ export default function Me() {
       <View style={s.header}>
         <Text variant="h1">Profile</Text>
         <View style={s.inline}>
-          {user && <IconButton icon={SquarePlus} label="Post photos" onPress={() => router.push('/upload')} />}
+          {user && <IconButton icon={SquarePlus} label="New post" onPress={() => router.push('/upload')} />}
           <IconButton icon={Settings} label="Settings" onPress={() => router.push('/settings')} />
         </View>
       </View>

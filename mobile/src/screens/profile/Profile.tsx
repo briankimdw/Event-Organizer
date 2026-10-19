@@ -236,7 +236,7 @@ export default function Profile() {
         )}
         {provider && isMine && (
           <View style={[s.row, s.actions]}>
-            <Button title="Post photos" icon={Plus} grow onPress={() => router.push('/upload')} />
+            <Button title="New post" icon={Plus} grow onPress={() => router.push('/upload')} />
             {provider.albumCount > 0
               ? <Button title="My work" icon={Images} variant="ghost" grow onPress={() => router.push('/my-work')} />
               : <Button title="Packages" icon={PackageIcon} variant="ghost" grow onPress={() => router.push('/me')} />}
@@ -294,7 +294,7 @@ export default function Profile() {
             <View style={s.pad}>
               <EmptyState compact icon={Images} title="No albums yet"
                 text={isMine ? 'Post your first album and it will show up here.' : `${firstName} hasn’t posted any work yet.`}
-                action={isMine ? <Button title="Post photos" size="sm" onPress={() => router.push('/upload')} /> : undefined} />
+                action={isMine ? <Button title="New post" size="sm" onPress={() => router.push('/upload')} /> : undefined} />
             </View>
           )}
           {!!albums.data?.length && (

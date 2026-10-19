@@ -1,12 +1,16 @@
 // A card for something shared in chat (message.shared from @shared/api/messages.js):
 // a post or a photographer; tapping opens it. Native twin of the web's
 // components/share/ShareCard.jsx. Events are archived (photography pivot): an old
-// shared event shows as a small generic stub that opens nothing.
+// shared event shows as a small generic stub that opens nothing. A shared before & after shows
+// the after photo with the "Before / After" badge; press and hold to wipe the before in.
 import { router } from 'expo-router'
 import { CalendarDays, ChevronRight, ImageOff, Star } from 'lucide-react-native'
+import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 
 import { Avatar, Photo, Text } from '@/components'
+import { BA_THUMB_PRESS_MS, BeforeAfterThumb } from '@/components/BeforeAfter'
+import { useBeforePhotos } from '@/lib/beforeAfter'
 import { makeStyles, useTheme } from '@/theme'
 
 export type SharedThing = {
@@ -25,6 +29,7 @@ export type SharedThing = {
   rating?: number | null
   reviewCount?: number
   fromPrice?: string | null
+  beforeAfter?: boolean
 }
 
 const open = (s: SharedThing) => {
@@ -59,20 +64,7 @@ export function ShareCard({ shared }: { shared: SharedThing | null | undefined }
     )
   }
 
-  if (shared.kind === 'post') {
-    return (
-      <Pressable onPress={() => open(shared)} style={({ pressed }) => [s.card, pressed && s.pressed]} accessibilityRole="button" accessibilityLabel={`Post${shared.title ? `: ${shared.title}` : ''}${shared.vendorName ? ` by ${shared.vendorName}` : ''}`}>
-        {!!shared.vendorName && <Text variant="small" weight="600" numberOfLines={1} style={s.head}>{shared.vendorName}</Text>}
-        {shared.cover ? <Photo uri={shared.cover} style={s.photo} /> : <View style={[s.photo, s.ph]}><ImageOff size={22} color={c.muted} /></View>}
-        {(!!shared.title || !!shared.caption) && (
-          <View style={s.body}>
-            {!!shared.title && <Text variant="small" weight="600" numberOfLines={1}>{shared.title}</Text>}
-            {!!shared.caption && <Text variant="tiny" muted numberOfLines={2}>{shared.caption}</Text>}
-          </View>
-        )}
-      </Pressable>
-    )
-  }
+  if (shared.kind === 'post') return <PostCard shared={shared} />
 
   if (shared.kind === 'provider') {
     const meta = [shared.noun && shared.noun.replace(/^\w/, (x) => x.toUpperCase()), shared.city?.split(',')[0]].filter(Boolean).join(' · ')
@@ -110,6 +102,35 @@ export function ShareCard({ shared }: { shared: SharedThing | null | undefined }
 }
 
 export default ShareCard
+
+function PostCard({ shared }: { shared: SharedThing }) {
+  const s = useStyles()
+  const { c } = useTheme()
+  const before = useBeforePhotos(shared.beforeAfter && shared.id ? [shared.id] : []).get(shared.id || '')
+  const [peek, setPeek] = useState(false)
+  const ba = !!before && !!shared.cover
+  return (
+    <Pressable
+      onPress={() => open(shared)}
+      onLongPress={ba ? () => setPeek(true) : undefined}
+      onPressOut={ba ? () => setPeek(false) : undefined}
+      delayLongPress={BA_THUMB_PRESS_MS}
+      style={({ pressed }) => [s.card, pressed && !peek && s.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${shared.beforeAfter ? 'Before and after post' : 'Post'}${shared.title ? `: ${shared.title}` : ''}${shared.vendorName ? ` by ${shared.vendorName}` : ''}`}
+    >
+      {!!shared.vendorName && <Text variant="small" weight="600" numberOfLines={1} style={s.head}>{shared.vendorName}</Text>}
+      {ba ? <BeforeAfterThumb before={before} after={shared.cover} peek={peek} style={s.photo} />
+        : shared.cover ? <Photo uri={shared.cover} style={s.photo} /> : <View style={[s.photo, s.ph]}><ImageOff size={22} color={c.muted} /></View>}
+      {(!!shared.title || !!shared.caption) && (
+        <View style={s.body}>
+          {!!shared.title && <Text variant="small" weight="600" numberOfLines={1}>{shared.title}</Text>}
+          {!!shared.caption && <Text variant="tiny" muted numberOfLines={2}>{shared.caption}</Text>}
+        </View>
+      )}
+    </Pressable>
+  )
+}
 
 const useStyles = makeStyles((t) => ({
   card: { width: 228, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: t.c.line, backgroundColor: t.c.card },

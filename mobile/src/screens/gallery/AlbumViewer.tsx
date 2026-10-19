@@ -3,9 +3,10 @@
 // left/right through an album's photos (horizontal paging). Pinch to zoom in on a photo
 // (it springs back when you let go, Instagram-style); press and hold to hide the overlays.
 // Close with the X, Back, or by pulling down past the first album (iOS bounce).
-// TODO(port): persistent zoom + pan and double-tap zoom, before/after slider (shows the
-// "after" photo), owner edit/delete (ManagePost), collections picker (Save uses the default
-// collection), report/block sheet.
+// Before & after posts show the full-screen comparison slider (components/BeforeAfter.tsx):
+// it only claims horizontal drags, so swiping up / down still pages between posts.
+// TODO(port): persistent zoom + pan and double-tap zoom, owner edit/delete (ManagePost),
+// collections picker (Save uses the default collection), report/block sheet.
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Linking from 'expo-linking'
 import { useRouter } from 'expo-router'
@@ -19,13 +20,14 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Avatar, Button, Chip, ChipRow, IdVerified, InA11yGroup, Photo, ProBadge, Sheet, Text } from '@/components'
+import { BeforeAfter } from '@/components/BeforeAfter'
 import { ShareSheet } from '@/components/share/ShareSheet'
 import { announce, useReduceMotion } from '@/lib/a11y'
 import { useStore } from '@/state/store'
 import { makeStyles } from '@/theme'
 import type { Album } from '../profile/AlbumGrid'
 
-type ViewerPhoto = { id: string; seed?: string; src: string; exif?: Record<string, any> | null }
+type ViewerPhoto = { id: string; seed?: string; src: string; beforeSrc?: string | null; exif?: Record<string, any> | null }
 const photoKey = (p: ViewerPhoto) => p.id ?? p.seed
 const shortExif = (e?: Record<string, any> | null) => [e?.focal, e?.aperture, e?.shutter, e?.iso && `ISO ${e.iso}`].filter(Boolean).join('  ·  ')
 // Attribution for a photo that isn't the poster's own (photos.exif.credit: { by, license, licenseUrl,
@@ -124,9 +126,11 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
         onHold={setHolding}
         onPost={(d) => goPostRef.current(d)}
         reduceMotion={reduceMotion}
+        insets={{ top: insets.top + 52, bottom: insets.bottom + 150 }}
+        demo={a.id === albums[startIndex]?.id}
       />
     ),
-    [size.w, size.h, reduceMotion], // eslint-disable-line react-hooks/exhaustive-deps
+    [size.w, size.h, reduceMotion, insets.top, insets.bottom], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   // The pages are sized from the window until the viewer measures itself. If the real
@@ -241,7 +245,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
             )}
           </LinearGradient>
 
-          {!hintSeen && (
+          {!hintSeen && album.type !== 'beforeafter' && (
             <View style={s.hint} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
               <Text variant="tiny" weight="600" center style={s.white}>
                 {album.photos.length > 1 ? 'Swipe ← for more of this shoot · ' : ''}↑ next album{'\n'}Pinch to zoom · hold to see just the photo
@@ -317,9 +321,9 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
 }
 
 // One album: its photos side by side (horizontal paging).
-function AlbumPage({ album, width, height, start, onPhoto, onHold, onPost, reduceMotion }: {
+function AlbumPage({ album, width, height, start, onPhoto, onHold, onPost, reduceMotion, insets, demo }: {
   album: Album; width: number; height: number; start: number; onPhoto: (j: number) => void; onHold: (on: boolean) => void
-  onPost: (delta: number) => void; reduceMotion: boolean
+  onPost: (delta: number) => void; reduceMotion: boolean; insets: { top: number; bottom: number }; demo?: boolean
 }) {
   const s = useStyles()
   const listRef = useRef<FlatList<ViewerPhoto>>(null)
@@ -367,6 +371,7 @@ function AlbumPage({ album, width, height, start, onPhoto, onHold, onPost, reduc
         data={album.photos as ViewerPhoto[]}
         keyExtractor={(p) => photoKey(p)!}
         horizontal
+        scrollEnabled={album.photos.length > 1} // a before & after page is one slider: its drags are the slider's
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         initialScrollIndex={Math.min(start, album.photos.length - 1)}
@@ -375,7 +380,14 @@ function AlbumPage({ album, width, height, start, onPhoto, onHold, onPost, reduc
         onScrollEndDrag={onScroll}
         windowSize={3}
         initialNumToRender={1}
-        renderItem={({ item, index: i }) => <ZoomablePhoto uri={item.src} width={width} height={height} onHold={onHold} a11y={a11y(i)} />}
+        renderItem={({ item, index: i }) => (item.beforeSrc ? (
+          // Before & after: the slider fills the page (contain, so nothing is cropped). Its own
+          // screen-reader element is the adjustable slider; next / previous post stay on the page.
+          <View style={{ width, height }} accessibilityActions={a11y(i).accessibilityActions} onAccessibilityAction={a11y(i).onAccessibilityAction}>
+            <BeforeAfter before={item.beforeSrc} after={item.src} contentFit="contain" accessibilityLabel={album.title || 'Photo'}
+              demo={demo} hint insets={insets} style={{ backgroundColor: 'transparent' }} />
+          </View>
+        ) : <ZoomablePhoto uri={item.src} width={width} height={height} onHold={onHold} a11y={a11y(i)} />)}
         style={s.flex}
       />
     </View>

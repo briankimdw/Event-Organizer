@@ -71,7 +71,7 @@ export default function Home() {
           <div className="hd-greet">{firstName ? `${greeting()}, ${firstName}` : greeting()}</div>
           <h1 className="hd-title">Find your photographer</h1>
         </div>
-        <Link to="/upload" className="post-btn" aria-label="Post your work">
+        <Link to="/upload" className="post-btn" aria-label="New post">
           <Plus size={18} aria-hidden="true" /> Post
         </Link>
       </header>

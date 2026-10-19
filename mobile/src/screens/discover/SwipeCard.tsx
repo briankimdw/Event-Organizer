@@ -5,9 +5,13 @@
 // Vendor cards (verticals without posts) have the same gestures and a different face
 // (VendorFace.tsx): their covers on top (edges flip them), the name below opens the profile.
 // Remount it per card (key={card.id}) so every card starts from the center.
+// Before & after cards (card.beforeAfter, photos[0].beforeSrc): press and hold anywhere to wipe the
+// before photo in (let go to come back), or tap the "Before / After" pill to toggle it. The hold is a
+// third gesture in the race: it only wins when the finger stays still for 250ms, so a drag is
+// still a swipe and a quick tap still opens the details. Screen readers get a "Show before" action.
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import { ChevronLeft, ChevronRight, Compass, Sparkles, Star, ThumbsDown } from 'lucide-react-native'
+import { ChevronLeft, ChevronRight, Compass, Eye, Sparkles, Star, ThumbsDown } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -16,6 +20,7 @@ import Animated, { interpolate, runOnJS, useAnimatedStyle, useReducedMotion, use
 import { cardWords } from '@shared/api/discover.js'
 import { fromPriceText } from '@/components/PriceLabel'
 import { Avatar, IdVerified, InA11yGroup, Photo, ProBadge, Text } from '@/components'
+import { BA, BeforeAfter } from '@/components/BeforeAfter'
 import { useFocusOnShow } from '@/lib/a11y'
 import { makeStyles } from '@/theme'
 import { cardA11yLabel } from './cards'
@@ -28,7 +33,7 @@ const VENDOR_COVER = 0.46
 export const THRESHOLD = 90
 const FLY_MS = 260
 
-export type TapZone = 'prev' | 'next' | 'details' | 'correct' | 'profile'
+export type TapZone = 'prev' | 'next' | 'details' | 'correct' | 'profile' | 'compare'
 
 type Props = {
   card: DeckCard
@@ -71,6 +76,18 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
   const leaving = useSharedValue(false)
   const p = card.provider
   const photo = card.photos[shot] ?? card.photos[0]
+  // Before & after: 0 = the after photo, 1 = the before photo (wiped in from the left).
+  const beforeSrc: string | null = card.kind === 'photo' && (card as any).beforeAfter ? ((photo as any)?.beforeSrc ?? null) : null
+  const baPos = useSharedValue(0)
+  const [showingBefore, setShowingBefore] = useState(false)
+  const wipe = (on: boolean) => {
+    baPos.value = reduceMotion ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: on ? 450 : 260 })
+  }
+  const toggleBefore = () => {
+    const next = !showingBefore
+    setShowingBefore(next)
+    wipe(next)
+  }
 
   // Warm the cache with the rest of the album so flipping is instant.
   useEffect(() => {
@@ -127,6 +144,8 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
 
   const vendor = card.kind === 'vendor'
   const flips = card.photos.length > 1
+  // The "Before / After" pill (bottom left, above the name row): its tap area.
+  const compareRect = beforeSrc ? { x2: 170, y1: h - 150, y2: h - 104 } : null
   const tap = Gesture.Tap()
     .enabled(!disabled)
     .maxDistance(8)
@@ -134,6 +153,7 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
       const cover = h * VENDOR_COVER
       const zone: TapZone =
         e.y < 64 && e.x > w - 64 ? 'correct'
+        : compareRect && e.x < compareRect.x2 && e.y > compareRect.y1 && e.y < compareRect.y2 ? 'compare'
         : vendor
           ? (e.y > cover && e.y < cover + 72 ? 'profile'
             : e.y < cover && flips && e.x < w * 0.3 ? 'prev'
@@ -143,10 +163,21 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
         : e.x < w * 0.3 ? 'prev'
         : e.x > w * 0.7 ? 'next'
         : 'details'
-      runOnJS(onTap)(zone)
+      if (zone === 'compare') runOnJS(toggleBefore)()
+      else runOnJS(onTap)(zone)
     })
 
-  const gesture = Gesture.Race(pan, tap)
+  const hold = Gesture.LongPress()
+    .enabled(!disabled && !!beforeSrc)
+    .minDuration(BA.HOLD_MS)
+    .maxDistance(8)
+    .onStart(() => {
+      baPos.value = reduceMotion ? 1 : withTiming(1, { duration: 450 })
+    })
+    .onFinalize((_e, success) => {
+      if (success) baPos.value = reduceMotion ? 0 : withTiming(0, { duration: 260 })
+    })
+  const gesture = Gesture.Race(pan, tap, hold)
 
   const cardStyle = useAnimatedStyle(() => ({
     opacity: fade.value,
@@ -159,8 +190,11 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
   const from = fromPriceText(p)
   const meta = [card.category, from].filter(Boolean).map((x) => `· ${x}`).join(' ')
   const nextFree = useNextFree(card.authorId, card.kind === 'vendor')
-  const a11yLabel = [cardA11yLabel(card, shot, match), nextFree].filter(Boolean).join(', ')
-  const actions = flips ? A11Y_ACTIONS : A11Y_ACTIONS.filter((a) => a.name !== 'next' && a.name !== 'prev')
+  const a11yLabel = [cardA11yLabel(card, shot, match), beforeSrc && (showingBefore ? 'before and after, showing the before photo' : 'before and after'), nextFree].filter(Boolean).join(', ')
+  const actions = [
+    ...(flips ? A11Y_ACTIONS : A11Y_ACTIONS.filter((a) => a.name !== 'next' && a.name !== 'prev')),
+    ...(beforeSrc ? [{ name: 'compare', label: showingBefore ? 'Show after' : 'Show before' }] : []),
+  ]
 
   return (
     <GestureDetector gesture={gesture}>
@@ -177,6 +211,7 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
           const name = e.nativeEvent.actionName
           if (name === 'activate') onTap('details')
           else if (name === 'like' || name === 'pass' || name === 'save') onAction?.(name)
+          else if (name === 'compare') toggleBefore()
           else onTap(name as TapZone)
         }}
       >
@@ -191,7 +226,11 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
         ) : (
         <>
         {/* pointerEvents none: on the web target an <img> would start a native image drag (pointercancel) */}
-        <View style={StyleSheet.absoluteFill} pointerEvents="none"><Photo uri={photo?.src} style={StyleSheet.absoluteFill} /></View>
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {beforeSrc
+            ? <BeforeAfter before={beforeSrc} after={photo?.src} interactive={false} position={baPos} labels={false} style={StyleSheet.absoluteFill} />
+            : <Photo uri={photo?.src} style={StyleSheet.absoluteFill} />}
+        </View>
 
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {card.photos.length > 1 && (
@@ -213,6 +252,17 @@ export function SwipeCard({ card, shot, showHint, match, exit, disabled, onTap, 
             <View style={s.iconBtn}><ThumbsDown size={16} color="#fff" /></View>
           </View>
 
+          {!!beforeSrc && (
+            <View style={[s.compare, showingBefore && s.compareOn]}>
+              <Eye size={13} color={showingBefore ? '#111' : '#fff'} />
+              <Text maxFontSizeMultiplier={1.3} variant="tiny" weight="700" style={{ color: showingBefore ? '#111' : '#fff' }}>{showingBefore ? 'Before' : 'Before / After'}</Text>
+            </View>
+          )}
+          {showHint && !!beforeSrc && (
+            <View style={[s.hint, s.hintHigh]}>
+              <Text maxFontSizeMultiplier={1.4} variant="tiny" weight="600" style={s.white}>Hold to see the before · swipe to like or pass</Text>
+            </View>
+          )}
           {showHint && card.photos.length > 1 && (
             <View style={s.hint}>
               <Text maxFontSizeMultiplier={1.4} variant="tiny" weight="600" style={s.white}>Tap the edges for {card.photos.length} {(cardWords(card) as { things: string }).things} · swipe to like or pass</Text>
@@ -321,4 +371,7 @@ const useStyles = makeStyles((t) => ({
   match: { alignItems: 'center' },
   exif: { color: 'rgba(255,255,255,0.75)', marginTop: 8, fontFamily: 'monospace', fontSize: 11 },
   credit: { color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: '500' },
+  compare: { position: 'absolute', left: 12, bottom: 112, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  compareOn: { backgroundColor: '#fff' },
+  hintHigh: { bottom: 158 },
 }))

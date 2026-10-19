@@ -566,9 +566,9 @@ function Portfolio() {
       <Text variant="small" muted>This is what clients see on your profile.</Text>
       {error && <ErrorState error={error} onRetry={reload} />}
       <View style={[s.grid, s.mtSm]}>
-        <Pressable onPress={() => router.push('/upload')} style={[s.tile, s.addTile]} accessibilityRole="button" accessibilityLabel="Post photos">
+        <Pressable onPress={() => router.push('/upload')} style={[s.tile, s.addTile]} accessibilityRole="button" accessibilityLabel="New post">
           <Plus size={22} color={c.ink} />
-          <Text variant="tiny">Post photos</Text>
+          <Text variant="tiny">New post</Text>
         </Pressable>
         {loading && <View style={[s.tile, s.addTile]}><ActivityIndicator color={c.muted} /></View>}
         {albums?.filter((a) => a.photos?.length).map((a) => (

@@ -21,12 +21,13 @@ export const todayKey = () => {
 export const prettyDay = (key: string) =>
   key && /^\d{4}-\d{2}-\d{2}$/.test(key) ? new Date(`${key}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 
-// Required fields first. Returns { field: message } for anything that needs fixing.
-// The title is optional (a post without one is named after its category).
+// Returns { field: message } for anything that needs fixing. Nothing is required: a post
+// without a title gets the suggested one (suggestPostTitle), the category is optional
+// (pre-picked when it can be guessed). Only bad values are flagged.
 export function validatePost({ title, categoryId, shotOn }: { title: string; categoryId: string | null; shotOn: string }) {
   const errors: Record<string, string | undefined> = {}
   if (title.trim().length > LIMITS.title) errors.title = `Keep the title under ${LIMITS.title} characters.`
-  if (!categoryId) errors.category = 'Pick what kind of work this is.'
+  void categoryId
   if (shotOn && !/^\d{4}-\d{2}-\d{2}$/.test(shotOn)) errors.shotOn = 'Use the format YYYY-MM-DD, e.g. 2026-06-14.'
   else if (shotOn && Number.isNaN(+new Date(`${shotOn}T12:00:00`))) errors.shotOn = 'That isn’t a real date.'
   else if (shotOn && shotOn > todayKey()) errors.shotOn = 'The date can’t be in the future.'
@@ -36,16 +37,23 @@ export function validatePost({ title, categoryId, shotOn }: { title: string; cat
 
 const counter = (value: string, max: number) => (value.length > max * 0.8 ? `${value.length}/${max}` : undefined)
 
-// fallback: the title used when this is left empty (shown as a hint).
+// fallback: the suggested title, used when this is left empty (shown as the placeholder,
+// with a chip to take it and change it).
 export function TitleField({ value, onChange, error, placeholder = 'e.g. Nguyen–Park wedding', fallback }: {
   value: string; onChange: (v: string) => void; error?: string; placeholder?: string; fallback?: string | null
 }) {
+  const s = useStyles()
   const c = counter(value, LIMITS.title)
   return (
     <View>
       <TextField label="Title · optional" labelRight={c ? <Text variant="tiny" color={value.length > LIMITS.title ? 'danger' : 'muted'}>{c}</Text> : undefined}
-        maxLength={LIMITS.title} value={value} onChangeText={onChange} placeholder={placeholder} returnKeyType="done" />
-      {error ? <FieldHint error>{error}</FieldHint> : !value.trim() && fallback ? <FieldHint>{`Left blank, it’s called “${fallback}”.`}</FieldHint> : null}
+        maxLength={LIMITS.title} value={value} onChangeText={onChange} placeholder={fallback || placeholder} returnKeyType="done" />
+      {error ? <FieldHint error>{error}</FieldHint> : !value.trim() && fallback ? (
+        <View style={s.suggest}>
+          <Text variant="tiny" muted>Left blank, it’s called “{fallback}”.</Text>
+          <Chip label="Use and edit" onPress={() => onChange(fallback)} accessibilityLabel={`Use the title ${fallback}`} />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -137,12 +145,14 @@ export function settingsSummary(fields: SettingField[], hidden: Set<string>) {
     .join(' · ')
 }
 
-export function CameraSettings({ fields, hidden, onToggle }: { fields: SettingField[]; hidden: Set<string>; onToggle: (k: string) => void }) {
+export function CameraSettings({ fields, hidden, onToggle, onAll }: { fields: SettingField[]; hidden: Set<string>; onToggle: (k: string) => void; onAll?: (show: boolean) => void }) {
   if (!fields.length) return <Text variant="small" muted>No camera settings found in these photos. That’s fine: they’re optional.</Text>
+  const anyShown = fields.some((f) => !hidden.has(f.key))
   return (
     <View>
       <Text variant="tiny" muted>Shown on your post to help clients get a feel for your work. Switch off anything you’d rather keep to yourself.</Text>
-      {fields.map(({ key, label, values }) => (
+      {onAll && <ToggleRow label="Show camera settings" sub={anyShown ? 'On this post' : 'All hidden'} value={anyShown} onChange={onAll} />}
+      {anyShown && fields.map(({ key, label, values }) => (
         <ToggleRow
           key={key}
           label={label}
@@ -157,6 +167,7 @@ export function CameraSettings({ fields, hidden, onToggle }: { fields: SettingFi
 
 const useStyles = makeStyles((t) => ({
   label: { marginBottom: 6 },
+  suggest: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 6 },
   textarea: { minHeight: 80, textAlignVertical: 'top' },
   pair: { flexDirection: 'row', gap: 8 },
   grow: { flex: 1, minWidth: 0 },

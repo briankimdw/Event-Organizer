@@ -609,7 +609,7 @@ function Portfolio() {
       <div className="grid3 mt-sm rounded-grid">
         <Link to="/upload" className="add-tile">
           <Plus size={22} />
-          <span className="tiny">Post photos</span>
+          <span className="tiny">New post</span>
         </Link>
         {loading && <div className="add-tile muted"><div className="spinner" /></div>}
         {albums?.filter((a) => a.photos?.length).map((a) => (

@@ -165,7 +165,7 @@ function WorkGrid({ data, setData }) {
       {albums.length === 0 ? (
         <EmptyState icon={ImagePlus} title="Nothing posted yet"
           text="Post your first shoot. Albums, single photos and before / afters all show up here."
-          action={<Link to="/upload" className="btn accent">Post photos</Link>} />
+          action={<Link to="/upload" className="btn accent">New post</Link>} />
       ) : (
         <>
           <div className="mw-bar pad-x">

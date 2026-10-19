@@ -51,7 +51,7 @@ export default function Me() {
         <h1 className="title-lg">Profile</h1>
         {user && (
           <div className="row">
-            <Link to="/upload" className="icon-btn" aria-label="Post photos">
+            <Link to="/upload" className="icon-btn" aria-label="New post">
               <PlusSquare size={22} aria-hidden="true" />
             </Link>
             <Link to="/settings" className="icon-btn" aria-label="Settings">

@@ -3,7 +3,8 @@
 // that have photos) filter it (kept in the route param ?s=); tap a photo to open it in its
 // post, tap the name to open the photographer. Photographers who haven't posted yet appear
 // as tinted tiles between the photos; with no posts at all there's a "be the first" invite.
-// Pages in 24 at a time as you scroll.
+// Pages in 24 at a time as you scroll. Before & after posts show their after photo with a
+// "Before / After" badge; press and hold the tile to wipe the before photo in.
 // Data + shaping: the shared api/home.js (listExplorePhotos, buildExploreTiles, exploreFilters,
 // exploreVendorTiles, mixExploreTiles, masonry) and api/discover.js (vendorFacts).
 import { useRouter } from 'expo-router'
@@ -19,6 +20,7 @@ import {
 } from '@shared/api/home.js'
 import { verticalMeta } from '@shared/verticals/index.js'
 import { Avatar, Button, Chip, EmptyState, ErrorState, Photo, Text, VerticalIcon } from '@/components'
+import { BA_THUMB_PRESS_MS, BeforeAfterThumb } from '@/components/BeforeAfter'
 import { fromPriceText } from '@/components/PriceLabel'
 import useQuery from '@/hooks/useQuery'
 import { IMAGE_BUTTON_ROLE } from '@/lib/a11y'
@@ -34,7 +36,7 @@ const GAP = 8
 const SIDE = 12
 const CAP = 1.4 // Dynamic Type cap inside fixed-size tiles
 
-type PhotoTile = { kind: 'photo'; id: string; src: string; ratio: number; albumId: string; title?: string; provider: Provider }
+type PhotoTile = { kind: 'photo'; id: string; src: string; ratio: number; albumId: string; title?: string; provider: Provider; beforeAfter?: boolean; beforeSrc?: string | null }
 type VendorTileT = { kind: 'vendor'; id: string; providerId: string; ratio: number; provider: Provider }
 type Tile = PhotoTile | VendorTileT
 type Filters = { services: { slug: string; name: string; n: number }[] }
@@ -175,15 +177,21 @@ export function Explore({ tabs, service }: { tabs: ReactNode; service: string | 
 function ExploreTile({ t, width, onOpen, onOpenProvider }: { t: PhotoTile; width: number; onOpen: () => void; onOpenProvider: () => void }) {
   const s = useStyles()
   const p = t.provider
+  const ba = !!t.beforeAfter && !!t.beforeSrc
+  const [peek, setPeek] = useState(false)
+  const size = { width, height: Math.round(width * t.ratio) }
   return (
     <View>
       <Pressable
         onPress={onOpen}
-        style={({ pressed }) => [s.tileImg, pressed && s.pressed]}
+        onLongPress={ba ? () => setPeek(true) : undefined}
+        onPressOut={ba ? () => setPeek(false) : undefined}
+        delayLongPress={BA_THUMB_PRESS_MS}
+        style={({ pressed }) => [s.tileImg, pressed && !peek && s.pressed]}
         accessibilityRole={IMAGE_BUTTON_ROLE}
-        accessibilityLabel={`${t.title || 'Post'} by ${p.name}`}
+        accessibilityLabel={`${t.title || 'Post'} by ${p.name}${ba ? ', before and after' : ''}`}
       >
-        <Photo uri={t.src} style={{ width, height: Math.round(width * t.ratio) }} />
+        {ba ? <BeforeAfterThumb before={t.beforeSrc} after={t.src} peek={peek} style={size} /> : <Photo uri={t.src} style={size} />}
       </Pressable>
       <Pressable onPress={onOpenProvider} style={s.cap} accessibilityRole="link" accessibilityLabel={p.name}>
         <Avatar uri={p.avatar} name={p.name} size={22} />

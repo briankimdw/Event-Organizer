@@ -28,7 +28,7 @@ export function HomeHeader() {
         <Text variant="h3" style={s.title}>Find your photographer</Text>
       </View>
       {isProvider && (
-        <Pressable onPress={() => router.push('/upload')} style={s.post} accessibilityRole="button" accessibilityLabel="Post photos">
+        <Pressable onPress={() => router.push('/upload')} style={s.post} accessibilityRole="button" accessibilityLabel="New post">
           <Plus size={16} color={c.onInk} />
           <Text variant="small" weight="600" style={{ color: c.onInk }}>Post</Text>
         </Pressable>
