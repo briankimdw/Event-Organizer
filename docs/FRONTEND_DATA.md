@@ -2,6 +2,17 @@
 
 All data shown in the app comes from Supabase. Screens never build queries themselves: they call functions in `frontend/src/api/` and get plain objects back.
 
+## Posting rework (2026-10-19): editing, before & after, retry, resume
+
+Shared plain-JS changes (the Expo app imports `api/portfolio.js` directly; `lib/images.js` is swapped for `mobile/src/shims/images.ts`, and `api/portfolio.js` still only needs `fileExtension`, `makeDisplayCopy`, `readCameraSettings` from it). Nothing old changed meaning except that new posts start hidden:
+
+- **`postAlbum()`** (same signature, all additive): the album is created with `status: 'hidden'` and set to `'published'` (plus `cover_photo_id`) once every photo is up, so clients never see half a post; on failure it is deleted as before. File items may now carry `recipe` (saved as `photos.edit_recipe` when the column exists, silently dropped when it doesn't) and `pairRole` ('before' | 'after'); a ready-made `display` ({ blob, width, height }, e.g. an edited render) is used as the public copy. Items sharing **the same `file` object** upload that original once (a before & after made from one edit: both rows point at one `original_path`). New options `coverIndex`, `signal` (AbortSignal; the thrown error has `.cancelled`). Network / 5xx hiccups are retried twice per photo.
+- **Step by step** (per-photo progress, retry, cancel, resume): `createPostDraft(meta) → albumId` (hidden), `uploadPostPhoto({ userId, albumId, position, item, hiddenFields, originalPath?, onProgress, signal, retries }) → { photoId, displayPath, originalPath, width, height }` (cleans up its own files on failure), `publishPost(albumId, { coverPhotoId })`, `discardPostDraft(albumId)`. Helpers: `originalOwners(items)`, `isCancelled(err)`, `editRecipeSupported()`.
+- **A posted post's photos:** `getPostPhotos(albumId)` (rows + `edit_recipe` + `src`), `reorderPostPhotos(albumId, photoIds, { kind })` (first = cover), `setPostCover(albumId, photoIds, coverId)`, `replacePostPhoto({ userId, albumId, photo, photos, item })` (same position / pair role / hidden settings), `removePostPhoto(albumId, photo, photos)`, `convertPost(albumId, 'before_after' | 'album', { beforeId, afterId, photoIds })`. Re-editing and reverting are in `api/edits.js` (`saveEdit`, `revertEdit`, `loadEditSource`, `loadOriginalUrl`).
+- **Pure helpers:** `suggestPostTitle({ service, shotOn, location })` → "Wedding in Los Angeles, Sep 2026"; `photoHints({ width, height, size, duplicateOf })` → `[{ kind: 'lowres' | 'large' | 'duplicate', text }]` (non-blocking notes).
+- **`lib/images.js` (web only):** HEIC/HEIF is converted to JPEG in the browser with `heic-to` (lazy chunk, only when the browser can't decode it; the HEIC original is still what's uploaded privately). New `isHeic`, `toDecodable`, `displayFromRender`, `previewFromBlob`, `fingerprint` (duplicate check), `LARGE_FILE_BYTES`; `makePreview` / `makeDisplayCopy` accept any Blob.
+- **Web only:** `components/upload/usePostQueue.js` + `uploadQueue.js` save the post being uploaded in IndexedDB (`pm-posting`), so `/upload` offers "Finish posting …?" after the tab closed; My Work marks that hidden draft "Unfinished".
+
 ## Removed in the photography pivot (2026-10-18)
 
 photomatch is photography only again: **one vertical, `photography` ("Photo & video")**, whose creators sell photo and/or video work. The multi-vendor code is kept, not built, in `archive/event-platform/frontend/src/` (same relative paths) and in the git tag `multi-vendor-snapshot`. Shared plain-JS changes (the Expo app imports these):
@@ -28,7 +39,7 @@ photomatch is photography only again: **one vertical, `photography` ("Photo & vi
 | `src/api/catalog.js` | Photographers (photo & video listings only), services, reviews, availability, search, "% match". |
 | `src/verticals/` | `catalog.js` (the one vertical, `photography` "Photo & video", and its photo + video services) and `index.js`, the registry: `verticalMeta`, `verticalConfig` (package/provider fields, filters, price types, booking quantity), `priceSuffix`, `quantityFor`, `attributeLines`, `cleanAttributes`, `nounFor`/`countLabel`. Plain JS (shared with mobile). |
 | `src/components/verticals/` | Web pieces: `VerticalIcon` (lucide name → icon), `PackageFields` (form from a field config), `AttributeList` (display). |
-| `src/api/portfolio.js` | Albums (read and post), photographer onboarding. |
+| `src/api/portfolio.js` | Albums (read, post step by step, manage a post's photos), photographer onboarding. |
 | `src/api/discover.js` | Swipe feed, swipe logging and undo, taste profile, "Not into this". |
 | `src/api/bookings.js` | Bookings as client and as photographer, plus every booking action. |
 | `src/api/messages.js` | Conversations, messages, realtime, inquiries, sharing posts and photographers. |

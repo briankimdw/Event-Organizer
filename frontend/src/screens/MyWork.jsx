@@ -8,6 +8,7 @@ import { useStore } from '../store.jsx'
 import { AlbumViewer } from './Gallery.jsx'
 import { invalidate } from '../api/catalog.js'
 import { getMyProvider, listMyAlbums, publicUrl, reorderAlbums, toViewerAlbum } from '../api/portfolio.js'
+import { loadQueue } from '../components/upload/uploadQueue.js'
 
 const STATUS_LABEL = { processing: 'Processing', under_review: 'In review', hidden: 'Hidden' }
 
@@ -91,6 +92,14 @@ export default function MyWork() {
 
 function WorkGrid({ data, setData }) {
   const { toast } = useStore()
+  const { user } = useAuth()
+  const [unfinished, setUnfinished] = useState(null) // album id of an upload that didn't finish (this browser)
+  useEffect(() => {
+    if (!user) return
+    let live = true
+    loadQueue(user.id).then((rec) => live && setUnfinished(rec && rec.items.some((it) => it.state !== 'done') ? rec.albumId : null))
+    return () => { live = false }
+  }, [user])
   const [order, setOrder] = useState(null) // album ids while reordering
   const [saving, setSaving] = useState(false)
   const dragFrom = useRef(null)
@@ -147,7 +156,7 @@ function WorkGrid({ data, setData }) {
   const right = reordering ? (
     <button className="link-btn accent" onClick={saveOrder} disabled={saving}>{saving ? 'Saving…' : 'Done'}</button>
   ) : (
-    <Link to="/upload" className="icon-btn" aria-label="New post"><Plus size={22} /></Link>
+    <Link to="/upload" className="btn sm accent mw-new"><Plus size={16} aria-hidden="true" /> New post</Link>
   )
 
   return (
@@ -161,7 +170,7 @@ function WorkGrid({ data, setData }) {
         <>
           <div className="mw-bar pad-x">
             <span className="muted tiny grow">
-              {reordering ? 'Use the arrows (or drag) to set the order clients see.' : 'Tap a post to view, edit or delete it.'}
+              {reordering ? 'Use the arrows (or drag) to set the order clients see.' : 'Tap a post to view it, edit its photos, or delete it.'}
             </span>
             {reordering ? (
               <button className="link-btn small" onClick={() => setOrder(null)} disabled={saving}>Cancel</button>
@@ -176,13 +185,16 @@ function WorkGrid({ data, setData }) {
                   <img src={a.cover} alt="" loading="lazy" draggable={false} />
                   {a.type === 'beforeafter' ? <span className="album-count">B/A</span>
                     : a.photos.length > 1 && <span className="album-count"><Copy size={12} /> {a.photos.length}</span>}
-                  {STATUS_LABEL[a.status] && <span className="mw-status">{STATUS_LABEL[a.status]}</span>}
+                  {a.id === unfinished ? <span className="mw-status warn">Unfinished</span>
+                    : STATUS_LABEL[a.status] && <span className="mw-status">{STATUS_LABEL[a.status]}</span>}
                   {!reordering && <span className="mw-title">{a.title}</span>}
                 </>
               )
               if (!reordering) {
+                const finish = a.id === unfinished
                 return (
-                  <Link key={a.id} to={`/my-work?post=${a.id}`} className="mw-tile" aria-label={a.title}>
+                  <Link key={a.id} to={finish ? '/upload' : `/my-work?post=${a.id}`} className="mw-tile"
+                    aria-label={finish ? `${a.title}: unfinished upload, open to resume` : `${a.title}${STATUS_LABEL[a.status] ? ` (${STATUS_LABEL[a.status]})` : ''}`}>
                     {inner}
                   </Link>
                 )

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { CalendarDays, ChevronRight, ImageOff, Star } from 'lucide-react'
 import { shareLink } from '../../api/messages.js'
+import { BeforeAfterBadge } from '../beforeafter/BeforeAfter.jsx'
 import './share.css'
 
 // A card for something shared in chat (message.shared from api/messages.js):
@@ -24,9 +25,16 @@ export default function ShareCard({ shared, mine = false }) {
 
 function PostCard({ s }) {
   return (
-    <Link to={shareLink(s)} className="share-card post" aria-label={`Post${s.title ? `: ${s.title}` : ''}${s.vendorName ? ` by ${s.vendorName}` : ''}`}>
+    <Link to={shareLink(s)} className="share-card post" aria-label={`${s.beforeAfter ? 'Before and after post' : 'Post'}${s.title ? `: ${s.title}` : ''}${s.vendorName ? ` by ${s.vendorName}` : ''}`}>
       {s.vendorName && <div className="sc-head"><b className="small ellipsis">{s.vendorName}</b></div>}
-      {s.cover ? <img className="sc-photo" src={s.cover} alt="" loading="lazy" /> : <div className="sc-photo ph"><ImageOff size={22} /></div>}
+      {s.cover ? (
+        s.beforeAfter ? (
+          <span className="sc-media">
+            <img className="sc-photo" src={s.cover} alt="" loading="lazy" />
+            <BeforeAfterBadge />
+          </span>
+        ) : <img className="sc-photo" src={s.cover} alt="" loading="lazy" />
+      ) : <div className="sc-photo ph"><ImageOff size={22} /></div>}
       <div className="sc-body">
         {s.title && <b className="small ellipsis">{s.title}</b>}
         {s.caption && <div className="sc-caption tiny">{s.caption}</div>}

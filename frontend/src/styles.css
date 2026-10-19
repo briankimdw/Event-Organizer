@@ -255,15 +255,7 @@ img { display: block; }
 .carousel-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.5); }
 .carousel-dots span.on { background: #fff; }
 
-.before-after { position: relative; width: 100%; overflow: hidden; background: var(--soft); user-select: none; }
-.before-after img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.ba-before { position: absolute; inset: 0; }
-.ba-before img { filter: saturate(.35) contrast(.8) brightness(1.08) sepia(.15); }
-.ba-divider { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; transform: translateX(-1px); pointer-events: none; }
-.ba-knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 34px; height: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-size: 15px; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
-.ba-label { position: absolute; top: 10px; font-size: 11px; font-weight: 700; color: #fff; background: rgba(0,0,0,.5); padding: 3px 8px; border-radius: 999px; pointer-events: none; }
-.ba-label.left { left: 10px; } .ba-label.right { right: 10px; }
-.before-after input[type=range] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+/* Before / after: components/beforeafter/beforeafter.css */
 
 .exif-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .exif-cell { display: flex; align-items: center; gap: 10px; background: var(--soft); padding: 10px; border-radius: 12px; }
@@ -723,7 +715,7 @@ input[type=date].filter { width: 130px; }
 .reel-track { position: absolute; inset: 0; }
 .reel-slide { height: 100%; display: flex; align-items: center; justify-content: center; }
 .reel-slide > img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
-.reel-ba { width: 100%; }
+.reel-ba { width: 100%; height: 100%; }
 .reel-ui { transition: opacity .2s ease; }
 .reel-viewer.holding .reel-ui { opacity: 0; pointer-events: none; }
 .reel-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 28px 4px; background: linear-gradient(rgba(0,0,0,.55), transparent); }
@@ -826,7 +818,6 @@ input[type=date].filter { width: 130px; }
 .center-self { align-self: center; }
 .field > span.row { display: flex; }
 
-.ba-before.real img { filter: none; }
 .avatar-initials.small-initials { font-size: 14px; }
 
 /* ---------- Posting ---------- */
@@ -1129,7 +1120,7 @@ input[type=date].filter { width: 130px; }
 .pp-slot-empty { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 1.5px dashed #d4d4d4; border-radius: var(--radius); color: var(--muted); }
 .pp-slot-empty:hover { border-color: var(--ink); color: var(--ink); }
 .pp-swap { width: 36px; height: 36px; border-radius: 50%; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0, 0, 0, .08); }
-.pp-ba-preview .before-after { border-radius: var(--radius); }
+.pp-ba-preview :is(.before-after, .ba-frame) { border-radius: var(--radius); }
 
 /* Fields (PostFields.jsx, CameraSettings.jsx) */
 .pf-field { gap: 8px; }

@@ -35,7 +35,9 @@
 //   DeckCard = PhotoCard | VendorCard. Shared fields: { kind, id, photoId, albumId, authorId,
 //     providerId, provider, vertical, title, category, categorySlug, photos [{ id, src, exif }], tags[],
 //     reason, exploration, score, exif }
-//     PhotoCard  kind 'photo': id = photoId; occasion { slug, name } | null; photos[0] is the picked photo
+//     PhotoCard  kind 'photo': id = photoId; occasion { slug, name } | null; photos[0] is the picked photo.
+//                Before & after posts: beforeAfter true, photos = [the after photo] with photos[0].beforeSrc
+//                (the before photo's URL); other cards have beforeAfter false and no beforeSrc.
 //     VendorCard kind 'vendor': id 'v:<providerId>', photoId null, albumId null, photos = album covers
 //                (often []), lines (key attributes), tags (lower-case traits, for "Not into this")
 // Swipes
@@ -96,6 +98,9 @@ async function photoCards(rows) {
       const photos = [...(album.photos || [])]
         .filter((p) => album.kind !== 'before_after' || p.pair_role !== 'before')
         .sort((a, b) => a.position - b.position)
+      // Before & after posts: the card shows the after photo; its before photo rides along as beforeSrc.
+      const pairBefore = album.kind === 'before_after' ? (album.photos || []).find((p) => p.pair_role === 'before') : null
+      const beforeSrc = pairBefore ? photoUrl(pairBefore.display_path) : null
       const pickedId = r.photo_id || album.cover_photo_id || photos[0]?.id
       // The picked photo first, then the rest of the album (up to 5 total).
       const ordered = [photos.find((p) => p.id === pickedId), ...photos.filter((p) => p.id !== pickedId)].filter(Boolean).slice(0, 5)
@@ -116,7 +121,8 @@ async function photoCards(rows) {
         category: album.category?.name ?? null,
         categorySlug: album.category?.slug ?? null,
         occasion: occSlug ? { slug: occSlug, name: occTag.name || occSlug } : null,
-        photos: ordered.map((p) => ({ id: p.id, src: photoUrl(p.display_path), exif: p.exif || {} })),
+        photos: ordered.map((p) => ({ id: p.id, src: photoUrl(p.display_path), exif: p.exif || {}, ...(beforeSrc ? { beforeSrc } : null) })),
+        beforeAfter: !!beforeSrc,
         tags: r.auto_tags || first.auto_tags || [],
         reason: r.reason ?? null,
         exploration: !!r.exploration,

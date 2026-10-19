@@ -4,7 +4,7 @@ import { Bookmark, Flag, Heart, ImageOff, Info, MapPin, Camera, MoreHorizontal, 
 import Sheet from '../components/Sheet.jsx'
 import ExifPanel from '../components/Exif.jsx'
 import ProfileLink from '../components/ProfileLink.jsx'
-import { BeforeAfter } from '../components/Media.jsx'
+import BeforeAfter from '../components/beforeafter/BeforeAfter.jsx'
 import { SaveSheet, ModerationSheet } from '../components/PostSheets.jsx'
 import ShareSheet from '../components/share/ShareSheet.jsx'
 import { fromPriceLabel } from '../components/Booking.jsx'
@@ -279,7 +279,8 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
   // ---- pointer gestures ----
   const onDown = (e) => {
     if (exiting || e.target.closest('button, a, [role=link]')) return
-    const onSlider = e.target.matches('input[type=range]') // before/after slider owns horizontal drags
+    // Before/after: its handle owns drags (it also stops the press from reaching here); swipes elsewhere on the photo still page.
+    const onSlider = !!e.target.closest('.ba-knob, .ba-grip, .ba-compare')
     if (!onSlider) e.currentTarget.setPointerCapture(e.pointerId)
     // A primary pointer starts a fresh interaction: forget any finger whose "up" we never saw.
     if (e.isPrimary) pointers.current.clear()
@@ -468,7 +469,19 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
                             } : undefined}
                           >
                             {a.type === 'beforeafter' ? (
-                              <div className="reel-ba"><BeforeAfter src={p.src} beforeSrc={p.beforeSrc} /></div>
+                              <div className="reel-ba">
+                                <BeforeAfter
+                                  before={p.beforeSrc}
+                                  after={p.src}
+                                  alt={a.title || 'Edit'}
+                                  aspect="contain"
+                                  dragFrom="handle"
+                                  demo="once"
+                                  onInteract={() => setHintSeen(true)}
+                                  loading="eager"
+                                  style={{ '--ba-bg': 'transparent' }}
+                                />
+                              </div>
                             ) : (
                               <img src={p.src} alt={current && j === at ? `${a.title || 'Photo'}${a.photos.length > 1 ? `, photo ${j + 1} of ${a.photos.length}` : ''}` : ''} draggable={false} />
                             )}
@@ -564,7 +577,8 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
         </div>
 
         {!hintSeen && (
-          <div className="reel-hint reel-ui" aria-hidden="true">
+          <div className={`reel-hint reel-ui ${album.type === 'beforeafter' ? 'reel-hint-ba' : ''}`} aria-hidden="true">
+            {album.type === 'beforeafter' && <>Drag the handle to compare<br /></>}
             {album.photos.length > 1 ? 'Swipe ← for more of this shoot · ' : ''}↑ next album
             <br />
             Double-tap to zoom · drag off the photo to close

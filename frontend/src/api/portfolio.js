@@ -6,6 +6,22 @@
 //   creditsSupported, listCredits, setAlbumCredits, searchVendors, listTaggedAlbums,
 //   setAlbumOccasion. Albums no longer carry `credits`; postAlbum / updateAlbum ignore
 //   `occasion` and `credits`. getMyProviders only returns photo & video listings.
+//
+// Changed 2026-10-19 (posting rework: editing, before/after, per-photo retry, resume).
+// Everything old still works the same way; new pieces are additive:
+//   - postAlbum(): posts are created *hidden* and published once every photo is up (clients
+//     never see half a post). Items may now carry `recipe` (saved as photos.edit_recipe when
+//     the column exists) and `pairRole`; a ready-made `display` is used as the public copy
+//     (e.g. an edited render). Items sharing one `file` object upload that original once.
+//     New options: coverIndex, signal (AbortSignal; the error then has .cancelled). Network
+//     and server hiccups are retried twice per photo.
+//   - New step-by-step API (per-photo retry / cancel / resume): createPostDraft, uploadPostPhoto,
+//     publishPost, discardPostDraft, originalOwners, isCancelled, editRecipeSupported.
+//   - New photo management: getPostPhotos, reorderPostPhotos, setPostCover, replacePostPhoto,
+//     removePostPhoto, convertPost.
+//   - New pure helpers: suggestPostTitle({ service, shotOn, location }), photoHints({ width,
+//     height, size, duplicateOf }).
+//   Re-editing / reverting a posted photo lives in api/edits.js (saveEdit, revertEdit, loadOriginalUrl).
 import { supabase } from '../lib/supabase.js'
 import { fileExtension, makeDisplayCopy, readCameraSettings } from '../lib/images.js'
 import { PHOTO_VERTICAL, VERTICALS, isPhotoVertical, normalizeVertical } from '../verticals/index.js'
@@ -157,6 +173,14 @@ export function toViewerAlbum(a) {
 // ---------------------------------------------------------------------------
 // Uploading
 // ---------------------------------------------------------------------------
+//
+// A post goes up in three steps, so a screen can show per-photo progress, retry one
+// photo, cancel, or resume after the tab was closed:
+//   1. createPostDraft(meta)   the album row, *hidden* until it's complete
+//   2. uploadPostPhoto(...)    per photo: public copy + private original + the photos row
+//   3. publishPost(albumId)    cover + status 'published'
+// discardPostDraft(albumId) throws a draft away. postAlbum() runs all three (and rolls
+// back on failure), for callers that just want "post this".
 
 const STORAGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1`
 const API_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
@@ -170,18 +194,25 @@ const storageError = (status, body) => {
   if (status === 401 || status === 403 || /row-level security|unauthorized|jwt/i.test(message)) {
     return new Error('Your session expired. Sign in again, then retry.')
   }
-  return new Error(message || `Upload failed (${status}).`)
+  // Server hiccups and timeouts are worth retrying; other refusals aren't.
+  return Object.assign(new Error(message || `Upload failed (${status}).`), { retryable: status >= 500 || status === 408 || status === 429 })
 }
+
+const abortError = () => Object.assign(new Error('Cancelled'), { name: 'AbortError', cancelled: true })
+export const isCancelled = (err) => !!err && (err.cancelled || err.name === 'AbortError')
 
 // Upload one file to Storage, reporting bytes sent. Uses XHR (fetch can't report
 // upload progress); falls back to supabase-js if the request can't be made at all.
-async function uploadFile(bucket, path, body, contentType, onBytes) {
+// signal: an AbortSignal (cancels the request).
+async function uploadFile(bucket, path, body, contentType, onBytes, signal) {
+  if (signal?.aborted) throw abortError()
   const { data } = await supabase.auth.getSession() // refreshes the token if it's about to expire
   const token = data.session?.access_token
   if (!token) throw new Error('You’re signed out. Sign in again to post.')
   try {
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
+      const onAbort = () => xhr.abort()
       xhr.open('POST', `${STORAGE_URL}/object/${bucket}/${path}`)
       xhr.setRequestHeader('authorization', `Bearer ${token}`)
       xhr.setRequestHeader('apikey', API_KEY)
@@ -189,15 +220,19 @@ async function uploadFile(bucket, path, body, contentType, onBytes) {
       xhr.setRequestHeader('cache-control', 'max-age=3600')
       xhr.setRequestHeader('x-upsert', 'false')
       xhr.upload.onprogress = (e) => e.lengthComputable && onBytes?.(Math.min(e.loaded, body.size))
-      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(storageError(xhr.status, xhr.responseText)))
-      xhr.onerror = () => reject(Object.assign(new Error('network'), { network: true }))
+      const done = (fn) => (...a) => { signal?.removeEventListener('abort', onAbort); fn(...a) }
+      xhr.onload = done(() => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(storageError(xhr.status, xhr.responseText))))
+      xhr.onerror = done(() => reject(Object.assign(new Error('network'), { network: true })))
+      xhr.onabort = done(() => reject(abortError()))
+      signal?.addEventListener('abort', onAbort)
       xhr.send(body)
     })
   } catch (err) {
     if (!err.network) throw err
+    if (signal?.aborted) throw abortError()
     // XHR couldn't connect: try once more the standard way (no byte progress).
     const { error } = await supabase.storage.from(bucket).upload(path, body, { contentType })
-    if (error) throw new Error('Network problem while uploading. Check your connection and try again.')
+    if (error) throw Object.assign(new Error('Network problem while uploading. Check your connection and try again.'), { retryable: true })
   }
   onBytes?.(body.size)
 }
@@ -221,11 +256,27 @@ async function inPool(items, limit, work) {
   if (failure) throw failure
 }
 
+// Retry `fn` when it fails with a network / server hiccup (not on refusals or cancel).
+async function withRetries(fn, { retries = 2, signal, onRetry } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn(attempt)
+    } catch (err) {
+      const retryable = (err.retryable || err.network || /failed to fetch|network/i.test(err.message || '')) && !isCancelled(err)
+      if (!retryable || attempt >= retries || signal?.aborted) throw err
+      onRetry?.(attempt + 1, err)
+      await new Promise((r) => setTimeout(r, 800 * 2 ** attempt))
+      if (signal?.aborted) throw abortError()
+    }
+  }
+}
+
 // Remove storage files; returns how many could not be removed. (Storage only
 // deletes files the user can also *read* through the API.)
 async function removeFiles(byBucket) {
   let left = 0
-  for (const [bucket, paths] of Object.entries(byBucket)) {
+  for (const [bucket, all] of Object.entries(byBucket)) {
+    const paths = [...new Set(all.filter(Boolean))]
     for (let i = 0; i < paths.length; i += 100) {
       const chunk = paths.slice(i, i + 100)
       const { data, error } = await supabase.storage.from(bucket).remove(chunk)
@@ -235,18 +286,44 @@ async function removeFiles(byBucket) {
   return left
 }
 
-// Post an album: create the row, then for each photo upload a public copy
-// (resized, metadata stripped) and the untouched original (private bucket),
-// and save the photo row with its camera settings. Rolls back on failure.
-//
-// files: File objects, or { file, display?, settings? } where display ({ blob, width, height },
-// from makeDisplayCopy) and settings (from readCameraSettings) were prepared ahead of time.
-// onProgress(donePhotos, total) after each photo; onPhotoProgress(index, { stage, fraction })
-// as each photo moves through preparing → uploading → saving → done (fraction 0..1, byte-based).
-export async function postAlbum({
-  userId, providerId, kind, title, caption, location, shotOn, categoryId, files, hiddenFields = [], onProgress, onPhotoProgress,
-}) {
-  const items = files.map((f) => (f instanceof Blob ? { file: f } : f))
+// ---- edit recipes -----------------------------------------------------------
+// photos.edit_recipe (jsonb) holds a photo's non-destructive edits (see lib/editor/recipe.js).
+// The column may not exist on the hosted database yet: then recipes are simply not saved
+// (the edited render still becomes the public copy) and nothing fails.
+let recipeColumn = null // null = not checked yet
+
+const mentionsRecipe = (error) => !!error && /edit_recipe/.test(`${error.message || ''} ${error.details || ''} ${error.hint || ''}`)
+
+// Does the database have photos.edit_recipe? (Checked once per page load.)
+export async function editRecipeSupported() {
+  if (recipeColumn === null) {
+    const { error } = await supabase.from('photos').select('id, edit_recipe').limit(1)
+    recipeColumn = !error
+  }
+  return recipeColumn
+}
+
+// Insert a photos row; drops edit_recipe (and remembers to) if the column isn't there or writable.
+async function insertPhotoRow(row) {
+  const hasRecipe = row.edit_recipe != null && recipeColumn !== false
+  const { edit_recipe: _drop, ...plain } = row
+  if (hasRecipe) {
+    const res = await supabase.from('photos').insert(row).select('id').single()
+    if (!res.error) {
+      recipeColumn = true
+      return res.data
+    }
+    if (!mentionsRecipe(res.error)) throw res.error
+    recipeColumn = false
+  }
+  return must(await supabase.from('photos').insert(plain).select('id').single())
+}
+
+// ---- the three steps --------------------------------------------------------
+
+// 1. The album row, hidden until publishPost() (clients never see a half-uploaded post).
+// kind: 'album' | 'before_after'. Returns the album id.
+export async function createPostDraft({ providerId, kind = 'album', title, caption, location, shotOn, categoryId }) {
   const album = must(
     await supabase.from('albums').insert({
       provider_id: providerId,
@@ -256,59 +333,186 @@ export async function postAlbum({
       location_text: location || null,
       shot_on: shotOn || null,
       kind,
+      status: 'hidden',
     }).select('id').single(),
   )
+  return album.id
+}
 
-  const uploaded = { portfolio: [], 'portfolio-originals': [] }
-  const photoIds = []
+// 2. One photo: upload the public copy and the untouched original (private bucket), then
+// save the photos row. Retries network/server hiccups (`retries`, default 2).
+//   item: a File, or { file, display?, settings?, recipe?, pairRole? }
+//     file      the original (uploaded as is to portfolio-originals)
+//     display   { blob, width, height }: the public copy, ready made (e.g. an edited render
+//               from displayFromRender / makeDisplayCopy). Made from `file` when missing.
+//     settings  camera settings (readCameraSettings); read from `file` when missing
+//     recipe    the edit recipe that produced `display` (saved as photos.edit_recipe if supported)
+//     pairRole  'before' | 'after' (before/after posts)
+//   position: the photo's place in the post. hiddenFields: camera settings to leave out.
+//   originalPath: reuse an original that's already uploaded (two photos made from one file,
+//     e.g. a before/after from one edit) instead of uploading it again.
+//   onProgress({ stage: 'preparing'|'uploading'|'saving'|'done', fraction 0..1, attempt? }); signal: AbortSignal.
+// Returns { photoId, displayPath, originalPath, width, height }. Removes its own files if it fails.
+export async function uploadPostPhoto({
+  userId, albumId, position = 0, item, hiddenFields = [], originalPath = null, onProgress, signal, retries = 2,
+}) {
+  const it = item instanceof Blob ? { file: item } : item
+  const { file } = it
+  const report = (stage, fraction, extra) => onProgress?.({ stage, fraction, ...extra })
+  report('preparing', 0)
+  const all = it.settings ?? (await readCameraSettings(file))
+  const exif = Object.fromEntries(Object.entries(all).filter(([k]) => !hiddenFields.includes(k)))
+  const copy = it.display ?? (await makeDisplayCopy(file))
+  if (signal?.aborted) throw abortError()
+
+  return withRetries(async () => {
+    const key = crypto.randomUUID()
+    const displayPath = `${userId}/${albumId}/${key}.jpg`
+    const ownOriginal = originalPath ? null : `${userId}/${albumId}/${key}-original.${fileExtension(file)}`
+    const uploaded = { portfolio: [], 'portfolio-originals': [] }
+    const bytes = copy.blob.size + (ownOriginal ? file.size : 0)
+    try {
+      report('uploading', 0.05)
+      await uploadFile('portfolio', displayPath, copy.blob, 'image/jpeg', (sent) => report('uploading', 0.05 + (0.9 * sent) / bytes), signal)
+      uploaded.portfolio.push(displayPath)
+      if (ownOriginal) {
+        await uploadFile('portfolio-originals', ownOriginal, file, file.type || 'application/octet-stream',
+          (sent) => report('uploading', 0.05 + (0.9 * (copy.blob.size + sent)) / bytes), signal)
+        uploaded['portfolio-originals'].push(ownOriginal)
+      }
+      if (signal?.aborted) throw abortError()
+      report('saving', 0.95)
+      const photo = await insertPhotoRow({
+        album_id: albumId,
+        owner_id: userId,
+        position,
+        display_path: displayPath,
+        original_path: originalPath || ownOriginal,
+        width: copy.width,
+        height: copy.height,
+        pair_role: it.pairRole || null,
+        exif,
+        exif_hidden: hiddenFields,
+        edit_recipe: it.recipe ?? null,
+      })
+      report('done', 1)
+      return { photoId: photo.id, displayPath, originalPath: originalPath || ownOriginal, width: copy.width, height: copy.height }
+    } catch (err) {
+      await removeFiles(uploaded).catch(() => {})
+      throw err
+    }
+  }, { retries, signal, onRetry: (attempt) => report('uploading', 0.05, { attempt }) })
+}
+
+// 3. Make the post live. coverPhotoId: the cover (the first photo, or the "after").
+export async function publishPost(albumId, { coverPhotoId = null } = {}) {
+  const patch = { status: 'published', ...(coverPhotoId ? { cover_photo_id: coverPhotoId } : {}) }
+  const { error } = await supabase.from('albums').update(patch).eq('id', albumId)
+  if (!error) return
+  // Already held for review by the server: keep its status, just set the cover.
+  if (/being reviewed/i.test(error.message || '') && coverPhotoId) {
+    must(await supabase.from('albums').update({ cover_photo_id: coverPhotoId }).eq('id', albumId))
+    return
+  }
+  throw error
+}
+
+// Throw away a draft (or any post): its row, photos and files. Never throws for "already gone".
+export async function discardPostDraft(albumId) {
+  try {
+    await deleteAlbum(albumId)
+  } catch (err) {
+    if (!/already be gone/i.test(err.message || '')) throw err
+  }
+}
+
+// For each item, the index of the earlier item with the same original file (or itself).
+// Two photos made from one file (a before/after from one edit) share one uploaded original.
+export function originalOwners(items) {
+  const first = new Map()
+  return items.map((it, i) => {
+    const f = it instanceof Blob ? it : it.file
+    if (!first.has(f)) first.set(f, i)
+    return first.get(f)
+  })
+}
+
+// Post an album in one go: draft, every photo (2 at a time), publish. Rolls back on failure.
+//
+// files: File objects, or items as in uploadPostPhoto ({ file, display?, settings?, recipe?, pairRole? }).
+//   In a before/after post, photo 0 is the before and photo 1 the after unless pairRole says otherwise.
+//   Items that share the same `file` object upload that original once.
+// coverIndex: which photo is the cover (default: the first; the "after" of a before/after).
+// onProgress(donePhotos, total) after each photo; onPhotoProgress(index, { stage, fraction })
+// as each photo moves through preparing → uploading → saving → done (fraction 0..1, byte-based).
+// signal: AbortSignal to cancel (the draft is then removed and the error has .cancelled).
+// Returns the album id.
+export async function postAlbum({
+  userId, providerId, kind = 'album', title, caption, location, shotOn, categoryId, files, hiddenFields = [],
+  coverIndex = null, onProgress, onPhotoProgress, signal,
+}) {
+  const items = files.map((f) => (f instanceof Blob ? { file: f } : f)).map((it, i) => ({
+    ...it, pairRole: it.pairRole ?? (kind === 'before_after' ? (i === 0 ? 'before' : 'after') : null),
+  }))
+  const albumId = await createPostDraft({ providerId, kind, title, caption, location, shotOn, categoryId })
+  const owners = originalOwners(items)
+  const results = items.map(() => {
+    let resolve, reject
+    const promise = new Promise((a, b) => { resolve = a; reject = b })
+    promise.catch(() => {})
+    return { promise, resolve, reject }
+  })
   let done = 0
   try {
-    await inPool(items, 2, async ({ file, display, settings }, i) => {
-      const report = (stage, fraction) => onPhotoProgress?.(i, { stage, fraction })
-      report('preparing', 0)
-      const all = settings ?? (await readCameraSettings(file))
-      const exif = Object.fromEntries(Object.entries(all).filter(([k]) => !hiddenFields.includes(k)))
-      const copy = display ?? (await makeDisplayCopy(file))
-      const key = crypto.randomUUID()
-      const displayPath = `${userId}/${album.id}/${key}.jpg`
-      const originalPath = `${userId}/${album.id}/${key}-original.${fileExtension(file)}`
-      const bytes = copy.blob.size + file.size
-      report('uploading', 0.05)
-
-      await uploadFile('portfolio', displayPath, copy.blob, 'image/jpeg', (sent) => report('uploading', 0.05 + (0.9 * sent) / bytes))
-      uploaded.portfolio.push(displayPath)
-      await uploadFile('portfolio-originals', originalPath, file, file.type || 'application/octet-stream',
-        (sent) => report('uploading', 0.05 + (0.9 * (copy.blob.size + sent)) / bytes))
-      uploaded['portfolio-originals'].push(originalPath)
-
-      report('saving', 0.95)
-      const photo = must(
-        await supabase.from('photos').insert({
-          album_id: album.id,
-          owner_id: userId,
-          position: i,
-          display_path: displayPath,
-          original_path: originalPath,
-          width: copy.width,
-          height: copy.height,
-          pair_role: kind === 'before_after' ? (i === 0 ? 'before' : 'after') : null,
-          exif,
-          exif_hidden: hiddenFields,
-        }).select('id').single(),
-      )
-      photoIds[i] = photo.id
-      report('done', 1)
-      onProgress?.(++done, items.length)
+    await inPool(items, 2, async (item, i) => {
+      try {
+        const owner = owners[i]
+        const originalPath = owner !== i ? (await results[owner].promise).originalPath : null
+        const res = await uploadPostPhoto({
+          userId, albumId, position: i, item, hiddenFields, originalPath, signal,
+          onProgress: (p) => onPhotoProgress?.(i, p),
+        })
+        results[i].resolve(res)
+        onProgress?.(++done, items.length)
+      } catch (err) {
+        results[i].reject(err)
+        throw err
+      }
     })
-    const coverId = kind === 'before_after' ? photoIds[1] ?? photoIds[0] : photoIds[0]
-    must(await supabase.from('albums').update({ cover_photo_id: coverId }).eq('id', album.id))
+    const photoIds = await Promise.all(results.map((r) => r.promise.then((x) => x.photoId)))
+    const cover = coverIndex ?? (kind === 'before_after' ? Math.max(0, items.findIndex((it) => it.pairRole === 'after')) : 0)
+    await publishPost(albumId, { coverPhotoId: photoIds[cover] ?? photoIds[0] })
   } catch (err) {
-    // Undo: the album row (photos cascade) and any files already uploaded.
-    await supabase.from('albums').delete().eq('id', album.id)
-    await removeFiles(uploaded).catch(() => {})
+    // Undo: the album row (photos cascade) and the files already uploaded.
+    await discardPostDraft(albumId).catch(() => {})
     throw err
   }
-  return album.id
+  return albumId
+}
+
+// ---------------------------------------------------------------------------
+// Posting helpers (pure; shared with the Expo app)
+// ---------------------------------------------------------------------------
+
+// A title for a post saved without one, from what we know:
+// "Wedding in Los Angeles, Sep 2026", "Portrait, Aug 2026", "Wedding", "New post".
+export function suggestPostTitle({ service = null, shotOn = '', location = '' } = {}) {
+  const what = service || 'New post'
+  const city = (location || '').split(',')[0].trim()
+  const when = shotOn ? new Date(`${shotOn}T12:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''
+  return `${what}${city ? ` in ${city}` : ''}${when ? `, ${when}` : ''}`.slice(0, 120)
+}
+
+// Gentle, non-blocking notes about a photo for the composer:
+// [{ kind: 'lowres' | 'large' | 'duplicate', text }]. duplicateOf: the 1-based number of the
+// photo it duplicates (or null).
+export function photoHints({ width = 0, height = 0, size = 0, duplicateOf = null } = {}, { lowResEdge = 1200, largeBytes = 25 * 1024 * 1024 } = {}) {
+  const hints = []
+  const edge = Math.max(width, height)
+  if (edge && edge < lowResEdge) hints.push({ kind: 'lowres', text: `Low resolution (${width} × ${height}): may look soft on big screens` })
+  if (size > largeBytes) hints.push({ kind: 'large', text: `Large file (${Math.round(size / (1024 * 1024))} MB): takes a little longer to upload` })
+  if (duplicateOf) hints.push({ kind: 'duplicate', text: `Looks like the same photo as #${duplicateOf}` })
+  return hints
 }
 
 // ---------------------------------------------------------------------------
@@ -346,6 +550,79 @@ export async function deleteAlbum(albumId) {
 export async function reorderAlbums(albumIds) {
   const results = await Promise.all(albumIds.map((id, i) => supabase.from('albums').update({ sort_order: i + 1 }).eq('id', id)))
   for (const r of results) must(r)
+}
+
+// ---- a post's photos ---------------------------------------------------------
+
+const PHOTO_COLUMNS = 'id, album_id, position, display_path, original_path, width, height, pair_role, exif, exif_hidden'
+
+// A post's photos for editing, in order: [{ id, album_id, position, display_path, original_path,
+// width, height, pair_role, exif, exif_hidden, edit_recipe (null when none or not supported), src }].
+export async function getPostPhotos(albumId) {
+  const withRecipe = await editRecipeSupported()
+  const rows = must(
+    await supabase.from('photos').select(PHOTO_COLUMNS + (withRecipe ? ', edit_recipe' : '')).eq('album_id', albumId).order('position'),
+  )
+  return rows.map((r) => ({ ...r, edit_recipe: r.edit_recipe ?? null, src: publicUrl('portfolio', r.display_path) }))
+}
+
+// Put a post's photos in this order (photo ids, first to last); the first becomes the cover
+// (except in a before/after, whose cover stays the "after").
+export async function reorderPostPhotos(albumId, photoIds, { kind = 'album' } = {}) {
+  const results = await Promise.all(photoIds.map((id, i) => supabase.from('photos').update({ position: i }).eq('id', id).eq('album_id', albumId)))
+  for (const r of results) must(r)
+  if (kind !== 'before_after' && photoIds[0]) must(await supabase.from('albums').update({ cover_photo_id: photoIds[0] }).eq('id', albumId))
+}
+
+// Make a photo the cover: it moves to the front (the cover is always the first photo).
+export const setPostCover = (albumId, photoIds, coverId) =>
+  reorderPostPhotos(albumId, [coverId, ...photoIds.filter((id) => id !== coverId)])
+
+// Replace one photo of a post with a new file (same place, same before/after role, same
+// hidden camera settings). item: as in uploadPostPhoto (File or { file, display?, settings?, recipe? }).
+// photo: the row being replaced (from getPostPhotos). photos: all of the post's rows (to keep
+// an original another photo still uses). Returns the new photo's { photoId, ... }.
+export async function replacePostPhoto({ userId, albumId, photo, photos = [], item, onProgress, signal }) {
+  const it = item instanceof Blob ? { file: item } : item
+  const res = await uploadPostPhoto({
+    userId, albumId, position: photo.position, hiddenFields: photo.exif_hidden || [], onProgress, signal,
+    item: { ...it, pairRole: photo.pair_role || null },
+  })
+  // Keep the cover pointing at this spot, then drop the old row and its files.
+  await supabase.from('albums').update({ cover_photo_id: res.photoId }).eq('id', albumId).eq('cover_photo_id', photo.id)
+  must(await supabase.from('photos').delete().eq('id', photo.id))
+  const originalShared = photos.some((p) => p.id !== photo.id && p.original_path && p.original_path === photo.original_path)
+  await removeFiles({ portfolio: [photo.display_path], 'portfolio-originals': originalShared ? [] : [photo.original_path] }).catch(() => {})
+  return res
+}
+
+// Remove one photo from a post (posts keep at least one photo; a before/after keeps both).
+export async function removePostPhoto(albumId, photo, photos = []) {
+  if (photos.length && photos.length <= 1) throw new Error('A post needs at least one photo. Delete the post instead.')
+  must(await supabase.from('photos').delete().eq('id', photo.id).eq('album_id', albumId))
+  const rest = photos.filter((p) => p.id !== photo.id)
+  if (rest[0]) await supabase.from('albums').update({ cover_photo_id: rest[0].id }).eq('id', albumId).is('cover_photo_id', null)
+  const originalShared = rest.some((p) => p.original_path && p.original_path === photo.original_path)
+  await removeFiles({ portfolio: [photo.display_path], 'portfolio-originals': originalShared ? [] : [photo.original_path] }).catch(() => {})
+}
+
+// Turn a post into a before & after (exactly two photos: beforeId and afterId) or back into
+// a plain post (toKind 'album'; photoIds = the order to keep, default after then before).
+export async function convertPost(albumId, toKind, { beforeId = null, afterId = null, photoIds = null } = {}) {
+  if (toKind === 'before_after') {
+    if (!beforeId || !afterId || beforeId === afterId) throw new Error('Pick a before and an after photo.')
+    const results = await Promise.all([
+      supabase.from('photos').update({ pair_role: 'before', position: 0 }).eq('id', beforeId).eq('album_id', albumId),
+      supabase.from('photos').update({ pair_role: 'after', position: 1 }).eq('id', afterId).eq('album_id', albumId),
+    ])
+    for (const r of results) must(r)
+    must(await supabase.from('albums').update({ kind: 'before_after', cover_photo_id: afterId }).eq('id', albumId))
+    return
+  }
+  const order = photoIds || [afterId, beforeId].filter(Boolean)
+  const results = await Promise.all(order.map((id, i) => supabase.from('photos').update({ pair_role: null, position: i }).eq('id', id).eq('album_id', albumId)))
+  for (const r of results) must(r)
+  must(await supabase.from('albums').update({ kind: 'album', cover_photo_id: order[0] || null }).eq('id', albumId))
 }
 
 // Occasion tags on posts are stored as album tags 'occasion-<slug>'. Setting them (and post

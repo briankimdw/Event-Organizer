@@ -120,7 +120,7 @@ export async function unreadCount() {
 // cards, migration 20261011000000_share_cards) are added once that migration is applied.
 const BASE_MESSAGE_COLUMNS = `
   id, conversation_id, sender_id, body, shared_album_id, created_at,
-  album:albums!messages_shared_album_id_fkey(id, title, caption, provider_id, cover:photos!albums_cover_photo_fk(display_path),
+  album:albums!messages_shared_album_id_fkey(id, title, caption, kind, provider_id, cover:photos!albums_cover_photo_fk(display_path),
     owner:providers!albums_provider_id_fkey(display_name))`
 const SHARE_MESSAGE_COLUMNS = `,
   shared_provider_id, shared_event_id, share_preview,
@@ -165,7 +165,7 @@ export function shareLabel(m) {
 }
 
 // The card a message carries, or null:
-//   { kind: 'post', id, providerId, title, caption, cover, vendorName, available }
+//   { kind: 'post', id, providerId, title, caption, cover, vendorName, beforeAfter, available }
 //   { kind: 'provider', id, name, avatar, cover, noun, rating, reviewCount, fromPrice, available }
 //   { kind: 'event', id, title, available: false }   (an old shared event: shown as a stub)
 function toShared(m) {
@@ -180,6 +180,7 @@ function toShared(m) {
       caption: a?.caption ?? null,
       cover: photoUrl(a?.cover?.display_path ?? p.cover ?? null),
       vendorName: a?.owner?.display_name ?? p.vendor ?? null,
+      beforeAfter: a?.kind === 'before_after', // a before & after post (cover = its after photo)
       available: !!a,
     }
   }

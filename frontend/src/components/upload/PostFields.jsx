@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { postConfig } from '../../verticals/index.js'
 import './upload.css'
@@ -26,15 +27,24 @@ export function validatePost({ title, categoryId, shotOn }) {
 const Counter = ({ value, max }) => (value.length > max * 0.8 ? <span className={`pf-count ${value.length > max ? 'over' : ''}`}>{value.length}/{max}</span> : null)
 
 // fallback: the title used when this is left empty (shown as a hint).
-export function TitleField({ value, onChange, error, placeholder = 'e.g. Nguyen–Park wedding', autoFocus, fallback }) {
+// onUseFallback: adds a "Use it" button that fills the field with the fallback (to tweak it).
+export function TitleField({ value, onChange, error, placeholder = 'e.g. Nguyen–Park wedding', autoFocus, fallback, onUseFallback }) {
+  const id = useId()
+  const showHint = !error && !value.trim() && fallback
   return (
-    <label className="field pf-field">
-      <span className="pf-label">Title <span className="pf-optional">optional</span> <Counter value={value} max={LIMITS.title} /></span>
-      <input className={`input ${error ? 'invalid' : ''}`} maxLength={LIMITS.title} value={value} autoFocus={autoFocus}
-        onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-invalid={!!error} enterKeyHint="done" />
+    <div className="field pf-field">
+      <label className="pf-label" htmlFor={id}>Title <span className="pf-optional">optional</span> <Counter value={value} max={LIMITS.title} /></label>
+      <input id={id} className={`input ${error ? 'invalid' : ''}`} maxLength={LIMITS.title} value={value} autoFocus={autoFocus}
+        onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-invalid={!!error} enterKeyHint="done"
+        aria-describedby={showHint ? `${id}-hint` : undefined} />
       {error ? <small className="field-hint" role="alert">{error}</small>
-        : !value.trim() && fallback ? <small className="muted tiny pf-hint">Left blank, it’s called “{fallback}”.</small> : null}
-    </label>
+        : showHint ? (
+          <small className="muted tiny pf-hint" id={`${id}-hint`}>
+            Left blank, it’s called “{fallback}”.
+            {onUseFallback && <> <button type="button" className="link-btn accent tiny pf-use" onClick={onUseFallback}>Use it and edit</button></>}
+          </small>
+        ) : null}
+    </div>
   )
 }
 

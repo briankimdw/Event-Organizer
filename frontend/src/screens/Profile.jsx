@@ -15,6 +15,8 @@ import { PolicyTable, priceLabel } from '../components/Booking.jsx'
 import { ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
 import SendToSheet from '../components/share/ShareSheet.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
+import { BeforeAfterThumb } from '../components/beforeafter/BeforeAfter.jsx'
+import BeforeAfterShowcase from '../components/beforeafter/Showcase.jsx'
 import { MapPreview } from '../components/map/LazyMap.jsx'
 import AttributeList from '../components/verticals/AttributeList.jsx'
 import { VerticalTag } from '../components/verticals/VerticalIcon.jsx'
@@ -333,6 +335,9 @@ export default function Profile() {
             </div>
           )}
           {albums?.length > 0 && (
+            <BeforeAfterShowcase albums={albums} galleryTo={(a) => `/gallery/${provider.id}?post=${a.id}`} />
+          )}
+          {albums?.length > 0 && (
             <div className="grid3 mt-sm">
               {albums.map((a) => (
                 <Link
@@ -340,8 +345,11 @@ export default function Profile() {
                   to={a.status === 'under_review' && isMine ? `/ai-review/${a.id}` : `/gallery/${provider.id}?post=${a.id}`}
                   className="album-tile"
                   title={a.title}
+                  aria-label={a.type === 'beforeafter' ? `${a.title || 'Post'}, before and after` : undefined}
                 >
-                  <img src={a.cover} alt="" loading="lazy" />
+                  {a.type === 'beforeafter'
+                    ? <BeforeAfterThumb before={a.photos[0]?.beforeSrc} after={a.photos[0]?.src || a.cover} aspect="1" />
+                    : <img src={a.cover} alt="" loading="lazy" />}
                   {a.photos.length > 1 && (
                     <span className="album-count"><Copy size={12} /> {a.photos.length}</span>
                   )}

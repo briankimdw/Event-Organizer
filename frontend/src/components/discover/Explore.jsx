@@ -4,6 +4,7 @@ import { ImageOff, Search as SearchIcon, Star } from 'lucide-react'
 import ProfileLink, { PersonAvatar } from '../ProfileLink.jsx'
 import { EmptyState, ErrorState } from '../States.jsx'
 import CatalogIcon from '../home/CatalogIcon.jsx'
+import { BeforeAfterThumb } from '../beforeafter/BeforeAfter.jsx'
 import { useAuth } from '../../auth.jsx'
 import useQuery from '../../lib/useQuery.js'
 import { fromPriceLabel } from '../../lib/format.js'
@@ -122,8 +123,12 @@ function Tile({ t }) {
   const p = t.provider
   return (
     <figure className="dc-tile">
-      <Link to={`/gallery/${p.id}?post=${t.albumId}&photo=${t.id}`} className="dc-tile-img" style={{ aspectRatio: `1 / ${t.ratio}` }} aria-label={`${t.title || 'Post'} by ${p.name}`}>
-        <img src={t.src} alt={t.title ? `${t.title} by ${p.name}` : `Work by ${p.name}`} loading="lazy" draggable={false} />
+      <Link to={`/gallery/${p.id}?post=${t.albumId}&photo=${t.id}`} className="dc-tile-img" style={{ aspectRatio: `1 / ${t.ratio}` }} aria-label={`${t.title || 'Post'} by ${p.name}${t.beforeAfter ? ', before and after' : ''}`}>
+        {t.beforeAfter ? (
+          <BeforeAfterThumb before={t.beforeSrc} after={t.src} alt={t.title ? `${t.title} by ${p.name}` : `Work by ${p.name}`} />
+        ) : (
+          <img src={t.src} alt={t.title ? `${t.title} by ${p.name}` : `Work by ${p.name}`} loading="lazy" draggable={false} />
+        )}
       </Link>
       <figcaption className="dc-tile-cap">
         <PersonAvatar id={p.id} src={p.avatar} name={p.name} username={p.username} className="avatar dc-tile-avatar" />

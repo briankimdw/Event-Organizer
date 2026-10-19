@@ -1,21 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ImagePlus, Lock, MapPinOff, X } from 'lucide-react'
+import { ChevronLeft, ImagePlus, Lock, MapPinOff, RotateCcw, Wand2, X } from 'lucide-react'
 import Segmented from '../components/Segmented.jsx'
+import useDocumentTitle from '../components/useDocumentTitle.js'
 import Sheet from '../components/Sheet.jsx'
 import { ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import VerticalIcon from '../components/verticals/VerticalIcon.jsx'
 import PhotoPicker from '../components/upload/PhotoPicker.jsx'
 import usePhotoItems from '../components/upload/usePhotoItems.js'
+import usePostQueue from '../components/upload/usePostQueue.js'
+import { loadQueue } from '../components/upload/uploadQueue.js'
+import { EditorLayer, editorAvailable } from '../components/upload/editorBridge.jsx'
+import EditAllSheet from '../components/upload/EditAllSheet.jsx'
 import CameraSettings, { SETTING_FIELDS, readFields, settingsSummary } from '../components/upload/CameraSettings.jsx'
 import { CaptionField, CategoryField, Disclosure, PlaceDateFields, TitleField, prettyDay, validatePost } from '../components/upload/PostFields.jsx'
 import ListingPicker from '../components/upload/ListingPicker.jsx'
-import { Posted, PostFailed, Posting } from '../components/upload/PostingStatus.jsx'
+import { PostFailed, Posted, Posting } from '../components/upload/PostingStatus.jsx'
 import { useAuth } from '../auth.jsx'
 import { useStore } from '../store.jsx'
 import { invalidate } from '../api/catalog.js'
-import { getMyProviders, getProviderServiceIds, getServicesOf, postAlbum } from '../api/portfolio.js'
-import { autoPostTitle, postConfig } from '../verticals/index.js'
+import { getMyProviders, getProviderServiceIds, getServicesOf, suggestPostTitle } from '../api/portfolio.js'
+import { isHeic } from '../lib/images.js'
+import { postConfig } from '../verticals/index.js'
 import '../components/upload/upload.css'
 
 const lastCategoryKey = (providerId) => `pm:last-category:${providerId}`
@@ -28,13 +35,6 @@ const writeLast = (key, value) => {
 
 // Every camera setting (for a config that turns camera settings off: none are kept).
 const ALL_SETTINGS = SETTING_FIELDS.map(([key]) => key)
-
-const friendlyError = (err) => {
-  const msg = err?.message || ''
-  if (/failed to fetch|networkerror|load failed/i.test(msg)) return 'Network problem. Check your connection and try again.'
-  if (/jwt|not authenticated|row-level security/i.test(msg)) return 'Your session expired. Sign in again, then retry.'
-  return msg || 'Something went wrong.'
-}
 
 // Post photo & video work to your listing. Signed-in photographers only: people without a
 // listing get a short explanation and a way to set one up. Camera settings (EXIF) are always
@@ -88,6 +88,7 @@ export default function Upload() {
 
 // Same look as TopBar, with a custom back action (and an optional close icon).
 function Header({ title, subtitle, onBack, close = false, right }) {
+  useDocumentTitle(title)
   const navigate = useNavigate()
   const location = useLocation()
   const back = onBack ?? (() => (location.key === 'default' ? navigate('/me', { replace: true }) : navigate(-1)))
@@ -100,10 +101,10 @@ function Header({ title, subtitle, onBack, close = false, right }) {
           </button>
         )}
       </div>
-      <div className="topbar-title">
-        <div>{title}</div>
+      <h1 className="topbar-title">
+        <span className="topbar-name">{title}</span>
         {subtitle && <small>{subtitle}</small>}
-      </div>
+      </h1>
       <div className="topbar-side right">{right}</div>
     </header>
   )
@@ -134,13 +135,18 @@ function NotAPhotographer() {
   )
 }
 
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files')
+const photoWord = (n) => (n === 1 ? '1 photo' : `${n} photos`)
+
 // ---------------------------------------------------------------------------
-// The composer: 1) photos, 2) details, then posting
+// The composer: 1) photos (+ editing), 2) details, then posting
 // ---------------------------------------------------------------------------
 function Composer({ providers, initialId, userId }) {
   const navigate = useNavigate()
   const location = useLocation()
   const photos = usePhotoItems()
+  const queue = usePostQueue(userId)
+  const { job } = queue
   const { items } = photos
 
   const [providerId, setProviderId] = useState(initialId)
@@ -149,7 +155,6 @@ function Composer({ providers, initialId, userId }) {
   const post = postConfig(vertical)
 
   const [step, setStep] = useState(1)
-  const [phase, setPhase] = useState('edit') // edit | posting | done | failed
   const [mode, setMode] = useState('photos') // photos | before_after
   const [title, setTitle] = useState('')
   const [categoryId, setCategoryId] = useState(null)
@@ -164,8 +169,24 @@ function Composer({ providers, initialId, userId }) {
   const [openCamera, setOpenCamera] = useState(false)
   const [discarding, setDiscarding] = useState(false)
   const [dropping, setDropping] = useState(false)
-  const [posting, setPosting] = useState(null) // { list, perPhoto, error, albumId, cover }
+  const [preparing, setPreparing] = useState(false)
+  const [editing, setEditing] = useState(null) // { id, pair }
+  const [editAll, setEditAll] = useState(false)
+  const [saved, setSaved] = useState(null) // an unfinished upload from before (IndexedDB)
+  const [said, setSaid] = useState('') // screen reader announcements
   const body = useRef()
+  const openPicker = useRef(null)
+  const announce = useCallback((text) => {
+    setSaid('')
+    requestAnimationFrame(() => setSaid(text))
+  }, [])
+
+  // An upload that didn't finish last time (tab closed, connection lost)?
+  useEffect(() => {
+    let live = true
+    loadQueue(userId).then((rec) => live && setSaved(rec && rec.items.some((it) => it.state !== 'done') ? rec : null))
+    return () => { live = false }
+  }, [userId])
 
   // The listing's categories, and a sensible default: the last one used, or the only one it offers.
   useEffect(() => {
@@ -195,11 +216,19 @@ function Composer({ providers, initialId, userId }) {
     if (!place.trim() || place === provider.city) setPlace(next.city || '')
   }
 
+  const switchMode = (m) => {
+    if (m === mode) return
+    setMode(m)
+    photos.clearNotice()
+    if (m === 'photos') photos.dropPairs() // a before made from an edit isn't a photo of its own
+  }
+
   // The photos in this post (before/after uses the first two).
   const used = mode === 'before_after' ? items.slice(0, 2) : items
   const ready = used.length > 0 && used.every((i) => i.status === 'ready')
   const canContinue = ready && (mode === 'before_after' ? used.length === 2 : true)
   const kindLabel = mode === 'before_after' ? 'before & after' : 'post'
+  const editedCount = used.filter((i) => i.edited).length
 
   // Event date from the photos (earliest), unless you've set it yourself.
   const exifDate = useMemo(() => used.map((i) => i.settings?.taken_on).filter(Boolean).sort()[0] || '', [used])
@@ -209,10 +238,10 @@ function Composer({ providers, initialId, userId }) {
 
   const fields = useMemo(() => (post.showCamera ? readFields(used) : []), [used, post.showCamera])
   const serviceName = services?.find((s) => s.id === categoryId)?.name
-  const fallbackTitle = autoPostTitle({ service: serviceName })
+  const suggestion = suggestPostTitle({ service: serviceName, shotOn, location: place })
 
   // Warn before closing the tab with unposted photos (or mid-upload).
-  const dirty = items.length > 0 && phase !== 'done'
+  const dirty = (items.length > 0 && job?.phase !== 'done') || (job && !['done', 'failed'].includes(job.phase))
   useEffect(() => {
     if (!dirty) return
     const onUnload = (e) => {
@@ -242,28 +271,78 @@ function Composer({ providers, initialId, userId }) {
       return n
     })
 
-  // Drag & drop files anywhere on the composer (desktop).
-  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files')
-  const dropProps = phase === 'edit' ? {
-    onDragOver: (e) => {
+  const addFiles = useCallback((files) => {
+    const ids = photos.add(files, { max: mode === 'before_after' ? 2 : undefined })
+    if (ids.length) {
+      announce(`${photoWord(ids.length)} added.`)
+      if (step !== 1) goStep(1)
+    }
+  }, [photos, mode, step, announce])
+
+  // Drop files anywhere in the window, or paste them (while composing).
+  const composing = !job && !editing
+  useEffect(() => {
+    if (!composing) return
+    let depth = 0
+    const enter = (e) => { if (hasFiles(e)) { depth++; setDropping(true) } }
+    const over = (e) => {
       if (!hasFiles(e)) return
       e.preventDefault()
       e.dataTransfer.dropEffect = 'copy'
-      setDropping(true)
-    },
-    onDragLeave: (e) => {
-      if (!e.currentTarget.contains(e.relatedTarget)) setDropping(false)
-    },
-    onDrop: (e) => {
+    }
+    const leaveWin = (e) => { if (hasFiles(e) && --depth <= 0) { depth = 0; setDropping(false) } }
+    const drop = (e) => {
+      depth = 0
+      setDropping(false)
       if (!hasFiles(e)) return
       e.preventDefault()
-      setDropping(false)
-      photos.add(e.dataTransfer.files, { max: mode === 'before_after' ? 2 : undefined })
-      if (step !== 1) goStep(1)
-    },
-  } : {}
+      addFiles(e.dataTransfer.files)
+    }
+    const paste = (e) => {
+      const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/') || isHeic(f))
+      if (!files.length) return
+      e.preventDefault()
+      addFiles(files)
+    }
+    window.addEventListener('dragenter', enter)
+    window.addEventListener('dragover', over)
+    window.addEventListener('dragleave', leaveWin)
+    window.addEventListener('drop', drop)
+    window.addEventListener('paste', paste)
+    return () => {
+      window.removeEventListener('dragenter', enter)
+      window.removeEventListener('dragover', over)
+      window.removeEventListener('dragleave', leaveWin)
+      window.removeEventListener('drop', drop)
+      window.removeEventListener('paste', paste)
+    }
+  }, [composing, addFiles])
 
-  const post_ = async () => {
+  // ---- editing ----
+  const editingItem = editing && items.find((i) => i.id === editing.id)
+  const openEditor = editorAvailable ? (item, { pair = false } = {}) => setEditing({ id: item.id, pair }) : null
+  const finishEdit = async (res) => {
+    const { id, pair } = editing
+    setEditing(null)
+    if (!res?.blob) return
+    try {
+      if (pair || res.makeBeforeAfter) {
+        await photos.makePair(id, res)
+        setMode('before_after')
+        announce('Before & after made: the original is the before, your edit the after.')
+      } else if (!res.recipe) {
+        photos.clearEdit(id) // nothing changed (or everything reset): the original
+      } else {
+        await photos.setEdit(id, res)
+        announce('Edit saved.')
+      }
+    } catch (err) {
+      announce(`Couldn’t use that edit: ${err.message}`)
+    }
+  }
+
+  // ---- posting ----
+  const startPosting = async () => {
     const errs = validatePost({ title, categoryId, shotOn })
     setErrors(errs)
     if (Object.keys(errs).length) {
@@ -271,42 +350,35 @@ function Composer({ providers, initialId, userId }) {
       setTimeout(() => body.current?.querySelector('[aria-invalid=true], .field-hint')?.closest('.field')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
       return
     }
-    const list = used
-    setPosting({ list, perPhoto: [], error: '', albumId: null, cover: list[mode === 'before_after' ? 1 : 0]?.processed?.url || list[0]?.thumbUrl })
-    setPhase('posting')
-    scrollTop()
+    setPreparing(true)
     try {
-      const files = await photos.forUpload(list)
-      const albumId = await postAlbum({
-        userId,
+      const files = await photos.forUpload(used)
+      await queue.start({
         providerId: provider.id,
         kind: mode === 'before_after' ? 'before_after' : 'album',
-        title: title.trim() || fallbackTitle,
-        caption: caption.trim(),
-        location: place.trim(),
-        shotOn,
-        categoryId,
-        files,
+        meta: { title: title.trim() || suggestion, caption: caption.trim(), location: place.trim(), shotOn, categoryId },
         hiddenFields: post.showCamera ? [...hidden] : ALL_SETTINGS,
-        onPhotoProgress: (i, p) => setPosting((s) => {
-          const perPhoto = [...s.perPhoto]
-          perPhoto[i] = p
-          return { ...s, perPhoto }
-        }),
+        items: used.map((it, i) => ({
+          key: it.id, name: it.name, thumbUrl: it.thumbUrl, ...files[i],
+          pairRole: mode === 'before_after' ? (i === 0 ? 'before' : 'after') : null,
+        })),
       })
-      writeLast(lastCategoryKey(provider.id), categoryId)
-      invalidate('providers')
-      setPosting((s) => ({ ...s, albumId }))
-      setPhase('done')
-    } catch (err) {
-      console.warn(err)
-      setPosting((s) => ({ ...s, error: friendlyError(err) }))
-      setPhase('failed')
+    } finally {
+      setPreparing(false)
     }
+    scrollTop()
   }
+
+  // Remember the category; refresh lists once posted.
+  useEffect(() => {
+    if (job?.phase !== 'done') return
+    if (categoryId) writeLast(lastCategoryKey(job.providerId || provider.id), categoryId)
+    invalidate('providers')
+  }, [job?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const postAnother = () => {
     photos.reset()
+    queue.reset()
     setTitle('')
     setCaption('')
     setDateTouched(false)
@@ -315,130 +387,208 @@ function Composer({ providers, initialId, userId }) {
     setOpenMore(false)
     setOpenCamera(false)
     setMode('photos')
-    setPosting(null)
-    setPhase('edit')
     goStep(1)
   }
 
+  const cancelPosting = async () => {
+    await queue.cancel()
+    announce('Posting cancelled. Nothing was published; your photos are still here.')
+  }
+
+  const resumeSaved = () => {
+    const rec = saved
+    setSaved(null)
+    queue.resume(rec)
+  }
+  const discardSaved = () => {
+    const rec = saved
+    setSaved(null)
+    queue.discardSaved(rec)
+    announce('Unfinished post discarded.')
+  }
+
+  const live = <div className="sr-only" role="status" aria-live="polite">{said}</div>
+
   // ---- posting / done / failed ----
-  if (phase !== 'edit') {
+  if (job) {
+    const jobKind = job.kind === 'before_after' ? 'before & after' : 'post'
+    const coverItem = job.list[job.kind === 'before_after' ? 1 : 0] || job.list[0]
+    const busy = ['creating', 'posting', 'publishing', 'cancelling'].includes(job.phase)
     return (
       <div className="up-screen" ref={body}>
-        <Header title="New post" onBack={phase === 'posting' ? false : phase === 'failed' ? () => setPhase('edit') : leave} close={phase === 'done'} />
-        {phase === 'posting' && <Posting items={posting.list} perPhoto={posting.perPhoto} kindLabel={kindLabel} />}
-        {phase === 'done' && (
-          <Posted cover={posting.cover} kindLabel={kindLabel} viewTo={`/gallery/${provider.id}?post=${posting.albumId}`} onAnother={postAnother} />
+        <Header title="New post" onBack={busy ? false : job.phase === 'done' ? leave : job.phase === 'failed' ? queue.reset : false}
+          close={job.phase === 'done'} />
+        {['creating', 'posting', 'publishing', 'partial', 'cancelling'].includes(job.phase) && (
+          <Posting job={job} kindLabel={jobKind} onRetry={queue.retry} onCancel={cancelPosting} onPublishPartial={queue.publishPartial} />
         )}
-        {phase === 'failed' && <PostFailed error={posting.error} onRetry={post_} onEdit={() => setPhase('edit')} />}
+        {job.phase === 'done' && (
+          <Posted cover={coverItem?.thumbUrl} kindLabel={jobKind} partial={job.partial} viewTo={`/gallery/${job.providerId}?post=${job.albumId}`} onAnother={postAnother}
+            share={{ kind: 'post', id: job.albumId, providerId: job.providerId, title: job.title, subtitle: provider.display_name, image: coverItem?.thumbUrl }} />
+        )}
+        {job.phase === 'failed' && (
+          <PostFailed error={job.error} onRetry={job.gone || job.resumed ? null : startPosting} onEdit={queue.reset} />
+        )}
+        {live}
       </div>
     )
   }
 
-  const countLine = (n) => (n === 1 ? '1 photo' : `${n} photos`)
+  const countLine = (n) => photoWord(n)
   const subtitle = used.length ? (mode === 'before_after' ? 'Before & after' : countLine(used.length)) : providers.length > 1 ? null : provider.display_name
   const moreSummary = [place.trim(), prettyDay(shotOn), caption.trim() && 'caption added'].filter(Boolean).join(' · ')
   const shownCount = fields.filter((f) => !hidden.has(f.key)).length
+  const savedDone = saved ? saved.items.filter((it) => it.state === 'done').length : 0
 
   return (
-    <div className="up-screen" ref={body} {...dropProps}>
-      <Header title="New post" subtitle={subtitle} onBack={onBack} close={step === 1} />
-      <div className="up-steps" aria-label={`Step ${step} of 2`}>
-        <button type="button" className={`up-step ${step >= 1 ? 'on' : ''}`} onClick={() => goStep(1)} aria-current={step === 1 ? 'step' : undefined}>
-          <span className="up-step-bar" /><span>1 · Photos</span>
-        </button>
-        <button type="button" className={`up-step ${step >= 2 ? 'on' : ''}`} onClick={() => canContinue && goStep(2)} disabled={!canContinue} aria-current={step === 2 ? 'step' : undefined}>
-          <span className="up-step-bar" /><span>2 · Details</span>
-        </button>
+    <>
+      <div className="up-screen" ref={body} inert={editing ? '' : undefined}>
+        <Header title="New post" subtitle={subtitle} onBack={onBack} close={step === 1} />
+        <div className="up-steps" role="group" aria-label={`Step ${step} of 2`}>
+          <button type="button" className={`up-step ${step >= 1 ? 'on' : ''}`} onClick={() => goStep(1)} aria-current={step === 1 ? 'step' : undefined}>
+            <span className="up-step-bar" /><span>1 · Photos</span>
+          </button>
+          <button type="button" className={`up-step ${step >= 2 ? 'on' : ''}`} onClick={() => canContinue && goStep(2)} disabled={!canContinue} aria-current={step === 2 ? 'step' : undefined}>
+            <span className="up-step-bar" /><span>2 · Details</span>
+          </button>
+        </div>
+
+        {providers.length > 1 && (
+          <div className="up-listing">
+            <ListingPicker providers={providers} value={provider.id} onChange={switchListing} />
+          </div>
+        )}
+
+        {step === 1 ? (
+          <div className="pad up-body">
+            {saved && (
+              <section className="up-resume" aria-label="Unfinished post">
+                {saved.items[0]?.thumb && <ResumeThumb blob={saved.items[saved.kind === 'before_after' ? 1 : 0]?.thumb || saved.items[0].thumb} />}
+                <div className="grow">
+                  <b className="small">Finish posting “{saved.meta?.title || 'your post'}”?</b>
+                  <div className="muted tiny">
+                    {savedDone ? `${savedDone} of ${saved.items.length} photos went up before it stopped.` : `${photoWord(saved.items.length)} didn’t finish uploading.`}
+                  </div>
+                  <div className="up-resume-actions">
+                    <button type="button" className="btn sm accent" onClick={resumeSaved}><RotateCcw size={14} aria-hidden="true" /> Resume</button>
+                    <button type="button" className="btn sm ghost" onClick={discardSaved}>Discard</button>
+                  </div>
+                </div>
+              </section>
+            )}
+            {post.beforeAfter && (
+              <Segmented
+                className="up-mode"
+                label="Post type"
+                options={[{ value: 'photos', label: 'Photos' }, { value: 'before_after', label: 'Before & after' }]}
+                value={mode}
+                onChange={switchMode}
+              />
+            )}
+            <div className={post.beforeAfter ? 'mt' : ''}>
+              <PhotoPicker mode={mode} photos={photos} copy={post} onEdit={openEditor} announce={announce} pickerRef={openPicker} />
+            </div>
+            {mode === 'photos' && used.length > 1 && editorAvailable && (
+              <button type="button" className="link-btn small up-editall" onClick={() => setEditAll(true)} disabled={!ready} aria-haspopup="dialog">
+                <Wand2 size={14} aria-hidden="true" /> Edit all: apply one look to every photo
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="pad up-body up-details">
+            <button type="button" className="up-summary" onClick={() => goStep(1)}>
+              <span className="up-summary-thumbs">
+                {used.slice(0, 3).map((it, i) => <img key={it.id} src={it.thumbUrl} alt="" style={{ zIndex: 3 - i }} />)}
+              </span>
+              <span className="grow">
+                <b className="small">{mode === 'before_after' ? 'Before & after' : countLine(used.length)}</b>
+                <span className="muted tiny block">
+                  {mode === 'before_after' ? 'Before first, then after' : used.length > 1 ? 'First photo is the cover' : 'Ready to post'}
+                  {editedCount ? ` · ${editedCount} edited` : ''}
+                </span>
+              </span>
+              <span className="link-btn accent small">Change</span>
+            </button>
+
+            <CategoryField label="What is it?" value={categoryId} services={services} error={errors.category}
+              onChange={(v) => { setCategoryId(v); errors.category && setErrors((e) => ({ ...e, category: undefined })) }} />
+            <TitleField value={title} onChange={(v) => { setTitle(v); errors.title && setErrors((e) => ({ ...e, title: undefined })) }} error={errors.title}
+              placeholder={post.title} fallback={suggestion} onUseFallback={() => setTitle(suggestion)} />
+
+            <Disclosure title="More details" badge={<span className="pf-optional">optional</span>} summary={moreSummary || 'Caption, location, date'}
+              open={openMore} onToggle={() => setOpenMore((o) => !o)}>
+              <CaptionField value={caption} onChange={setCaption} placeholder={post.caption} />
+              <PlaceDateFields location={place} onLocation={setPlace} shotOn={shotOn}
+                onShotOn={(v) => { setShotOn(v); setDateTouched(true); errors.shotOn && setErrors((e) => ({ ...e, shotOn: undefined })) }}
+                dateError={errors.shotOn} dateHint={!dateTouched && exifDate ? 'Date read from your photos.' : null} />
+            </Disclosure>
+
+            {post.showCamera && (
+              <Disclosure title="Camera settings"
+                badge={fields.length ? <span className="pf-optional">{shownCount} of {fields.length} shown</span> : null}
+                summary={fields.length ? settingsSummary(fields, hidden) || 'All hidden' : 'None found in these photos'}
+                open={openCamera} onToggle={() => setOpenCamera((o) => !o)}>
+                <CameraSettings fields={fields} hidden={hidden} onToggle={toggleHidden} />
+              </Disclosure>
+            )}
+
+            <div className="up-trust">
+              <div><MapPinOff size={14} aria-hidden="true" /> GPS location is never read, and it’s stripped from what clients see.</div>
+              <div><Lock size={14} aria-hidden="true" /> Your full-size originals are stored privately{editedCount ? ', so you can re-edit later' : ''}.</div>
+            </div>
+          </div>
+        )}
+
+        {(step === 2 || items.length > 0) && <div className="up-footer">
+          {step === 1 ? (
+            <button className="btn accent block" disabled={!canContinue} onClick={() => goStep(2)}>
+              {items.some((i) => i.status === 'loading') ? 'Reading photos…' : mode === 'before_after' && used.length === 1 ? 'Add the after photo' : 'Next'}
+            </button>
+          ) : (
+            <button className="btn accent block" onClick={startPosting} disabled={preparing}>
+              {preparing ? 'Getting photos ready…' : mode === 'before_after' ? 'Post before & after' : `Post${used.length > 1 ? ` ${used.length} photos` : ''}`}
+            </button>
+          )}
+        </div>}
+
+        {dropping && (
+          <div className="up-dropping" aria-hidden="true">
+            <ImagePlus size={30} />
+            <b>Drop to add photos</b>
+          </div>
+        )}
+
+        <Sheet open={discarding} onClose={() => setDiscarding(false)} title="Discard this post?">
+          <p className="muted small">The photos{editedCount ? ', edits' : ''} and details you’ve added won’t be saved.</p>
+          <div className="sheet-actions">
+            <button className="btn danger-solid block" onClick={() => { setDiscarding(false); photos.reset(); leave() }}>Discard</button>
+            <button className="btn ghost block" onClick={() => setDiscarding(false)}>Keep editing</button>
+          </div>
+        </Sheet>
+        {editAll && <EditAllSheet photos={photos} items={used} onClose={() => setEditAll(false)} announce={announce} />}
+        {live}
       </div>
 
-      {providers.length > 1 && (
-        <div className="up-listing">
-          <ListingPicker providers={providers} value={provider.id} onChange={switchListing} />
-        </div>
+      {editing && editingItem && createPortal(
+        <EditorLayer
+          source={editingItem.source || editingItem.file}
+          initialRecipe={editingItem.recipe}
+          mode="post"
+          allowBeforeAfter={mode === 'photos' || editing.pair}
+          onDone={finishEdit}
+          onCancel={() => setEditing(null)}
+        />,
+        document.getElementById('phone') || document.body,
       )}
-
-      {step === 1 ? (
-        <div className="pad up-body">
-          {post.beforeAfter && (
-            <Segmented
-              className="up-mode"
-              options={[{ value: 'photos', label: 'Photos' }, { value: 'before_after', label: 'Before / After' }]}
-              value={mode}
-              onChange={(m) => { setMode(m); photos.clearNotice() }}
-            />
-          )}
-          <div className={post.beforeAfter ? 'mt' : ''}>
-            <PhotoPicker mode={mode} photos={photos} copy={post} />
-          </div>
-        </div>
-      ) : (
-        <div className="pad up-body up-details">
-          <button type="button" className="up-summary" onClick={() => goStep(1)}>
-            <span className="up-summary-thumbs">
-              {used.slice(0, 3).map((it, i) => <img key={it.id} src={it.thumbUrl} alt="" style={{ zIndex: 3 - i }} />)}
-            </span>
-            <span className="grow">
-              <b className="small">{mode === 'before_after' ? 'Before & after' : countLine(used.length)}</b>
-              <span className="muted tiny block">{mode === 'before_after' ? 'Before first, then after' : used.length > 1 ? 'First photo is the cover' : 'Ready to post'}</span>
-            </span>
-            <span className="link-btn accent small">Edit</span>
-          </button>
-
-          <CategoryField label="What is it?" value={categoryId} services={services} error={errors.category}
-            onChange={(v) => { setCategoryId(v); errors.category && setErrors((e) => ({ ...e, category: undefined })) }} />
-          <TitleField value={title} onChange={(v) => { setTitle(v); errors.title && setErrors((e) => ({ ...e, title: undefined })) }} error={errors.title}
-            placeholder={post.title} fallback={categoryId ? fallbackTitle : null} />
-
-          <Disclosure title="More details" badge={<span className="pf-optional">optional</span>} summary={moreSummary || 'Caption, location, date'}
-            open={openMore} onToggle={() => setOpenMore((o) => !o)}>
-            <CaptionField value={caption} onChange={setCaption} placeholder={post.caption} />
-            <PlaceDateFields location={place} onLocation={setPlace} shotOn={shotOn}
-              onShotOn={(v) => { setShotOn(v); setDateTouched(true); errors.shotOn && setErrors((e) => ({ ...e, shotOn: undefined })) }}
-              dateError={errors.shotOn} dateHint={!dateTouched && exifDate ? 'Date read from your photos.' : null} />
-          </Disclosure>
-
-          {post.showCamera && (
-            <Disclosure title="Camera settings"
-              badge={fields.length ? <span className="pf-optional">{shownCount} of {fields.length} shown</span> : null}
-              summary={fields.length ? settingsSummary(fields, hidden) || 'All hidden' : 'None found in these photos'}
-              open={openCamera} onToggle={() => setOpenCamera((o) => !o)}>
-              <CameraSettings fields={fields} hidden={hidden} onToggle={toggleHidden} />
-            </Disclosure>
-          )}
-
-          <div className="up-trust">
-            <div><MapPinOff size={14} /> GPS location is never read, and it’s stripped from what clients see.</div>
-            <div><Lock size={14} /> Your full-size originals are stored privately.</div>
-          </div>
-        </div>
-      )}
-
-      {(step === 2 || items.length > 0) && <div className="up-footer">
-        {step === 1 ? (
-          <button className="btn accent block" disabled={!canContinue} onClick={() => goStep(2)}>
-            {items.some((i) => i.status === 'loading') ? 'Reading photos…' : mode === 'before_after' && used.length === 1 ? 'Add the after photo' : 'Next'}
-          </button>
-        ) : (
-          <button className="btn accent block" onClick={post_}>
-            {mode === 'before_after' ? 'Post before & after' : 'Post'}
-          </button>
-        )}
-      </div>}
-
-      {dropping && (
-        <div className="up-dropping" aria-hidden="true">
-          <ImagePlus size={30} />
-          <b>Drop to add photos</b>
-        </div>
-      )}
-
-      <Sheet open={discarding} onClose={() => setDiscarding(false)} title="Discard this post?">
-        <p className="muted small">The photos and details you’ve added won’t be saved.</p>
-        <div className="sheet-actions">
-          <button className="btn danger-solid block" onClick={() => { setDiscarding(false); photos.reset(); leave() }}>Discard</button>
-          <button className="btn ghost block" onClick={() => setDiscarding(false)}>Keep editing</button>
-        </div>
-      </Sheet>
-    </div>
+    </>
   )
+}
+
+function ResumeThumb({ blob }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => {
+    const u = URL.createObjectURL(blob)
+    setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [blob])
+  return url ? <img className="up-resume-thumb" src={url} alt="" /> : null
 }

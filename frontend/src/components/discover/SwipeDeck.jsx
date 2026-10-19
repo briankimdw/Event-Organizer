@@ -13,6 +13,7 @@ import { callName } from '../../lib/format.js'
 import { EmptyState, ErrorState, Loading } from '../States.jsx'
 import { VendorDetails, VendorFace } from './VendorCard.jsx'
 import CatalogIcon, { TintIcon } from '../home/CatalogIcon.jsx'
+import BeforeAfter, { BeforeAfterBadge } from '../beforeafter/BeforeAfter.jsx'
 import { useStore } from '../../store.jsx'
 import { useAuth } from '../../auth.jsx'
 import useQuery from '../../lib/useQuery.js'
@@ -439,7 +440,23 @@ export default function SwipeDeck({ tabs }) {
             onPointerUp={onUp}
             onPointerCancel={onUp}
           >
-            {isVendor ? <VendorFace card={card} shot={shot} active /> : <img src={photo?.src} alt={cardLabel} draggable={false} />}
+            {isVendor ? <VendorFace card={card} shot={shot} active />
+              : card.beforeAfter && photo?.beforeSrc ? (
+                // Before & after: only the handle (and the Before button) compare; drags anywhere else
+                // still swipe the card and a tap still opens details.
+                <BeforeAfter
+                  before={photo.beforeSrc}
+                  after={photo.src}
+                  alt={card.title || 'this edit'}
+                  aspect="fill"
+                  dragFrom="handle"
+                  tapToJump={false}
+                  demo="once"
+                  compact
+                  loading="eager"
+                  style={{ '--ba-bg': '#222', '--ba-inset-top': '62px', '--ba-inset-bottom': '112px', '--ba-inset-x': '14px' }}
+                />
+              ) : <img src={photo?.src} alt={cardLabel} draggable={false} />}
 
             {photoCount > 1 && (
               <>
@@ -471,6 +488,7 @@ export default function SwipeDeck({ tabs }) {
                   {card.reason}
                 </div>
               )}
+              {card.beforeAfter && <BeforeAfterBadge className="dc-ba-badge" />}
               <button className="card-icon" onPointerDown={stop} onClick={() => setSheet('correct')} aria-label="Not into this" aria-haspopup="dialog">
                 <ThumbsDown size={16} aria-hidden="true" />
               </button>
@@ -548,7 +566,9 @@ export default function SwipeDeck({ tabs }) {
         {card && (
           <>
             {!isVendor && card.title && <h3 className="mb-sm">{card.title}</h3>}
-            {photoCount > 0 && (
+            {card.beforeAfter && card.photos[0]?.beforeSrc ? (
+              <BeforeAfter before={card.photos[0].beforeSrc} after={card.photos[0].src} alt={card.title || 'this edit'} aspect="4 / 5" className="dc-ba-detail" />
+            ) : photoCount > 0 && (
               <div className="detail-shots">
                 {card.photos.map((ph, i) => (
                   <Link

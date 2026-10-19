@@ -41,7 +41,8 @@ export async function weekendAvailability(service = null) {
 }
 
 // Portfolio photos (photo & video listings only) for the Explore grid, newest posts first. Each:
-// { id, src, width, height, albumId, title, providerId, serviceSlug, serviceName, occasion (slug|null) }
+// { id, src, width, height, albumId, title, providerId, serviceSlug, serviceName, occasion (slug|null),
+//   beforeAfter (a before & after post: this is its after photo), beforeSrc (its before photo's URL, or null) }
 export const listExplorePhotos = ({ limit = 120 } = {}) =>
   cached(`home:explore:${limit}`, async () => {
     const rows = must(
@@ -53,9 +54,14 @@ export const listExplorePhotos = ({ limit = 120 } = {}) =>
         .order('created_at', { ascending: false })
         .limit(limit),
     )
+    // Before & after posts: one tile (the after photo) carrying its before photo as beforeSrc
+    // (null if the before photo fell outside this page of rows).
+    const befores = new Map(rows.filter((r) => r.album?.kind === 'before_after' && r.pair_role === 'before').map((r) => [r.album.id, photoUrl(r.display_path)]))
     return rows
       .filter((r) => r.album && r.pair_role !== 'before')
       .map((r) => ({
+        beforeAfter: r.album.kind === 'before_after',
+        beforeSrc: r.album.kind === 'before_after' ? befores.get(r.album.id) ?? null : null,
         id: r.id,
         src: photoUrl(r.display_path),
         width: r.width || 4,
