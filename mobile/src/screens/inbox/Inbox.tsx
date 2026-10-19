@@ -2,7 +2,7 @@
 // (direct, group, booking, inquiry), newest first, with unread dots. Live: reloads
 // when a message arrives anywhere (subscribeToInbox) and whenever the tab regains focus.
 import { useFocusEffect, useRouter } from 'expo-router'
-import { Briefcase, CalendarDays, MessageCircle, Search, SquarePen, Users } from 'lucide-react-native'
+import { Briefcase, MessageCircle, Search, SquarePen, Users } from 'lucide-react-native'
 import { useCallback, useEffect, useState } from 'react'
 import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -51,7 +51,7 @@ export default function Inbox() {
 
   let body
   if (authLoading) body = <Loading />
-  else if (!user) body = <SignInPrompt title="Sign in to see your messages" text="Chat with vendors about bookings, pricing and style." />
+  else if (!user) body = <SignInPrompt title="Sign in to see your messages" text="Chat with photographers about bookings, pricing and style." />
   else if (loading && !data) body = <Loading />
   else if (error && !data) body = <ErrorState error={error} onRetry={reload} />
   else {
@@ -84,7 +84,7 @@ export default function Inbox() {
             <EmptyState
               icon={MessageCircle}
               title="No messages yet"
-              text="Message anyone, ask a vendor a question, or request a booking to start a thread."
+              text="Message anyone, ask a photographer a question, or request a booking to start a thread."
               action={<Button title="New message" size="sm" onPress={() => router.push('/inbox/new')} />}
             />
           ) : (
@@ -127,8 +127,8 @@ function ConversationRow({ c, onPress }: { c: Conversation; onPress: () => void 
           <Text weight={c.unread ? '700' : '600'} numberOfLines={1} style={s.shrink}>{c.title}</Text>
           {c.kind === 'booking' && <Tag icon={Briefcase} label="Booking" />}
           {c.kind === 'inquiry' && <Tag label="Inquiry" />}
-          {c.kind === 'group' && <Tag icon={Users} label="Group" />}
-          {c.kind === 'event' && <Tag icon={CalendarDays} label="Event" />}
+          {/* Old event chats (archived) arrive as groups from the shared api/messages.js. */}
+          {c.isGroup && <Tag icon={Users} label="Group" />}
         </View>
         <Text variant="small" numberOfLines={1} muted={!c.unread} weight={c.unread ? '600' : undefined}>{preview(c)}</Text>
       </View>

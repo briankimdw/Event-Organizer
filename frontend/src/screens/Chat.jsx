@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertCircle, Calendar, CalendarHeart, ChevronRight, ImagePlus, Info, MessageCircle, SendHorizontal } from 'lucide-react'
+import { AlertCircle, Calendar, ChevronRight, ImagePlus, Info, MessageCircle, SendHorizontal } from 'lucide-react'
 import TopBar from '../components/TopBar.jsx'
 import GalleryUpload from '../components/GalleryUpload.jsx'
 import Sheet from '../components/Sheet.jsx'
@@ -18,7 +18,6 @@ import {
   addGroupMembers, getConversation, leaveGroup, listMessages, markRead, messageError, openChat, renameGroup, sendMessage,
 } from '../api/messages.js'
 import { getBooking } from '../api/bookings.js'
-import { eventIdForConversation } from '../api/events.js'
 import { GALLERY_ACCEPT } from '../lib/galleryRules.js'
 
 const GALLERY_STATUSES = ['confirmed', 'in_progress', 'delivered'] // the provider can upload the delivery gallery
@@ -61,7 +60,6 @@ export default function Chat() {
   const c = data?.conversation
   const messages = data?.messages || []
   const { data: booking } = useQuery(c?.bookingId ? () => getBooking(c.bookingId) : null, [c?.bookingId])
-  const { data: eventId } = useQuery(c?.kind === 'event' ? () => eventIdForConversation(c.id) : null, [c?.id, c?.kind]) // event chats link to their board
   const [draft, setDraft] = useState('')
   const [menu, setMenu] = useState(null)
   const [info, setInfo] = useState(false)
@@ -170,7 +168,7 @@ export default function Chat() {
     )
   }
 
-  const isGroup = c.isGroup || c.kind === 'event'
+  const isGroup = c.isGroup
   const other = c.members[0]
   const byProfile = new Map(c.members.map((m) => [m.profileId, m]))
   const authorOf = (m) => byProfile.get(m.from) || { id: m.from, profileId: m.from, name: 'Former member', avatar: avatarUrl(null, '?') }
@@ -196,16 +194,9 @@ export default function Chat() {
         }
         subtitle={typers.length ? 'typing…' : isGroup ? `${c.members.length + 1} people` : other?.username ? `@${other.username}` : null}
         right={
-          <>
-            {eventId && (
-              <Link to={`/events/${eventId}`} className="icon-btn" aria-label="Event board" title="Event board">
-                <CalendarHeart size={20} />
-              </Link>
-            )}
-            <button className="icon-btn" aria-label="Conversation details" onClick={() => setInfo(true)}>
-              <Info size={20} />
-            </button>
-          </>
+          <button className="icon-btn" aria-label="Conversation details" onClick={() => setInfo(true)}>
+            <Info size={20} />
+          </button>
         }
       />
 
@@ -441,13 +432,15 @@ function ChatInfo({ open, onClose, conversation: c, onChanged, onLeft, onReport 
               <img className="avatar" src={m.avatar} alt="" />
               <div className="grow">
                 <div>{m.name}</div>
-                {m.username && <div className="muted tiny">@{m.username}{m.isPhotographer ? ' · Vendor' : ''}</div>}
+                {m.username && <div className="muted tiny">@{m.username}{m.isPhotographer ? ' · Photographer' : ''}</div>}
               </div>
               <ChevronRight size={16} className="muted" />
             </Link>
           ))}
           {c.isGroup && <div className="list-row muted small">+ You</div>}
-          {c.isGroup && (
+          {/* Old event chats (events were archived) are read-and-reply groups: the database only
+              manages members and names of plain groups. */}
+          {c.isGroup && !c.fromEvent && (
             <div className="settings-group mt-sm">
               <button className="list-row" onClick={() => setMode('add')}>Add people</button>
               <button className="list-row" onClick={() => { setTitle(c.customTitle || ''); setMode('rename') }}>Rename group</button>

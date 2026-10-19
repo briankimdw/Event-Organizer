@@ -1,9 +1,9 @@
 // Discover tab: native port of frontend/src/screens/Discover.jsx. Two modes, switched
 // with big text tabs in the header (kept in the route params, like the web's ?mode=):
-//   For you  - the swipe deck: every vertical mixed, or one at a time  SwipeDeck.tsx
-//              (photo cards where vendors posted, vendor cards where they haven't)
-//   Explore  - a masonry grid of real work across every vertical       Explore.tsx
-// ?v= (a vertical or 'all'), ?s= (a service) and ?o= (an occasion) are shared by both modes.
+//   For you  - the swipe deck of photo & video work                     SwipeDeck.tsx
+//              (photo cards where photographers posted, vendor cards where they haven't)
+//   Explore  - a masonry grid of real work                               Explore.tsx
+// ?s= (a service) is shared by both modes. (?v= / ?o= from old links are ignored.)
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Pressable, View } from 'react-native'
 
@@ -17,18 +17,18 @@ const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v)
 
 export default function Discover() {
   const router = useRouter()
-  const params = useLocalSearchParams<{ mode?: string; v?: string; s?: string; o?: string }>()
+  const params = useLocalSearchParams<{ mode?: string; s?: string }>()
   const mode: Mode = one(params.mode) === 'explore' ? 'explore' : 'foryou'
   const setMode = (next: Mode) => {
     if (next === mode) return
-    // Keep what's being browsed (vertical, service, occasion) across the switch, like the web.
+    // Keep the service being browsed across the switch, like the web.
     router.setParams({ mode: next === 'explore' ? 'explore' : undefined } as any)
   }
   const tabs = <DiscoverTabs value={mode} onChange={setMode} />
   return mode === 'explore' ? (
-    <Explore tabs={tabs} vertical={one(params.v) || null} service={one(params.s) || null} occasion={one(params.o) || null} />
+    <Explore tabs={tabs} service={one(params.s) || null} />
   ) : (
-    <SwipeDeck tabs={tabs} initialVertical={one(params.v)} initialService={one(params.s)} initialOccasion={one(params.o)} />
+    <SwipeDeck tabs={tabs} initialService={one(params.s)} />
   )
 }
 

@@ -2,6 +2,11 @@
 // inquiries) and their messages. You only ever see conversations you're a
 // member of (Row-Level Security); new conversations are created through
 // database functions that also enforce blocks.
+//
+// Photography pivot (2026-10-18): events with friends were archived. Event chats
+// (kind 'event' in the database) come back as plain group chats (kind 'group',
+// `fromEvent: true`), events can't be shared any more, and an old shared event shows
+// as a stub card ({ kind: 'event', title, available: false }).
 import { supabase } from '../lib/supabase.js'
 import { avatarUrl, fromPriceLabel, photoUrl } from '../lib/format.js'
 import { listProviders } from './catalog.js'
@@ -52,8 +57,9 @@ function toConversation(row, uid, last = null) {
   const lastAt = last?.created_at || row.last_message_at
   return {
     id: row.id,
-    kind: row.kind, // 'direct' | 'group' | 'booking' | 'inquiry' | 'event'
-    isGroup: row.kind === 'group',
+    kind: row.kind === 'event' ? 'group' : row.kind, // 'direct' | 'group' | 'booking' | 'inquiry'
+    isGroup: row.kind === 'group' || row.kind === 'event',
+    fromEvent: row.kind === 'event', // an old event chat: a group whose members came from an (archived) event
     title: row.title || others.map((o) => (row.kind === 'group' ? o.name.split(' ')[0] : o.name)).join(', ') || 'Just you',
     customTitle: row.title,
     bookingId: row.booking_id,
@@ -134,46 +140,34 @@ export async function shareColumnsReady() {
 }
 const messageColumns = async () => BASE_MESSAGE_COLUMNS + ((await shareColumnsReady()) ? SHARE_MESSAGE_COLUMNS : '')
 
-// What can be sent as a card in chat. Posts always work; vendor and event
-// cards need the share-card migration.
+// What can be sent as a card in chat. Posts always work; photographer cards need the
+// share-card migration. (Events were archived: `event` is always false.)
 export async function shareSupport() {
   const ready = await shareColumnsReady()
-  return { post: true, provider: ready, event: ready }
+  return { post: true, provider: ready, event: false }
 }
 
-// In-app path of a shared thing (also used for "Copy link").
+// In-app path of a shared thing (also used for "Copy link"); null for things that have no
+// page any more (events and plans were archived).
 export const shareLink = ({ kind, id, providerId } = {}) =>
   kind === 'post' ? (providerId ? `/gallery/${providerId}?post=${id}` : `/post/${id}`)
     : kind === 'provider' ? `/u/${id}`
-      : kind === 'event' ? `/events/${id}`
-        : kind === 'plan' ? '/plan'
-          : '/'
+      : kind === 'event' || kind === 'plan' ? null
+        : '/'
 
 // One-line summary of a message without text ("Shared Lumen Studio").
 export function shareLabel(m) {
   const p = m?.share_preview || {}
-  if (m?.shared_event_id || p.kind === 'event') return p.title ? `Shared an event: ${p.title}` : 'Shared an event'
-  if (m?.shared_provider_id || p.kind === 'provider') return p.name ? `Shared ${p.name}` : 'Shared a vendor'
+  if (m?.shared_event_id || p.kind === 'event') return 'Shared an event'
+  if (m?.shared_provider_id || p.kind === 'provider') return p.name ? `Shared ${p.name}` : 'Shared a photographer'
   if (m?.shared_album_id || p.kind === 'post') return 'Shared a post'
   return ''
-}
-
-const fmtEventDate = (start, end) => {
-  if (!start) return null
-  const opts = { weekday: 'short', month: 'short', day: 'numeric' }
-  const a = new Date(start)
-  const yearly = a.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}
-  const first = a.toLocaleDateString('en-US', { ...opts, ...yearly })
-  if (!end) return first
-  const b = new Date(end)
-  if (b.toDateString() === a.toDateString()) return first
-  return `${a.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${b.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...yearly })}`
 }
 
 // The card a message carries, or null:
 //   { kind: 'post', id, providerId, title, caption, cover, vendorName, available }
 //   { kind: 'provider', id, name, avatar, cover, noun, rating, reviewCount, fromPrice, available }
-//   { kind: 'event', id, title, typeName, date, location, cover, available }
+//   { kind: 'event', id, title, available: false }   (an old shared event: shown as a stub)
 function toShared(m) {
   const p = m.share_preview || {}
   if (m.shared_album_id || p.kind === 'post') {
@@ -191,7 +185,7 @@ function toShared(m) {
   }
   if (m.shared_provider_id || p.kind === 'provider') {
     const v = m.provider
-    const name = v?.display_name ?? p.name ?? 'Vendor'
+    const name = v?.display_name ?? p.name ?? 'Photographer'
     return {
       kind: 'provider',
       id: v?.id ?? m.shared_provider_id ?? p.id ?? null,
@@ -206,17 +200,7 @@ function toShared(m) {
     }
   }
   if (m.shared_event_id || p.kind === 'event') {
-    return {
-      kind: 'event',
-      id: m.shared_event_id ?? p.id ?? null,
-      title: p.title || 'Event',
-      type: p.type ?? null,
-      date: fmtEventDate(p.starts_at, p.ends_at),
-      startsAt: p.starts_at ?? null,
-      location: p.location_text ?? null,
-      cover: p.cover ? photoUrl(p.cover) : null,
-      available: !!m.shared_event_id,
-    }
+    return { kind: 'event', id: m.shared_event_id ?? p.id ?? null, title: p.title || null, available: false }
   }
   return null
 }
@@ -238,8 +222,9 @@ const toMessage = (m, uid) => {
   }
 }
 
-// Vendor cards: fill in the vertical noun, cover and "from $X" from the
-// (cached) provider list. Best effort; the card works without it.
+// Photographer cards: fill in the noun, cover and "from $X" from the (cached) provider
+// list. Best effort; the card works without it. A shared listing that isn't in the list
+// (inactive, or a non-photo vendor from the multi-vendor days) shows as unavailable.
 async function withVendorDetails(messages) {
   if (!messages.some((m) => m.shared?.kind === 'provider' && m.shared.available)) return messages
   let byId
@@ -251,8 +236,12 @@ async function withVendorDetails(messages) {
   }
   for (const m of messages) {
     const s = m.shared
-    const p = s?.kind === 'provider' ? byId.get(s.id) : null
-    if (!p) continue
+    if (s?.kind !== 'provider') continue
+    const p = byId.get(s.id)
+    if (!p) {
+      m.shared = { ...s, available: false }
+      continue
+    }
     m.shared = { ...s, name: p.name, avatar: p.avatar, cover: p.cover, noun: p.verticalInfo?.noun ?? null, vertical: p.vertical, city: p.city, rating: p.rating, reviewCount: p.reviewCount, fromPrice: fromPriceLabel(p) }
   }
   return messages
@@ -271,13 +260,12 @@ const fetchMessage = async (id, uid) => {
   return (await withVendorDetails([toMessage(data, uid)]))[0]
 }
 
-// Send a message: text and/or one shared thing (a post, a vendor or an event).
+// Send a message: text and/or one shared thing (a post or a photographer).
 // Returns the saved message.
-export async function sendMessage(conversationId, { text = null, sharedAlbumId = null, sharedProviderId = null, sharedEventId = null }) {
+export async function sendMessage(conversationId, { text = null, sharedAlbumId = null, sharedProviderId = null }) {
   const uid = await viewer()
   const row = { conversation_id: conversationId, body: text?.trim() || null, shared_album_id: sharedAlbumId }
   if (sharedProviderId) row.shared_provider_id = sharedProviderId
-  if (sharedEventId) row.shared_event_id = sharedEventId
   const saved = must(await supabase.from('messages').insert(row).select(await messageColumns()).single())
   return (await withVendorDetails([toMessage(saved, uid)]))[0]
 }
@@ -286,23 +274,24 @@ export async function sendMessage(conversationId, { text = null, sharedAlbumId =
 // Sharing ("Send to"): one message with a card in each chosen conversation.
 // ---------------------------------------------------------------------------
 
-//   await shareToChats({ conversationIds, profileIds, kind: 'post'|'provider'|'event', id, text })
+//   await shareToChats({ conversationIds, profileIds, kind: 'post'|'provider', id, text })
 // profileIds: people to send to directly; their one-to-one thread is opened
 // (or created) first. text: an optional note sent with the card.
 // Returns { sent: [conversationId], failed: [{ target, error }] }; throws only
 // when nothing could be sent.
 export async function shareToChats({ conversationIds = [], profileIds = [], kind, id, text = null, link = null } = {}) {
-  if (!['post', 'provider', 'event'].includes(kind) || !id) throw new Error('Nothing to share')
+  if (kind === 'event') throw new Error('Events can’t be shared any more.')
+  if (!['post', 'provider'].includes(kind) || !id) throw new Error('Nothing to share')
   const support = await shareSupport()
   const note = text?.trim() || null
   let payload
   if (kind === 'post') payload = { sharedAlbumId: id }
-  else if (support[kind]) payload = kind === 'provider' ? { sharedProviderId: id } : { sharedEventId: id }
-  else if (kind === 'provider') {
-    // Older database: send the vendor's link as text instead of a card.
+  else if (support.provider) payload = { sharedProviderId: id }
+  else {
+    // Older database: send the photographer's link as text instead of a card.
     const url = `${typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://photomatch.app'}${link || shareLink({ kind, id })}`
     payload = { text: note ? `${note}\n${url}` : url }
-  } else throw new Error('Sharing events in chat isn’t set up yet (database update pending).')
+  }
 
   const failed = []
   const direct = await Promise.all(
@@ -328,7 +317,7 @@ export async function shareToChats({ conversationIds = [], profileIds = [], kind
 
 // Recipients for the share sheet, as one list:
 //   { key, type: 'conversation'|'person', conversationId?, profileId?, name, avatar, avatars[], sub, isGroup }
-// With an empty query: my recent chats (DMs, groups, event chats, vendor threads).
+// With an empty query: my recent chats (DMs, groups, photographer threads).
 // With a query: matching chats, then matching people. A person I already have a
 // one-to-one thread with shows as that thread.
 export const conversationTarget = (c) => ({
@@ -338,9 +327,9 @@ export const conversationTarget = (c) => ({
   name: c.title,
   avatar: c.members[0]?.avatar ?? avatarUrl(null, c.title),
   avatars: c.members.slice(0, 2).map((m) => m.avatar),
-  isGroup: c.isGroup || c.kind === 'event' || c.members.length > 1,
+  isGroup: c.isGroup || c.members.length > 1,
   kind: c.kind,
-  sub: c.kind === 'event' ? 'Event chat' : c.isGroup ? `${c.members.length + 1} people` : c.members[0]?.username ? `@${c.members[0].username}` : '',
+  sub: c.isGroup ? `${c.members.length + 1} people` : c.members[0]?.username ? `@${c.members[0].username}` : '',
 })
 
 export const personTarget = (p) => ({

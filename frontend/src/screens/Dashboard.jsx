@@ -32,9 +32,7 @@ const HELD = ['requested', 'countered', 'accepted']
 export default function Dashboard({ tab, onTabChange, provider, bookings, onProviderChanged }) {
   const { myProvider } = useStore()
   const pending = (bookings?.data || []).filter((r) => r.status === 'requested').length
-  // Non-visual services (DJs, planners...) don't get a Portfolio tab unless they've posted.
-  const showPortfolio = verticalMeta(myProvider?.vertical).visual || (provider?.albumCount ?? 0) > 0
-  if (tab === 'portfolio' && !showPortfolio) tab = 'packages'
+  const showPortfolio = true // every photographer has a portfolio
 
   return (
     <div className="pad-x">
@@ -462,7 +460,7 @@ function Packages({ provider, onChanged }) {
       {packages.data?.map((p) => (
         <button key={p.id} className={`package-card pkg-edit ${p.isActive ? '' : 'inactive'}`} onClick={() => openEdit(p)}>
           <div className="row between">
-            <h4>{p.name}</h4>
+            <h3 className="h4">{p.name}</h3>
             <b>{priceLabel(p)}</b>
           </div>
           <div className="pkg-facts">
@@ -505,7 +503,16 @@ function Packages({ provider, onChanged }) {
               <span>Description <span className="pf-optional">optional</span></span>
               <textarea className="input" rows={2} maxLength={1000} value={form.description} onChange={set('description')} placeholder="What’s included, in a sentence or two" />
             </label>
-            <PackageFields fields={config.packageFields} values={form.attributes} onChange={(attributes) => setForm({ ...form, attributes })} />
+            {FIELD_GROUPS.map((g) => {
+              const fields = config.packageFields.filter((f) => (f.group || null) === g.key)
+              if (!fields.length) return null
+              return (
+                <fieldset key={g.label} className="v-group mt-sm">
+                  <legend className="small"><b>{g.label}</b> {g.hint && <span className="muted tiny">{g.hint}</span>}</legend>
+                  <PackageFields fields={fields} values={form.attributes} onChange={(attributes) => setForm({ ...form, attributes })} />
+                </fieldset>
+              )
+            })}
             <label className="field mt-sm"><span>Deposit: {form.depositPct}%</span><input type="range" min="0" max="100" step="5" value={form.depositPct} onChange={set('depositPct')} /></label>
             <button className="btn block mt" disabled={saving || !form.name.trim() || !form.categoryId || !priceOk} onClick={save}>
               {saving ? 'Saving…' : form.id ? 'Save changes' : 'Publish package'}
@@ -522,13 +529,17 @@ function Packages({ provider, onChanged }) {
   )
 }
 
-const PACKAGE_EXAMPLES = {
-  photography: 'Engagement session', videography: 'Wedding highlight film', catering: 'Taco bar buffet', venue: 'Saturday evening rental',
-  music: 'Reception DJ set', florals: 'Bridal bouquet', cakes: 'Three-tier wedding cake', bar: 'Open bar, 4 hours', 'hair-makeup': 'Bridal glam',
-  rentals: 'Chiavari chair', planning: 'Day-of coordination',
-}
+const PACKAGE_EXAMPLES = { photography: 'Engagement session, or Wedding highlight film' }
 
-// The listing's own custom fields (cuisines, capacity, genres...), shown above its packages.
+// The package form's field sections (`group` on the fields in verticals/photography/config.js).
+// Photo and video are both optional: a package fills in what it includes.
+const FIELD_GROUPS = [
+  { key: 'photo', label: 'Photos', hint: 'if it includes photos' },
+  { key: 'video', label: 'Video', hint: 'if it includes video' },
+  { key: null, label: 'Delivery' },
+]
+
+// The listing's own custom fields (beyond specialties, which the profile shows), above its packages.
 function ListingDetails({ provider, vertical, onChanged }) {
   const { myProvider, refreshProvider, toast } = useStore()
   const fields = verticalConfig(vertical).providerFields.filter((f) => f.key !== 'specialties')

@@ -1,11 +1,11 @@
 // Me tab: native port of frontend/src/screens/Me.jsx. Profile header with edit,
 // the Hiring / Business switch, and either the client view (bookings, shortlist,
-// following, taste, collections) or the business view: listing switcher (one
-// listing per vertical, "Add a service"), the get-ready checklist (identity,
-// payouts, package, portfolio, service area), stat tiles and the Dashboard tabs.
+// following, taste, collections) or the business view (one photo / video listing):
+// the get-ready checklist (identity, payouts, package, portfolio, service area),
+// stat tiles and the Dashboard tabs.
 // ?tab=packages|calendar|requests|portfolio opens that Dashboard tab.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
-import { Check, ChevronRight, CreditCard, Images, LogOut, MapPin, Package, Plus, Settings, ShieldCheck, SquarePlus, Store } from 'lucide-react-native'
+import { Camera, Check, ChevronRight, CreditCard, Images, LogOut, MapPin, Package, Settings, ShieldCheck, SquarePlus } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -13,12 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { listMyBookings, listProviderBookings } from '@shared/api/bookings.js'
 import { getProvider, invalidate } from '@shared/api/catalog.js'
 import { fromKey, today, toKey } from '@shared/lib/dates.js'
-import { verticalMeta } from '@shared/verticals/index.js'
-import { Button, Chip, EmptyState, IconButton, Loading, Text, VerticalIcon } from '@/components'
+import { Button, EmptyState, IconButton, Loading, Text } from '@/components'
 import useQuery, { type QueryState } from '@/hooks/useQuery'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
-import { TOGGLE_ROLE } from '@/lib/a11y'
 import { makeStyles, useTheme } from '@/theme'
 import { ClientView, ProfileHero, RoleSwitch, SignedOut, StatTile, rating } from './account/MeParts'
 import { Callout, Group, ListRow } from './account/ui'
@@ -116,15 +114,14 @@ function ProviderView({ detail, bookings, tab, onTab, openTab, onTabsLayout }: {
     return (
       <View style={s.padX}>
         <EmptyState
-          icon={Store}
-          title="Take bookings for your business"
-          text="Photographer, caterer, DJ, venue, florist… Set up a listing with your packages and clients can find and book you."
-          action={<Button title="List your services" variant="accent" onPress={() => router.push('/new-listing')} />}
+          icon={Camera}
+          title="Take bookings for your photo or video work"
+          text="Set up your listing with your packages and portfolio, and clients can find and book you."
+          action={<Button title="Set up your listing" variant="accent" onPress={() => router.push('/new-listing')} />}
         />
       </View>
     )
   }
-  const visual = verticalMeta(myProvider.vertical).visual
   const list = bookings.data || []
   const pending = list.filter((r) => r.status === 'requested').length
   const monthKey = toKey(today()).slice(0, 7)
@@ -140,14 +137,13 @@ function ProviderView({ detail, bookings, tab, onTab, openTab, onTabsLayout }: {
     // Payouts (Stripe Connect) aren't built yet, so this can't be completed.
     { done: false, label: 'Set up payouts', sub: 'Coming soon: bank payouts aren’t available yet', Icon: CreditCard, disabled: true },
     { done: packageCount > 0, label: 'Add a package', sub: 'Clients book a package', Icon: Package, tab: 'packages' },
-    visual && { done: albumCount > 0, label: 'Add portfolio work', sub: 'Post at least one album', Icon: Images, tab: 'portfolio' },
+    { done: albumCount > 0, label: 'Add portfolio work', sub: 'Post at least one album', Icon: Images, tab: 'portfolio' },
     { done: !!provider?.location, label: 'Set your service area', sub: 'Where you’re based and how far you travel', Icon: MapPin, tab: 'calendar' },
-  ] as (Step | false)[]).filter(Boolean) as Step[]
+  ] as Step[])
   const doneCount = steps.filter((x) => x.done).length
 
   return (
     <View>
-      <ListingSwitch />
       {detail.loading && !provider ? null : doneCount < steps.length ? (
         <View style={[s.padX, s.mt]}>
           <View style={s.checklist}>
@@ -202,37 +198,6 @@ function ProviderView({ detail, bookings, tab, onTab, openTab, onTabsLayout }: {
   )
 }
 
-// Your listings (one per vertical): switch between them, or add another service.
-function ListingSwitch() {
-  const s = useStyles()
-  const router = useRouter()
-  const { myProvider, myProviders, selectProvider } = useStore()
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.listings} accessibilityLabel="Your listings">
-      {myProviders.map((p) => {
-        const meta = verticalMeta(p.vertical)
-        const on = p.id === myProvider?.id
-        return (
-          <Pressable
-            key={p.id}
-            onPress={() => selectProvider(p.id)}
-            style={[s.listing, on && s.listingOn]}
-            accessibilityRole={TOGGLE_ROLE}
-            accessibilityState={{ checked: on }}
-            accessibilityLabel={p.display_name}
-          >
-            <VerticalIcon name={meta.icon} size={13} tint={meta.tint} />
-            <Text variant="small" weight="600" numberOfLines={1} style={on ? s.listingOnText : undefined}>
-              {myProviders.length > 1 ? meta.name : p.display_name}
-            </Text>
-          </Pressable>
-        )
-      })}
-      <Chip label="Add a service" icon={Plus} toggle onPress={() => router.push('/new-listing')} />
-    </ScrollView>
-  )
-}
-
 // Shortcuts at the bottom of the tab: my work, settings, sign out.
 function AccountLinks() {
   const s = useStyles()
@@ -242,7 +207,7 @@ function AccountLinks() {
   return (
     <View style={[s.padX, s.links]}>
       <Group>
-        {myProvider && verticalMeta(myProvider.vertical).visual ? <ListRow icon={Images} title="My work" sub="Your posts: view, edit, reorder" onPress={() => router.push('/my-work')} /> : null}
+        {myProvider ? <ListRow icon={Images} title="My work" sub="Your posts: view, edit, reorder" onPress={() => router.push('/my-work')} /> : null}
         <ListRow icon={Settings} title="Settings" sub="Appearance, password, verification, privacy" onPress={() => router.push('/settings')} />
         <ListRow icon={LogOut} title="Sign out" chevron={false} onPress={async () => { await signOut(); toast('Signed out') }} />
       </Group>
@@ -267,12 +232,5 @@ const useStyles = makeStyles((t) => ({
   checkDone: { backgroundColor: t.c.ok, borderColor: t.c.ok },
   doneText: { color: t.c.muted, textDecorationLine: 'line-through' },
   tiles: { flexDirection: 'row', gap: 8, paddingHorizontal: t.space.lg, marginTop: t.space.lg },
-  listings: { paddingHorizontal: t.space.lg, gap: 6, marginTop: t.space.lg },
-  listing: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 11, maxWidth: 220,
-    borderRadius: 999, borderWidth: 1, borderColor: t.c.line, backgroundColor: t.c.bg,
-  },
-  listingOn: { backgroundColor: t.c.soft, borderColor: t.c.ink },
-  listingOnText: { color: t.c.ink },
   links: { marginTop: t.space.xxl },
 }))

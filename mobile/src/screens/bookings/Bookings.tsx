@@ -1,5 +1,5 @@
 // Bookings tab: native version of frontend/src/screens/Bookings.jsx.
-// Calendar of your bookings (tap dates to see what's booked or find vendors who are free),
+// Calendar of your bookings (tap dates to see what's booked or find photographers who are free),
 // "Needs your attention" cards, then Upcoming / Past (a segmented control here, where the
 // web shows Upcoming plus a collapsible Past list).
 import { listMyBookings } from '@shared/api/bookings.js'
@@ -20,7 +20,7 @@ import DatePicker from './DatePicker'
 import type { Booking } from './NeedsAction'
 import { StatusPill, statusLabel, useRefocus } from './parts'
 
-// How to address the vendor: "Maya" or "The Glasshouse DTLA" (never just "The").
+// How to address the pro: "Maya" or "Golden Hour Studio" (never just "The").
 const callOf = (p?: { name?: string; shortName?: string } | null) => p?.shortName || callName(p?.name || '')
 
 // What the client has to do next, per booking (web attentionFor). Payments aren't live
@@ -31,7 +31,7 @@ function attentionFor(b: Booking): { title: string; cta: string; to?: string } |
   if (b.status === 'delivered') {
     return deliversMedia(b.vertical)
       ? { title: b.vertical === 'videography' ? 'Your video is ready' : 'Your photos are ready', cta: 'Review delivery', to: `/bookings/${b.id}/delivery` }
-      : { title: `${callOf(b.provider as any) || 'Your vendor'} marked this done`, cta: 'Confirm' }
+      : { title: `${callOf(b.provider as any) || 'Your photographer'} marked this done`, cta: 'Confirm' }
   }
   if (b.status === 'completed' && b.reviewWindowOpen && !b.myReview) return { title: 'How did it go?', cta: 'Leave a review', to: `/bookings/${b.id}/review` }
   return null
@@ -83,7 +83,7 @@ export default function Bookings() {
   const futureSelected = selected.filter((k) => !isPast(fromKey(k)))
   const selectedBookings = selected.flatMap((k) => byDay[k] || [])
 
-  // How many vendors are free on at least one of the picked dates (search is public).
+  // How many pros are free on at least one of the picked dates (search is public).
   const freeKey = futureSelected.join(',')
   const { data: freeMap } = useQuery<Map<string, Set<string>>>(freeKey ? () => availabilityByDay(futureSelected) : null, [freeKey])
   const freeCount = freeMap ? new Set([...freeMap.values()].flatMap((x) => [...x])).size : null
@@ -121,7 +121,7 @@ export default function Bookings() {
               {futureSelected.length > 0 && (
                 <>
                   <Button
-                    title={`Find vendors for ${futureSelected.length === 1 ? fmtChip(fromKey(futureSelected[0])) : `${futureSelected.length} dates`}`}
+                    title={`Find a photographer for ${futureSelected.length === 1 ? fmtChip(fromKey(futureSelected[0])) : `${futureSelected.length} dates`}`}
                     icon={Search}
                     variant="accent"
                     block
@@ -129,7 +129,7 @@ export default function Bookings() {
                   />
                   {freeCount != null && (
                     <Text variant="tiny" muted center>
-                      {freeCount === 0 ? 'Nobody is free then yet. Try other dates.' : `${freeCount} vendor${freeCount === 1 ? '' : 's'} free`}
+                      {freeCount === 0 ? 'Nobody is free then yet. Try other dates.' : `${freeCount} pro${freeCount === 1 ? '' : 's'} free`}
                     </Text>
                   )}
                 </>
@@ -158,7 +158,7 @@ export default function Bookings() {
       {authLoading ? (
         <Loading />
       ) : !user ? (
-        <SignInPrompt title="Sign in to see your bookings" text="Your requests, upcoming events and past bookings show up here." />
+        <SignInPrompt title="Sign in to see your bookings" text="Your requests, upcoming shoots and past bookings show up here." />
       ) : loading && !data ? (
         <Loading />
       ) : error ? (
@@ -191,7 +191,7 @@ export default function Bookings() {
                   icon={CalendarX}
                   title="Nothing coming up"
                   text={bookings.length ? 'Requests and confirmed bookings will show here.' : 'Book a photographer, caterer, DJ or venue and it shows up here.'}
-                  action={<Button title="Find vendors" size="sm" onPress={() => router.push('/search')} />}
+                  action={<Button title="Find a photographer" size="sm" onPress={() => router.push('/search')} />}
                 />
               ) : (
                 <EmptyState compact icon={History} text="Finished, declined and cancelled bookings will show here." />

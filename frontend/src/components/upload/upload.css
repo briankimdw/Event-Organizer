@@ -64,3 +64,4 @@
 .uv-example .small { line-height: 1.25; }
 .uv-actions { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 360px; margin-top: 6px; }
 .uv-foot { margin-top: 4px; }
+.uv-foot a { text-decoration: underline; }

@@ -14,14 +14,13 @@ import { AttributeList } from './AttributeList'
 type Props = {
   packages: Package[]
   addons?: { id: string; name: string; price: number | null }[]
-  vertical?: string | null
   onSelect?: (pkg: Package) => void
 }
 
-export function PackageList({ packages, addons = [], vertical = 'photography', onSelect }: Props) {
+export function PackageList({ packages, addons = [], onSelect }: Props) {
   const s = useStyles()
   const { c } = useTheme()
-  const config = verticalConfig(vertical)
+  const config = verticalConfig()
   const otherFields = config.packageFields.filter((f: { key: string }) => !config.packageKeys.includes(f.key))
   return (
     <View>

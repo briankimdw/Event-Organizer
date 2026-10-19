@@ -3,10 +3,9 @@ import { Pencil, Trash2 } from 'lucide-react'
 import Sheet from '../Sheet.jsx'
 import { useStore } from '../../store.jsx'
 import { invalidate } from '../../api/catalog.js'
-import { creditsSupported, deleteAlbum, getServicesOf, toViewerAlbum, updateAlbum } from '../../api/portfolio.js'
-import { autoPostTitle, getOccasion, occasionsFor, postConfig } from '../../verticals/index.js'
-import { CaptionField, CategoryField, OccasionField, PlaceDateFields, TitleField, validatePost } from './PostFields.jsx'
-import { CreditsField } from './Credits.jsx'
+import { deleteAlbum, getServicesOf, toViewerAlbum, updateAlbum } from '../../api/portfolio.js'
+import { autoPostTitle, postConfig } from '../../verticals/index.js'
+import { CaptionField, CategoryField, PlaceDateFields, TitleField, validatePost } from './PostFields.jsx'
 
 // Owner-only sheets for a post in the viewer: a small menu, the edit form and the
 // delete confirmation. sheet: null | 'menu' | 'edit' | 'delete'.
@@ -23,7 +22,7 @@ export default function ManagePostSheets({ album, sheet, setSheet, onUpdated, on
           <span className="round-icon"><Pencil size={16} /></span>
           <div className="grow">
             <div className="small"><b>Edit details</b></div>
-            <div className="muted tiny">Category, occasion, title, credits, caption…</div>
+            <div className="muted tiny">Category, title, caption, place and date…</div>
           </div>
         </button>
         <button className="list-row danger" onClick={() => setSheet('delete')}>
@@ -42,9 +41,6 @@ function EditSheet({ album, vertical, onClose, onSaved }) {
   const post = postConfig(vertical)
   const [title, setTitle] = useState(album.title || '')
   const [categoryId, setCategoryId] = useState(album.categoryId ?? null)
-  const [occasion, setOccasion] = useState(album.occasion?.slug ?? null)
-  const [credits, setCredits] = useState(album.credits || [])
-  const [canCredit, setCanCredit] = useState(false)
   const [caption, setCaption] = useState(album.caption || '')
   const [place, setPlace] = useState(album.location || '')
   const [shotOn, setShotOn] = useState(album.shotOn || '')
@@ -55,10 +51,9 @@ function EditSheet({ album, vertical, onClose, onSaved }) {
 
   useEffect(() => {
     getServicesOf(vertical).then(setServices).catch(() => setServices([]))
-    creditsSupported().then(setCanCredit).catch(() => {})
   }, [vertical])
 
-  const fallbackTitle = autoPostTitle({ service: services?.find((s) => s.id === categoryId)?.name, occasion: getOccasion(occasion)?.name, slug: vertical })
+  const fallbackTitle = autoPostTitle({ service: services?.find((s) => s.id === categoryId)?.name })
 
   const save = async () => {
     const errs = validatePost({ title, categoryId, shotOn })
@@ -69,8 +64,7 @@ function EditSheet({ album, vertical, onClose, onSaved }) {
     setError('')
     try {
       const row = await updateAlbum(album.id, {
-        title: title.trim() || fallbackTitle, caption, location: place, shotOn, categoryId, occasion,
-        ...(canCredit ? { credits } : {}),
+        title: title.trim() || fallbackTitle, caption, location: place, shotOn, categoryId,
       })
       invalidate('providers')
       toast('Changes saved')
@@ -85,9 +79,7 @@ function EditSheet({ album, vertical, onClose, onSaved }) {
     <Sheet open onClose={busy ? () => {} : onClose} title="Edit post">
       <div className="mp-form">
         <CategoryField label="What is it?" value={categoryId} onChange={setCategoryId} services={services} error={errors.category} />
-        <OccasionField value={occasion} onChange={setOccasion} occasions={occasionsFor(vertical)} />
         <TitleField value={title} onChange={setTitle} error={errors.title} placeholder={post.title} fallback={categoryId ? fallbackTitle : null} />
-        {canCredit && <CreditsField value={credits} onChange={setCredits} exclude={[album.providerId]} />}
         <CaptionField value={caption} onChange={setCaption} placeholder={post.caption} />
         <PlaceDateFields location={place} onLocation={setPlace} shotOn={shotOn} onShotOn={setShotOn} dateError={errors.shotOn} />
         {error && <div className="form-error" role="alert">{error}</div>}

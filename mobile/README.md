@@ -1,9 +1,37 @@
 # Mobile app (Expo)
 
-The native app for the marketplace: React Native + **Expo SDK 57** (RN 0.86, React 19.2),
-**expo-router** (file-based routes that mirror the web routes), TypeScript.
+**photomatch** for iOS and Android: a marketplace for photographers and videographers (one
+vertical, `photography`, shown as "Photo & video"). React Native + **Expo SDK 57** (RN 0.86,
+React 19.2), **expo-router** (file-based routes that mirror the web routes), TypeScript.
 It reuses the web app's plain-JS data layer (`frontend/src/api`, `lib`, `verticals`) directly,
 with no copies. See [Shared code](#shared-code-the-bridge).
+
+## Photography pivot (2026-10-18)
+
+The app used to be a multi-vendor event marketplace ("Event Organizer"). It's photography only
+now; photographers and videographers are treated the same. The removed screens are kept, not
+built, in `archive/event-platform/mobile/` (same relative paths; git tag `multi-vendor-snapshot`
+has the full previous state):
+
+- Events with friends (`/events`, `/events/[id]`, `/events/new`, the "Add to event" buttons,
+  "Your events" on Home / Me, the event board button in chats). Old event chats come back from
+  the shared `api/messages.js` as group chats; an old shared event shows as a small stub card.
+- The AI planner (`/plan`, `screens/planner/**`, `SharePlanButton`, the Home planner card, the
+  `EXPO_PUBLIC_PLANNER_URL` env and the `planner-dev-mock` shim/redirect).
+- Occasion and service pages (`/occasions/[slug]`, `/services/[vertical]`, `screens/catalog/**`,
+  Home's vertical / occasion rails), the Discover vertical picker, the New listing vertical grid.
+- Post credits between vendors (the Upload / Edit post picker, credit chips in the gallery,
+  "Tagged in" on profiles) and the post occasion picker. Old posts still show their occasion tag.
+- `?event=` on `/book/[providerId]`; one listing per person (no listing switcher / picker).
+
+Brand: the visible name is **photomatch** (`app.json` `name`, the sign-in wordmark, share
+texts; `BRAND` in `src/lib/photo.ts`). The `slug` (`event-organizer`) and URL **scheme
+`eventorganizer`** are unchanged on purpose, so existing deep links and the Supabase redirect
+URLs (`eventorganizer://**`) keep working.
+
+Until the database cleanup runs, the live data still has non-photo listings. The shared queries
+keep only photo & video listings (`isPhotoVertical`, which also counts old `videography` rows);
+the app filters its own listings / covers the same way (`isPhotoListing` in `src/lib/photo.ts`).
 
 Everything here works in **Expo Go** (no native build needed). Keep it that way: only add
 libraries that Expo Go bundles, and always install them with `npx expo install <pkg>`.
@@ -32,7 +60,6 @@ npx expo start              # scan the QR code with Expo Go
 | --- | --- |
 | `EXPO_PUBLIC_SUPABASE_URL` | Same project as `frontend/.env.local` |
 | `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The **publishable** key only (safe in a client; RLS protects data). Never a service-role key. |
-| `EXPO_PUBLIC_PLANNER_URL` | The AI planner (`services/ml`). A phone can't reach `localhost`: use the PC's LAN IP, e.g. `http://192.168.1.20:8000`. Empty = the Expo dev server's host on port 8000. |
 
 Checks (run before you hand work back):
 
@@ -57,16 +84,17 @@ mobile/
       (tabs)/             the 5 tabs: index (Home), discover, bookings, inbox, me
       u/[id].tsx  search.tsx  book/[providerId].tsx  bookings/[id]/...  inbox/[id].tsx ...
     screens/            one file (or folder) per web screen; screen-only parts live next to it
-      home/  profile/  catalog/  Search.tsx  SignIn.tsx  Me.tsx  ComingSoon.tsx
+      home/  discover/  profile/  gallery/  bookings/  inbox/  provider/  account/
+      Search.tsx  SignIn.tsx  Me.tsx  ComingSoon.tsx
     components/         app-wide UI primitives (import from '@/components')
     hooks/              React hooks (useQuery = typed wrapper of the shared one)
     state/              auth.tsx (session + profile), store.tsx (follows, shortlist, toast...)
-    lib/                supabase.ts (the one client)
+    lib/                supabase.ts (the one client), a11y.ts, photo.ts (BRAND, isPhotoListing)
     shims/              browser APIs for shared code + native stand-ins for web-only modules
     theme.ts            design tokens (colors light/dark, radius, space, font) + makeStyles;
                         AppThemeProvider / useThemePreference: Light (default) / Dark / System,
                         chosen in Settings, saved in AsyncStorage `pm:theme` (not the phone's setting)
-    types.ts            types inferred from the shared JS (Provider, Package, Vertical...)
+    types.ts            types inferred from the shared JS (Provider, Package, Vertical)
 ```
 
 Imports: `@/...` = `mobile/src/...`, `@shared/...` = `frontend/src/...`.
@@ -76,8 +104,8 @@ from `@/components`. It pads itself by exactly the part the keyboard covers, so 
 on Android edge-to-edge (where `KeyboardAvoidingView` with `behavior={undefined}` often does nothing)
 without react-native-keyboard-controller, which Expo Go doesn't include.
 
-Store (`useStore()`), same as the web's: `myProviders` (all listings, one per vertical), `myProvider`
-(the selected one), `selectProvider(id)` (remembered in AsyncStorage), `refreshProvider(selectId?)`.
+Store (`useStore()`), same as the web's: `myProvider` (your photo & video listing), `myProviders`
+(normally just that one; old data may have two), `selectProvider(id)`, `refreshProvider(selectId?)`.
 
 ## Conventions for porting a web screen
 
@@ -87,9 +115,9 @@ Store (`useStore()`), same as the web's: `myProviders` (all listings, one per ve
    route file `export { default } from '@/screens/X'`.
 3. **Data**: call the same shared functions the web screen calls, from `@shared/api/*.js`, through
    `useQuery` from `@/hooks/useQuery` (same behavior as the web hook, typed). No mock data, no
-   copied queries. Shaping helpers in `@shared/api/home.js` (buildHomeFeed, buildVerticalPage,
-   buildOccasionChecklist...) and `@shared/verticals/index.js` (priceSuffix, attributeLines,
-   verticalConfig...) are shared too: use them instead of re-deriving.
+   copied queries. Shaping helpers in `@shared/api/home.js` (buildHomeFeed, serviceCounts,
+   buildExploreTiles...) and `@shared/verticals/index.js` (SERVICE_CHIPS, priceSuffix,
+   attributeLines, verticalConfig...) are shared too: use them instead of re-deriving.
 4. **Navigation**: `react-router` -> `expo-router`.
    `<Link to="/u/1">` / `navigate('/u/1')` -> `router.push('/u/1')` or `router.push({ pathname: '/u/[id]', params: { id } })`;
    `navigate(-1)` -> `router.back()`; `useParams` / `useSearchParams` -> `useLocalSearchParams()`;
@@ -113,6 +141,8 @@ Store (`useStore()`), same as the web's: `myProviders` (all listings, one per ve
 
 TypeScript note: the shared JS is type-inferred (`allowJs`). JS default params such as
 `dates = []` infer as `never[]`; cast the argument (`searchProviders({ dates } as any)`).
+`slug = null` infers as `null`: call `verticalMeta()` / `verticalConfig()` with no argument
+(there is one vertical) instead of passing a slug.
 Typed routes (`.expo/types/router.d.ts`) regenerate when `npx expo start` runs; after adding a
 route, start the dev server once before `npm run typecheck`.
 
@@ -133,7 +163,6 @@ route, start the dev server once before `npm run typecheck`.
   | --- | --- | --- |
   | `frontend/src/lib/supabase.js` | `src/lib/supabase.ts` | `import.meta.env`, browser session storage. Native client: AsyncStorage, `autoRefreshToken` + AppState start/stop, `persistSession`, `detectSessionInUrl: false` |
   | `frontend/src/lib/images.js` | `src/shims/images.ts` | canvas / `createImageBitmap` / `exifr`. Same exports via expo-image-manipulator, plus `prepareUpload(asset)` |
-  | `frontend/src/components/planner/devMock.js` | `src/shims/planner-dev-mock.ts` | web dev tool lazily imported by `api/planner.js` |
 
 - `@shared/*` alias -> `frontend/src/*` (Metro resolver + `tsconfig.json` `paths`).
 - New files and functions in `frontend/src/api/*` need nothing: import them and go. If a new shared
@@ -141,8 +170,8 @@ route, start the dev server once before `npm run typecheck`.
 
 `babel/shared-env-plugin.js` rewrites `import.meta.env.X` (only in files under `frontend/src`) to
 `globalThis.__SHARED_ENV__.X`, which `src/shims/env.ts` fills from the `EXPO_PUBLIC_*` values:
-`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_ML_URL` (planner URL), `DEV: false`
-(keeps web dev tools off), `PROD`, `MODE`.
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `DEV: false` (keeps web dev tools off),
+`PROD`, `MODE`.
 
 `src/shims/install.ts` runs before anything else (from `index.ts`) and only fills gaps, so the
 web target keeps the real browser APIs.
@@ -154,12 +183,10 @@ web target keeps the real browser APIs.
 | `lib/supabase.js` | `import.meta.env`, URL session detection | redirect to `src/lib/supabase.ts` | inject the client (or keep the redirect) |
 | `api/portfolio.js` | `import.meta.env` (storage URL/key) | Babel env rewrite | build the URL from the client |
 | `api/portfolio.js` | `File`/`Blob` uploads through XHR, `file.name`/`file.size`, `crypto.randomUUID` | pass `prepareUpload(asset)` results (Blob + name); `crypto.randomUUID` shim (expo-crypto) | accept `{ uri, name, type, size }` |
-| `api/planner.js` | `import.meta.env`, `location.hostname` fallback, `sessionStorage`, `?mock=1` via `location.search` | env rewrite (planner URL always set, so `location` is never read), `DEV=false`, sessionStorage shim, devMock redirect | pass base URL in; move mock out |
-| `api/events.js` | `localStorage` (planner brief cache) | global `localStorage` shim: in-memory, hydrated from / written to AsyncStorage (`ls:` prefix) | storage adapter param |
-| `api/locations.js` | `localStorage` (last location), `navigator.geolocation`, `DOMException` | localStorage shim; `navigator.geolocation.getCurrentPosition` shim on expo-location (permission prompt, `code 1` = denied); `DOMException` shim | location provider param |
+| `api/locations.js` | `localStorage` (last location), `navigator.geolocation`, `DOMException` | global `localStorage` shim (in-memory, hydrated from / written to AsyncStorage, `ls:` prefix); `navigator.geolocation.getCurrentPosition` shim on expo-location (permission prompt, `code 1` = denied); `DOMException` shim | location provider param |
+| `api/discover.js` | `localStorage` (the deck's service chip, `read/writeDeckChoice`) | the same `localStorage` shim | storage adapter param |
 | `lib/images.js` | `exifr`, `createImageBitmap`, `<canvas>`, `URL.createObjectURL` | redirect to `src/shims/images.ts` (expo-image-manipulator; EXIF from the picker's `exif: true`). **Untested on device** | split pure helpers from the browser pipeline |
 | `lib/format.js` | `avatarUrl()` returns an SVG `data:` URL for people without a photo | `Avatar` draws the same initials + color natively | return `{ initials, hue }` too |
-| `api/catalog.js` <-> `api/locations.js` | import each other (require cycle warning in Metro) | harmless today | move `invalidate`/`parsePoint` to a leaf module |
 | `auth.jsx`, `store.jsx` | React context files with web imports | ported to `src/state/*` with the same value shape | n/a (UI layer) |
 | `api/messages.js`, `api/portfolio.js`... | JS default params infer as `null` / `never[]` in TS (`sendMessage(id, { text })`, `getMyProvider(uid, pick)`) | `as any` at the call | JSDoc types |
 | `api/portfolio.js` `getMyProvider()` | MyWork / AiReview on the web use the oldest listing, not the selected one | native passes the selected listing id / checks all listings | pass the selected id on the web too |
@@ -191,36 +218,38 @@ swipe deck (use gesture-handler + reanimated), `navigator.share` (RN `Share`), G
 - **Google sign-in:** Supabase's Google page in an in-app browser (`expo-web-browser` auth session +
   `signInWithOAuth`), finished by `authLink.ts`. Works in Expo Go once `exp://**` (and `eventorganizer://**`
   for builds) are allowed Redirect URLs in Supabase. Google's native account picker would need a dev build.
-- Deep link scheme: `eventorganizer://` (app.json). App name "Event Organizer" (placeholder).
+- Deep link scheme: `eventorganizer://` (app.json; kept from the old name so existing links keep
+  working). App name: "photomatch".
 
 ## Web screens -> native status
 
 | Web route | Web screen | Native | Owner (proposed) |
 | --- | --- | --- | --- |
-| `/` | Home.jsx | **Ported** (feed, bookings tiles via `bookings/NeedsAction`, Explore teaser, Coming soon + invite via RN `Share`) | A |
-| `/search` | Search.jsx | **Ported** (list + map via `react-native-maps` with "Search this area", date picker, distance filter/sort, vertical filters; TODO: pin clustering) | A |
+| `/` | Home.jsx | **Ported** (search, photo + video service chips, bookings tiles via `bookings/NeedsAction`, shelves from `buildHomeFeed`, Explore teaser, "Shoot photo or video?" card + invite via RN `Share`) | A |
+| `/search` | Search.jsx | **Ported** (list + map via `react-native-maps` with "Search this area", service chips, date picker, distance filter/sort; TODO: pin clustering) | A |
 | `/u/:id` | Profile.jsx | **Ported** (availability strip, your dates, avatar viewer, followers sheet, review detail, map preview; TODO: report/block menu) | A |
-| `/services/:vertical` | ServiceHome.jsx | **Ported** (`buildVerticalPage`; tinted hero, shelves, invite, popular occasions) | A |
-| `/occasions/:slug` | Occasion.jsx | **Ported** (`buildOccasionChecklist`; ticks in AsyncStorage, top vendors, AI prompt box) | A |
 | `/sign-in` | SignIn.jsx | **Ported** (Google via browser session) | C |
-| `/me` | Me.jsx (+ Dashboard.jsx) | **Ported**: hero + edit, Hiring/Business switch, client view, listing switcher, checklist, stat tiles, Dashboard tabs (requests, calendar + blackouts, service area, packages, listing details, portfolio). `?tab=` opens a tab | C |
-| `/discover` | Discover.jsx (+ components/discover) | **Ported** (swipe deck on gesture-handler + reanimated, sheets, match moment, vertical picker; Explore masonry) | A |
+| `/me` | Me.jsx (+ Dashboard.jsx) | **Ported**: hero + edit, Hiring/Business switch, client view, checklist, stat tiles, Dashboard tabs (requests, calendar + blackouts, service area, packages (fixed / hourly / quote; photo + video fields), portfolio). `?tab=` opens a tab | C |
+| `/discover` | Discover.jsx (+ components/discover) | **Ported** (swipe deck on gesture-handler + reanimated, service chips, sheets, match moment, vendor cards for photographers without posts; Explore masonry with service filters) | A |
 | `/gallery/:personId`, `/post/:id` | Gallery.jsx | **Ported** (paged albums/photos, pinch-peek zoom, hold to hide UI; TODO: persistent zoom, before/after, owner edit, report, collections) | A |
-| `/plan` | Planner.jsx (+ components/planner) | Placeholder | B |
-| `/book/:providerId` | BookingRequest.jsx | Placeholder | B |
-| `/bookings` | Bookings.jsx | Placeholder | B |
-| `/bookings/:id` | BookingDetail.jsx | Placeholder | B |
-| `/bookings/:id/delivery` | Delivery.jsx | Placeholder | B |
-| `/bookings/:id/review` | Review.jsx | Placeholder | B |
+| `/book/:providerId` | BookingRequest.jsx | **Ported** | B |
+| `/bookings` | Bookings.jsx | **Ported** | B |
+| `/bookings/:id` | BookingDetail.jsx | **Ported** | B |
+| `/bookings/:id/delivery` | Delivery.jsx | **Ported** | B |
+| `/bookings/:id/review` | Review.jsx | **Ported** | B |
 | `/inbox` | Inbox.jsx | **Ported** (live via `subscribeToInbox`, unread dots, tab badge) | C |
 | `/inbox/new` | NewMessage.jsx (+ PeoplePicker) | **Ported** | C |
 | `/inbox/:id` | Chat.jsx | **Ported** (realtime, optimistic send/retry, day separators, receipts, typing, ChatInfo, report/block on long-press) | C |
-| `/upload` | Upload.jsx (+ components/upload) | **Ported** (expo-image-picker multi-select, arrows to reorder; date is a YYYY-MM-DD field). **Upload untested on device** | C |
+| `/upload` | Upload.jsx (+ components/upload) | **Ported** (photos and video stills: expo-image-picker multi-select, arrows to reorder; date is a YYYY-MM-DD field). **Upload untested on device** | C |
 | `/my-work` | MyWork.jsx | **Ported** (grid, reorder, `?post=` owner view + edit/delete; TODO: reuse the Gallery viewer) | C |
-| `/new-listing` | NewListing.jsx | **Ported** (`?v=` preset) | C |
+| `/new-listing` | NewListing.jsx | **Ported** (straight to the photo & video listing setup) | C |
 | `/verify` | Verify.jsx | **Ported** | C |
 | `/settings` | Settings.jsx | **Ported** | C |
 | `/ai-review/:id` | AiReview.jsx | **Ported** | C |
 | `/welcome` | Welcome.jsx | **Ported**; root layout redirects there when `needsWelcome` (`state/WelcomeGate.tsx`) | C |
 | `/reset-password` | ResetPassword.jsx | **Ported** (also finishes the reset link's sign-in) | C |
 | `/auth/callback` | AuthCallback.jsx | **Ported** (`screens/account/authLink.ts`) | C |
+
+Archived (not routes any more; see [Photography pivot](#photography-pivot-2026-10-18)): `/plan`,
+`/events`, `/events/:id`, `/events/new`, `/services/:vertical`, `/occasions/:slug`. Old links to
+them land on the not-found screen.

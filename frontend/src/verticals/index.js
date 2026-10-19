@@ -1,100 +1,82 @@
-// The vertical registry: the shared catalog (catalog.js) plus per-vertical
-// configs (verticals/<slug>/config.js) for verticals that need more than catalog
-// data: package/provider attribute fields, card detail lines, Search filters,
-// price types and booking quantities. Every vertical works without a config
-// (the generic fallback below), including ones the database knows about but
-// catalog.js doesn't.
+// The vertical registry. photomatch has ONE vertical now, `photography` ("Photo &
+// video", see catalog.js), but screens stay generic: they ask the registry for wording,
+// fields and price types instead of hard-coding them, so a vertical could come back
+// later. Plain JS, shared with the Expo app: no React, no DOM, no browser storage.
 //
-// Plain JS, shared with the Expo app: no React, no DOM, no browser storage.
-//
-//   verticalMeta(slug, dbRow?)  catalog entry merged with fallbacks (never undefined)
-//   verticalConfig(slug)        { priceTypes, defaultPriceType, packageFields, providerFields,
+//   verticalMeta(slug?, dbRow?)  catalog entry merged with fallbacks (never undefined);
+//                               null / 'videography' -> photography
+//   verticalConfig(slug?)       { priceTypes, defaultPriceType, packageFields, providerFields,
 //                                 cardKeys, packageKeys, filters, quantity, post }
-//   priceSuffix(type, pkg?)     ' / person', ' each', ' / day', '/hr', ''
-//   quantityFor(pkg, slug)      null, or { label, min, max, default } for per-guest / per-item packages
+//   priceSuffix(type, pkg?)     '/hr', '' (and ' / person', ' each', ' / day' for old packages)
+//   quantityFor(pkg, slug)      null for photo & video packages (kept for old per-person / per-item rows)
 //   optionsOf(field), optionLabel(field, value)  options as [{ value, label }]
-//   attributeLines(fields, attrs, keys?)  ['Up to 200 guests', 'Buffet', ...] (compact)
+//   attributeLines(fields, attrs, keys?)  ['300 edited', '14-day turnaround'] (compact)
 //   attributeEntries(fields, attrs)       [{ key, label, value, type }] for detail lists
 //   cleanAttributes(fields, attrs)        attrs without empty values, numbers coerced (schemas reject nulls)
-//   matchesFilters(provider, values, slug) Search filters that run on the client
-//   nounFor(slug, n) / countLabel(n, slug) 'caterer' / '3 caterers' ('vendor' for all verticals)
-//   lowerFirst(text)            'Catering' -> 'catering' but 'DJs & live music' unchanged (mid-sentence names)
-//   sessionNoun(slug)           'shoot' for photo/video, 'session' for wellness, else 'event'
-//   deliversMedia(slug)         true for photo/video (delivery gallery); others are just marked done
-//   postConfig(slug)            the post composer's wording per vertical: { noun, headline, prompts, title,
-//                               caption, showCamera, beforeAfter } (config.js `post`, generic fallback)
-//   occasionsFor(slug)          OCCASIONS, the ones that need this vertical first
-import { OCCASIONS, VERTICALS, getVertical, verticalOfService } from './catalog.js'
+//   matchesFilters(provider, values, slug) Search filters that run on the client (none for photography)
+//   nounFor(slug, n) / countLabel(n, slug) 'photographer' / '3 photographers'
+//   lowerFirst(text)            'Photographers' -> 'photographers' (mid-sentence names)
+//   sessionNoun(slug)           'shoot'
+//   deliversMedia(slug)         true (bookings end with a delivery gallery)
+//   postConfig(slug)            the post composer's wording: { noun, headline, prompts, title,
+//                               caption, showCamera, beforeAfter }
+//
+// Removed in the photography pivot (2026-10-18; the old file is in
+// archive/event-platform/frontend/src/verticals/index.js):
+//   - the 17 other per-vertical configs (verticals/<slug>/config.js) and fields.js
+//   - occasionsFor() now always returns [] (occasions were archived); kept for old imports
+//   - GENERIC now uses photography's wording ('photographer'), not 'vendor'
+import { VERTICALS, PHOTO_VERTICAL, getVertical, normalizeVertical, verticalOfService } from './catalog.js'
 import photography from './photography/config.js'
-import videography from './videography/config.js'
-import venue from './venue/config.js'
-import catering from './catering/config.js'
-import privateChef from './private-chef/config.js'
-import cakes from './cakes/config.js'
-import bar from './bar/config.js'
-import music from './music/config.js'
-import florals from './florals/config.js'
-import hairMakeup from './hair-makeup/config.js'
-import rentals from './rentals/config.js'
-import transportation from './transportation/config.js'
-import entertainment from './entertainment/config.js'
-import staffing from './staffing/config.js'
-import decor from './decor/config.js'
-import planning from './planning/config.js'
-import officiant from './officiant/config.js'
-import wellness from './wellness/config.js'
 
 export * from './catalog.js'
 
-const CONFIGS = {
-  photography, videography, venue, catering, 'private-chef': privateChef, cakes, bar, music, florals,
-  'hair-makeup': hairMakeup, rentals, transportation, entertainment, staffing, decor, planning, officiant, wellness,
-}
+const CONFIGS = { photography }
 
 // ---------------------------------------------------------------------------
 // Vertical metadata
 // ---------------------------------------------------------------------------
 
-// Used for "all verticals" wording and for verticals catalog.js doesn't know.
+// Fallback for slugs catalog.js doesn't know (rows from the old multi-vendor database;
+// the API filters those out, so this is only a safety net).
 export const GENERIC = {
-  slug: null, name: 'All services', noun: 'vendor', plural: 'Vendors', icon: 'Store', tint: '#64748b', group: 'help',
-  priceUnit: 'session', concurrent: false, visual: true, tagline: '', services: [],
+  slug: null, name: 'Photo & video', noun: 'photographer', plural: 'Photographers', pluralLong: 'Photographers & videographers',
+  icon: 'Camera', tint: '#64748b', group: 'capture', priceUnit: 'session', concurrent: false, visual: true, tagline: '', services: [],
 }
 
 const titleCase = (s = '') => s.replace(/[-_]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 
-/** The catalog entry for a vertical slug, merged with fallbacks; `row` (a service_categories row) fills unknown ones. */
-export function verticalMeta(slug, row = null) {
-  const known = slug ? getVertical(slug) : null
+/** The catalog entry for a vertical slug (null = photography), merged with fallbacks; `row` (a service_categories row) names unknown ones. */
+export function verticalMeta(slug = null, row = null) {
+  const known = getVertical(slug || PHOTO_VERTICAL)
   if (known) return { ...known, known: true }
-  if (!slug) return { ...GENERIC, known: false }
   const name = row?.name || titleCase(slug)
-  return { ...GENERIC, slug, name, noun: name.toLowerCase(), plural: name, known: false }
+  return { ...GENERIC, slug, name, noun: name.toLowerCase(), plural: name, pluralLong: name, known: false }
 }
 
-/** The vertical a provider belongs to, from its `vertical` slug or its service slugs. Defaults to photography. */
+/** The vertical a provider belongs to: always 'photography' for photo & video listings. */
 export const verticalSlugOf = (provider) =>
-  provider?.vertical || (provider?.categorySlugs || []).map((s) => verticalOfService(s)?.slug).find(Boolean) || 'photography'
+  normalizeVertical(provider?.vertical) || (provider?.categorySlugs || []).map((s) => verticalOfService(s)?.slug).find(Boolean) || PHOTO_VERTICAL
 
-// "Photographers" -> "photographers", but "DJs & musicians" stays as is.
+// "Photographers" -> "photographers"; acronyms stay as they are.
 export const lowerFirst = (s = '') => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s)
 
-/** 'caterer' (n = 1) or 'caterers'; slug null = any vertical ('vendor' / 'vendors'). */
+/** 'photographer' (n = 1) or 'photographers'. */
 export const nounFor = (slug, n = 1) => {
   const m = verticalMeta(slug)
   return n === 1 ? m.noun : lowerFirst(m.plural)
 }
 
-/** '1 caterer', '3 caterers', '0 vendors'. */
+/** '1 photographer', '3 photographers'. */
 export const countLabel = (n, slug) => `${n} ${nounFor(slug, n)}`
 
-/** What a booking is called: 'shoot', 'session' or 'event'. */
-export const sessionNoun = (slug) => (slug === 'photography' || slug === 'videography' ? 'shoot' : slug === 'wellness' ? 'session' : 'event')
+/** What a booking is called: 'shoot' (photo & video). Other slugs (old data) say 'event'. */
+export const sessionNoun = (slug) => (!slug || getVertical(slug) ? 'shoot' : 'event')
 
-/** Does this vertical hand over photos / video at the end (a delivery gallery)? Others just "mark done". */
-export const deliversMedia = (slug) => slug === 'photography' || slug === 'videography'
+/** Does this vertical hand over photos / video at the end (a delivery gallery)? True for photo & video. */
+export const deliversMedia = (slug) => !slug || !!getVertical(slug)
 
-/** Capitalized noun, e.g. for badges: 'Caterer'. */
+/** Capitalized noun, e.g. for badges: 'Photographer'. */
 export const nounTitle = (slug) => {
   const n = verticalMeta(slug).noun
   return n ? n[0].toUpperCase() + n.slice(1) : ''
@@ -115,7 +97,8 @@ export const PRICE_TYPES = {
 }
 // catalog.js priceUnit -> the price type it implies.
 const UNIT_TO_TYPE = { session: 'fixed', hour: 'hourly', person: 'per_person', item: 'per_item', day: 'daily' }
-// Price types today's database (before the all-verticals migration) accepts.
+// The price types photo & video packages use (the package editor offers only these; the
+// others above stay so old packages from the multi-vendor database still display).
 export const LEGACY_PRICE_TYPES = ['fixed', 'hourly', 'quote']
 
 /** '/hr', ' / person', ' each' (or ' / centerpiece' when the package names its unit), ' / day', ''. */
@@ -135,10 +118,10 @@ export function priceSuffix(type, pkg = null) {
 const configCache = new Map()
 
 /** A vertical's config with every key filled in (generic fallback for verticals without a config file). */
-export function verticalConfig(slug) {
+export function verticalConfig(slug = null) {
   if (configCache.has(slug)) return configCache.get(slug)
   const meta = verticalMeta(slug)
-  const c = CONFIGS[slug] || {}
+  const c = CONFIGS[getVertical(slug || PHOTO_VERTICAL)?.slug] || {}
   const defaultPriceType = UNIT_TO_TYPE[meta.priceUnit] || 'fixed'
   const priceTypes = c.priceTypes || [...new Set([defaultPriceType, 'fixed', 'hourly', 'quote'])]
   const config = {
@@ -175,12 +158,11 @@ const POST_DEFAULTS = {
 /** The post composer's wording and options for a vertical. */
 export const postConfig = (slug) => verticalConfig(slug).post
 
-/** The title of a post saved without one: 'Buffet · Wedding', 'Buffet', else the vertical's name. */
-export const autoPostTitle = ({ service = null, occasion = null, slug = null } = {}) =>
-  [service, occasion].filter(Boolean).join(' · ') || verticalMeta(slug).name || 'New post'
+/** The title of a post saved without one: 'Wedding', else 'New post'. (`occasion` and `slug` are ignored now; kept for old callers.) */
+export const autoPostTitle = ({ service = null } = {}) => service || 'New post'
 
-/** Every occasion, the ones that list this vertical in `needs` first (catalog order otherwise). */
-export const occasionsFor = (slug) => [...OCCASIONS.filter((o) => o.needs.includes(slug)), ...OCCASIONS.filter((o) => !o.needs.includes(slug))]
+/** @deprecated Occasions were archived: always []. */
+export const occasionsFor = () => []
 
 // Generic quantity labels when a vertical's config doesn't name them.
 // (daily packages are charged once per booked day: the dates picked are the days.)
@@ -279,25 +261,12 @@ export function cleanAttributes(fields = [], attrs = {}) {
 // Search filters (client side)
 // ---------------------------------------------------------------------------
 
-// Can this provider host / serve `guests` people? Capacity and package guest
-// limits must fit; providers with no limits anywhere count as a match.
-function fitsGuests(provider, guests) {
-  const a = provider.attributes || {}
-  const cap = Math.max(Number(a.capacity_standing) || 0, Number(a.capacity_seated) || 0, Number(a.max_guests) || 0)
-  if (cap && cap < guests) return false
-  if (Number(a.min_guests) > guests) return false
-  const limited = (provider.packages || []).filter((p) => p.minQuantity != null || p.maxQuantity != null || p.attributes?.passengers != null)
-  if (!limited.length) return true
-  return limited.some((p) => guests >= Number(p.minQuantity ?? 0) && guests <= Number(p.maxQuantity ?? p.attributes?.passengers ?? Infinity))
-}
-
-/** values: { guests: 100, dietary: ['Vegan'], setting: 'Outdoor' }. Unknown / empty values pass. */
+/** values: { [filter key]: value }. Unknown / empty values pass. (Photography has no attribute filters today.) */
 export function matchesFilters(provider, values = {}, slug = null) {
   const filters = verticalConfig(slug || verticalSlugOf(provider)).filters
   return filters.every((f) => {
     const v = values[f.key]
     if (isEmpty(v)) return true
-    if (f.type === 'guests') return fitsGuests(provider, Number(v))
     const attr = provider.attributes?.[f.attr || f.key]
     if (f.type === 'tags') return [].concat(v).every((t) => [].concat(attr || []).includes(t))
     return attr === v

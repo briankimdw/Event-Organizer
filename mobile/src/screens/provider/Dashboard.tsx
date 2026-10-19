@@ -37,11 +37,8 @@ type Props = { tab: DashTab; onTabChange: (t: DashTab) => void; provider: any; b
 
 export default function Dashboard({ tab, onTabChange, provider, bookings, onProviderChanged }: Props) {
   const s = useStyles()
-  const { myProvider } = useStore()
   const pending = (bookings?.data || []).filter((r) => r.status === 'requested').length
-  // Non-visual services (DJs, planners...) don't get a Portfolio tab unless they've posted.
-  const showPortfolio = verticalMeta(myProvider?.vertical).visual || (provider?.albumCount ?? 0) > 0
-  const current: DashTab = tab === 'portfolio' && !showPortfolio ? 'packages' : tab
+  const current: DashTab = tab
 
   return (
     <View style={s.pad}>
@@ -50,7 +47,7 @@ export default function Dashboard({ tab, onTabChange, provider, bookings, onProv
           { value: 'requests', label: pending ? `Requests · ${pending}` : 'Requests' },
           { value: 'calendar', label: 'Calendar' },
           { value: 'packages', label: 'Packages' },
-          ...(showPortfolio ? [{ value: 'portfolio' as DashTab, label: 'Portfolio' }] : []),
+          { value: 'portfolio', label: 'Portfolio' },
         ]}
         value={current}
         onChange={onTabChange}
@@ -353,32 +350,28 @@ type PackageForm = {
   depositPct: number; attributes: Record<string, any>; isActive: boolean
 }
 const EMPTY_FORM: PackageForm = { id: null, name: '', description: '', categoryId: '', priceType: 'fixed', price: '', hours: '', depositPct: 30, attributes: {}, isActive: true }
-const PRICE_FIELD: Record<string, string> = { fixed: 'Price', hourly: 'Price per hour', per_person: 'Price per person', per_item: 'Price per item', daily: 'Price per day' }
+// Photo & video packages: a fixed price, by the hour, or a custom quote (config.priceTypes).
+const PRICE_FIELD: Record<string, string> = { fixed: 'Price', hourly: 'Price per hour' }
 const DEPOSIT_STOPS = Array.from({ length: 21 }, (_, i) => i * 5)
-const PACKAGE_EXAMPLES: Record<string, string> = {
-  photography: 'Engagement session', videography: 'Wedding highlight film', catering: 'Taco bar buffet', venue: 'Saturday evening rental',
-  music: 'Reception DJ set', florals: 'Bridal bouquet', cakes: 'Three-tier wedding cake', bar: 'Open bar, 4 hours', 'hair-makeup': 'Bridal glam',
-  rentals: 'Chiavari chair', planning: 'Day-of coordination',
-}
 
 function Packages({ provider, onChanged }: { provider: any; onChanged: () => void }) {
   const s = useStyles()
   const { c } = useTheme()
   const { myProvider, toast } = useStore()
   const providerId: string | undefined = myProvider?.id
-  const vertical: string = myProvider?.vertical || provider?.vertical || 'photography'
-  const config = verticalConfig(vertical)
+  const config = verticalConfig()
   const packages = useQuery<any[]>(providerId ? () => listMyPackages(providerId) : null, [providerId])
-  const { data: allCategories } = useQuery<any[]>(() => getServices(vertical), [vertical])
+  const { data: allCategories } = useQuery<any[]>(() => getServices(), [])
   const [form, setForm] = useState<PackageForm | null>(null)
   const [saving, setSaving] = useState(false)
   const set = <K extends keyof PackageForm>(k: K) => (v: PackageForm[K]) => setForm((f) => f && { ...f, [k]: v })
 
-  // Services this listing offers (fallback: every service in its vertical).
+  // Services this listing offers (fallback: every photo and video service).
   const offered = (allCategories || []).filter((x) => provider?.categorySlugs?.includes(x.slug))
   const categories = offered.length ? offered : allCategories || []
-  // An older package may use a price type this vertical doesn't list; keep it selectable.
-  const priceTypes: string[] = form && !config.priceTypes.includes(form.priceType) ? [form.priceType, ...config.priceTypes] : config.priceTypes
+  // Fixed, hourly or quote. A package from the old multi-vendor data may have another
+  // type (per person...): it shows unselected and has to be switched before saving.
+  const priceTypes: string[] = config.priceTypes
 
   const openNew = () => setForm({ ...EMPTY_FORM, priceType: config.defaultPriceType, categoryId: categories[0]?.id || '' })
   const openEdit = (p: any) =>
@@ -432,11 +425,11 @@ function Packages({ provider, onChanged }: { provider: any; onChanged: () => voi
     }
   }
 
-  const priceOk = !!form && (form.priceType === 'quote' || (form.price !== '' && Number(form.price) >= 0))
+  const priceOk = !!form && priceTypes.includes(form.priceType) && (form.priceType === 'quote' || (form.price !== '' && Number(form.price) >= 0))
 
   return (
     <View style={s.mt}>
-      <ListingDetails provider={provider} vertical={vertical} onChanged={onChanged} />
+      <ListingDetails provider={provider} onChanged={onChanged} />
       {packages.loading && !packages.data && <Loading inline />}
       {packages.error && <ErrorState error={packages.error} onRetry={packages.reload} />}
       {packages.data?.length === 0 && (
@@ -462,13 +455,13 @@ function Packages({ provider, onChanged }: { provider: any; onChanged: () => voi
       <Sheet open={!!form} onClose={() => !saving && setForm(null)} title={form?.id ? 'Edit package' : 'New package'}>
         {form && (
           <>
-            <TextField label="Name" maxLength={80} value={form.name} onChangeText={set('name')} placeholder={`e.g. ${PACKAGE_EXAMPLES[vertical] || 'Standard package'}`} />
+            <TextField label="Name" maxLength={80} value={form.name} onChangeText={set('name')} placeholder="e.g. Wedding day: photos + highlight film" />
             <Text variant="small" muted style={s.label}>Service</Text>
             <ChipRow>
               {categories.map((x: any) => <Chip key={x.id} label={x.name} toggle on={form.categoryId === x.id} onPress={() => set('categoryId')(x.id)} />)}
             </ChipRow>
             {!!allCategories && !categories.length && (
-              <Text variant="tiny" color="danger">{verticalMeta(vertical).name} isn’t open for bookings yet, so packages can’t be published.</Text>
+              <Text variant="tiny" color="danger">Bookings aren’t open yet, so packages can’t be published.</Text>
             )}
             <Text variant="small" muted style={s.label}>Pricing</Text>
             <ChipRow>
@@ -503,15 +496,15 @@ function Packages({ provider, onChanged }: { provider: any; onChanged: () => voi
 }
 
 // The listing's own custom fields (cuisines, capacity, genres...), shown above its packages.
-function ListingDetails({ provider, vertical, onChanged }: { provider: any; vertical: string; onChanged: () => void }) {
+function ListingDetails({ provider, onChanged }: { provider: any; onChanged: () => void }) {
   const s = useStyles()
   const { myProvider, refreshProvider, toast } = useStore()
-  const fields = (verticalConfig(vertical).providerFields as FieldDef[]).filter((f) => f.key !== 'specialties')
+  const fields = (verticalConfig().providerFields as FieldDef[]).filter((f) => f.key !== 'specialties')
   const [draft, setDraft] = useState<Record<string, any> | null>(null)
   const [saving, setSaving] = useState(false)
   if (!fields.length || !myProvider) return null
   const attrs = provider?.attributes || myProvider.attributes || {}
-  const meta = verticalMeta(vertical)
+  const meta = verticalMeta()
 
   const save = async () => {
     setSaving(true)

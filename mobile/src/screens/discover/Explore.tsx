@@ -1,9 +1,9 @@
-// Discover -> "Explore": a Pinterest-style two-column masonry of real portfolio posts
-// across every vertical (native port of frontend/src/components/discover/Explore.jsx).
-// Chips filter by vertical, service and occasion (kept in the route params ?v= / ?s= / ?o=);
-// tap a photo to open it in its post, tap the name to open the vendor. Vendors who haven't
-// posted yet appear as tinted vendor tiles between the photos, and a vertical with no posts
-// shows its vendors plus a "be the first" invite. Pages in 24 at a time as you scroll.
+// Discover -> "Explore": a Pinterest-style two-column masonry of real photo & video work
+// (native port of frontend/src/components/discover/Explore.jsx). Service chips (the services
+// that have photos) filter it (kept in the route param ?s=); tap a photo to open it in its
+// post, tap the name to open the photographer. Photographers who haven't posted yet appear
+// as tinted tiles between the photos; with no posts at all there's a "be the first" invite.
+// Pages in 24 at a time as you scroll.
 // Data + shaping: the shared api/home.js (listExplorePhotos, buildExploreTiles, exploreFilters,
 // exploreVendorTiles, mixExploreTiles, masonry) and api/discover.js (vendorFacts).
 import { useRouter } from 'expo-router'
@@ -15,9 +15,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { invalidate } from '@shared/api/catalog.js'
 import { vendorFacts } from '@shared/api/discover.js'
 import {
-  buildExploreTiles, exploreFilters, exploreVendorTiles, listBrowseProviders, listExplorePhotos, masonry, mixExploreTiles, withArticle,
+  buildExploreTiles, exploreFilters, exploreVendorTiles, listBrowseProviders, listExplorePhotos, masonry, mixExploreTiles,
 } from '@shared/api/home.js'
-import { nounFor, postConfig, verticalMeta } from '@shared/verticals/index.js'
+import { verticalMeta } from '@shared/verticals/index.js'
 import { Avatar, Button, Chip, EmptyState, ErrorState, Photo, Text, VerticalIcon } from '@/components'
 import { fromPriceText } from '@/components/PriceLabel'
 import useQuery from '@/hooks/useQuery'
@@ -26,9 +26,8 @@ import { useInvite } from '@/screens/home/Browse'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
 import { makeStyles, useReadableTint, useTheme } from '@/theme'
-import type { Occasion, Provider, Vertical } from '@/types'
+import type { Provider } from '@/types'
 import { DiscoverHeader, PillButton } from './DiscoverHeader'
-import { TintChip } from './VerticalPicker'
 
 const PAGE = 24
 const GAP = 8
@@ -38,63 +37,49 @@ const CAP = 1.4 // Dynamic Type cap inside fixed-size tiles
 type PhotoTile = { kind: 'photo'; id: string; src: string; ratio: number; albumId: string; title?: string; provider: Provider }
 type VendorTileT = { kind: 'vendor'; id: string; providerId: string; ratio: number; provider: Provider }
 type Tile = PhotoTile | VendorTileT
-type Filters = {
-  allVerticals: (Vertical & { photos: number; vendors: number })[]
-  services: { slug: string; name: string; n: number }[]
-  occasions: (Occasion & { n: number })[]
-}
+type Filters = { services: { slug: string; name: string; n: number }[] }
 type Meta = { slug: string; name: string; noun: string; icon: string; tint: string }
+const META = verticalMeta() as Meta
 
-export function Explore({ tabs, vertical: v, service, occasion }: { tabs: ReactNode; vertical: string | null; service: string | null; occasion: string | null }) {
+export function Explore({ tabs, service }: { tabs: ReactNode; service: string | null }) {
   const s = useStyles()
   const { c } = useTheme()
   const router = useRouter()
   const { user } = useAuth()
-  const { myProviders = [] } = useStore()
+  const { myProvider } = useStore()
   const invite = useInvite()
   const { width } = useWindowDimensions()
   const scroller = useRef<ScrollView>(null)
-  const vertical = v && v !== 'all' ? v : null
-  // The vertical chips scroll so the selected one is in view (e.g. arriving from the deck on DJs).
-  const chipRow = useRef<ScrollView>(null)
-  const chipX = useRef<Record<string, number>>({})
 
   const photos = useQuery<any[]>(() => listExplorePhotos({ limit: 200 }), [])
   const providers = useQuery<Provider[]>(() => listBrowseProviders(), [user?.id])
   const ready = !!photos.data && !!providers.data
   const error = photos.error || providers.error
-  const args = { photos: photos.data, providers: providers.data, vertical, service } as any
-  const filters: Filters = ready ? (exploreFilters(args) as Filters) : { allVerticals: [], services: [], occasions: [] }
-  const photoTiles: Tile[] = ready ? (buildExploreTiles({ ...args, occasion }) as Tile[]) : []
-  // Vendors without posts: tiles between the photos (not when narrowing to an occasion).
-  const vendorTiles: Tile[] = ready && !occasion ? (exploreVendorTiles(args) as Tile[]) : []
-  const tiles = mixExploreTiles(photoTiles as any, vendorTiles as any, vertical ? 4 : 6) as Tile[]
-  const meta = vertical ? (verticalMeta(vertical) as Meta) : null
+  const args = { photos: photos.data, providers: providers.data, service } as any
+  const filters: Filters = ready ? (exploreFilters(args) as Filters) : { services: [] }
+  const photoTiles: Tile[] = ready ? (buildExploreTiles(args) as Tile[]) : []
+  // Photographers without posts: tiles between the photos.
+  const vendorTiles: Tile[] = ready ? (exploreVendorTiles(args) as Tile[]) : []
+  const tiles = mixExploreTiles(photoTiles as any, vendorTiles as any, 6) as Tile[]
   const noPosts = ready && photoTiles.length === 0
-  const mine = vertical ? myProviders.find((p: Provider) => p.vertical === vertical) : null
+  // A service picked elsewhere (a deck chip) that has no photos still shows as a chip.
+  const serviceChips = service && !filters.services.some((x) => x.slug === service)
+    ? [{ slug: service, name: (META as any).services?.find((x: { slug: string }) => x.slug === service)?.name || service, n: 0 }, ...filters.services]
+    : filters.services
 
   const [shown, setShown] = useState(PAGE)
   useEffect(() => {
     setShown(PAGE)
     scroller.current?.scrollTo({ y: 0, animated: false })
-  }, [vertical, service, occasion])
-  const chipsReady = ready && filters.allVerticals.length > 0
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const x = vertical ? chipX.current[vertical] : 0
-      if (x != null) chipRow.current?.scrollTo({ x: Math.max(0, x - 60), animated: false })
-    }, 50)
-    return () => clearTimeout(t)
-  }, [vertical, chipsReady])
+  }, [service])
   const more = tiles.length > shown
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent
     if (more && contentOffset.y + layoutMeasurement.height > contentSize.height - 600) setShown((n) => n + PAGE)
   }
 
-  const setFilter = (key: 'v' | 's' | 'o', value: string | null) =>
-    router.setParams((key === 'v' ? { v: value ?? undefined, s: undefined, o: undefined } : key === 's' ? { s: value ?? undefined, o: undefined } : { o: value ?? undefined }) as any)
-  const clearAll = () => router.setParams({ v: undefined, s: undefined, o: undefined } as any)
+  const setService = (value: string | null) => router.setParams({ s: value ?? undefined, v: undefined, o: undefined } as any)
+  const clearAll = () => setService(null)
   const refresh = () => {
     invalidate('home:explore')
     photos.reload()
@@ -103,7 +88,6 @@ export function Explore({ tabs, vertical: v, service, occasion }: { tabs: ReactN
 
   const colWidth = Math.floor((Math.min(width, 700) - SIDE * 2 - GAP) / 2)
   const columns = masonry(tiles.slice(0, shown), 2) as Tile[][]
-  const subFilters = (vertical ? filters.services.length : 0) + filters.occasions.length > 0
 
   return (
     <SafeAreaView style={s.root} edges={['top']}>
@@ -116,24 +100,11 @@ export function Explore({ tabs, vertical: v, service, occasion }: { tabs: ReactN
         refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={c.muted} colors={[c.ink]} progressBackgroundColor={c.card} />}
         contentContainerStyle={s.content}
       >
-        {ready && (
-          <ScrollView ref={chipRow} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} accessibilityLabel="Filter posts">
-            <Chip label="All" toggle on={!vertical && !service && !occasion} onPress={clearAll} />
-            {filters.allVerticals.map((x) => (
-              <View key={x.slug} onLayout={(e) => { chipX.current[x.slug] = e.nativeEvent.layout.x }}>
-                <TintChip info={x} label={x.name} on={vertical === x.slug} onPress={() => setFilter('v', vertical === x.slug ? null : x.slug)} />
-              </View>
-            ))}
-          </ScrollView>
-        )}
-        {ready && subFilters && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} accessibilityLabel={meta ? `Filter ${meta.name}` : 'Filter by occasion'}>
-            {!!vertical && filters.services.map((x) => (
-              <Chip key={x.slug} label={x.name} toggle on={service === x.slug} onPress={() => setFilter('s', service === x.slug ? null : x.slug)} />
-            ))}
-            {!!vertical && filters.services.length > 0 && filters.occasions.length > 0 && <View style={s.divider} />}
-            {filters.occasions.map((o) => (
-              <TintChip key={o.slug} info={o} label={o.name} on={occasion === o.slug} onPress={() => setFilter('o', occasion === o.slug ? null : o.slug)} />
+        {ready && serviceChips.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} accessibilityLabel="Filter by service">
+            <Chip label="All" toggle select on={!service} onPress={clearAll} accessibilityLabel="All services" />
+            {serviceChips.map((x) => (
+              <Chip key={x.slug} label={x.name} toggle select on={service === x.slug} onPress={() => setService(service === x.slug ? null : x.slug)} />
             ))}
           </ScrollView>
         )}
@@ -141,36 +112,36 @@ export function Explore({ tabs, vertical: v, service, occasion }: { tabs: ReactN
         {error && <ErrorState error={error} onRetry={refresh} />}
         {!ready && !error && <GridSkeleton width={colWidth} />}
 
-        {/* A vertical nobody has posted in yet: say so, and invite. */}
-        {noPosts && meta && !service && !occasion && (
-          <View style={[s.beFirst, { backgroundColor: `${meta.tint}14`, borderColor: `${meta.tint}40` }]}>
-            <VerticalIcon name={meta.icon} tint={meta.tint} size={22} bubble bubbleSize={48} />
+        {/* Nobody has posted yet: say so, and invite. */}
+        {noPosts && !service && (
+          <View style={[s.beFirst, { backgroundColor: `${META.tint}14`, borderColor: `${META.tint}40` }]}>
+            <VerticalIcon name={META.icon} tint={META.tint} size={22} bubble bubbleSize={48} />
             <View style={s.grow}>
-              <Text variant="body" weight="700">{vendorTiles.length ? `No ${postConfig(meta.slug).noun} posts yet` : `No ${nounFor(meta.slug, 2)} yet`}</Text>
+              <Text variant="body" weight="700">No posts yet</Text>
               <Text variant="small" muted style={s.mtXs}>
-                {mine
-                  ? `Be the first ${meta.noun} to post your work here.`
+                {myProvider
+                  ? 'Be the first to post your photo or video work here.'
                   : vendorTiles.length
-                    ? `Here are the ${nounFor(meta.slug, 2)} on photomatch. Know another great ${meta.noun}? Invite them.`
-                    : `Be the first ${meta.noun} on photomatch, or invite one you love.`}
+                    ? 'Here are the photographers and videographers on photomatch. Know another great one? Invite them.'
+                    : 'Be the first photographer or videographer on photomatch, or invite one you love.'}
               </Text>
               <View style={s.actions}>
-                {mine ? (
+                {myProvider ? (
                   <Button title="Post your work" icon={Upload} size="sm" onPress={() => router.push('/upload')} />
                 ) : (
-                  <Button title="List your services" icon={Store} size="sm" onPress={() => router.push({ pathname: '/new-listing', params: { v: meta.slug } } as any)} />
+                  <Button title="List your work" icon={Store} size="sm" onPress={() => router.push('/new-listing')} />
                 )}
-                <Button title={`Invite ${withArticle(meta.noun)}`} icon={Send} size="sm" variant="ghost" onPress={() => invite(meta as any)} />
+                <Button title="Invite a photographer" icon={Send} size="sm" variant="ghost" onPress={invite} />
               </View>
             </View>
           </View>
         )}
-        {ready && tiles.length === 0 && !(vertical && !service && !occasion) && (
+        {ready && tiles.length === 0 && !!service && (
           <EmptyState
             icon={ImageOff}
             title="No posts here yet"
-            text="New work shows up as soon as vendors post it."
-            action={(vertical || service || occasion) ? <Button title="See everything" variant="ghost" size="sm" onPress={clearAll} /> : undefined}
+            text="New work shows up as soon as photographers and videographers post it."
+            action={<Button title="See everything" variant="ghost" size="sm" onPress={clearAll} />}
           />
         )}
 
@@ -222,7 +193,7 @@ function ExploreTile({ t, width, onOpen, onOpenProvider }: { t: PhotoTile; width
   )
 }
 
-// A vendor who hasn't posted yet: their vertical's colour, name, key facts and price.
+// A photographer who hasn't posted yet: the vertical's colour, name, key facts and price.
 function VendorTile({ t, width, onOpen }: { t: VendorTileT; width: number; onOpen: () => void }) {
   const s = useStyles()
   const { c } = useTheme()
@@ -289,7 +260,6 @@ const useStyles = makeStyles((t) => ({
   root: { flex: 1, backgroundColor: t.c.bg },
   content: { paddingBottom: t.space.xxl },
   chips: { flexDirection: 'row', gap: 6, paddingHorizontal: t.space.lg, paddingTop: 2, paddingBottom: 8, alignItems: 'center' },
-  divider: { width: 1, alignSelf: 'stretch', marginVertical: 4, marginHorizontal: 2, backgroundColor: t.c.line },
   masonry: { flexDirection: 'row', gap: GAP, paddingHorizontal: SIDE, alignItems: 'flex-start', marginTop: 4 },
   col: { gap: 12 },
   tileImg: { borderRadius: t.radius.lg, overflow: 'hidden', backgroundColor: t.c.soft },

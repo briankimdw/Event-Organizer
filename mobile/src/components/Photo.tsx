@@ -23,7 +23,7 @@ type PhotoProps = {
 export function Photo({ uri, style, contentFit = 'cover', accessibilityLabel, vertical }: PhotoProps) {
   const { c } = useTheme()
   if (!uri && vertical) {
-    const m = verticalMeta(vertical) as { tint: string; icon: string }
+    const m = verticalMeta() as { tint: string; icon: string } // photo & video: the one vertical
     return (
       <View style={[{ backgroundColor: m.tint + '26', alignItems: 'center', justifyContent: 'center' }, style]} accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <VerticalIcon name={m.icon} size={30} color={m.tint} />

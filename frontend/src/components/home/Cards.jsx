@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, Send, Star } from 'lucide-react'
 import ShareSheet from '../share/ShareSheet.jsx'
-import { AddToEventButton } from '../events/EventParts.jsx'
 import { IdVerified, ProBadge } from '../Badges.jsx'
 import ProfileLink, { PersonAvatar } from '../ProfileLink.jsx'
 import { CoverFallback } from '../verticals/VerticalIcon.jsx'
@@ -10,7 +9,7 @@ import { fromKey } from '../../lib/dates.js'
 import { priceFrom, subtitleOf } from '../../api/home.js'
 import './home.css'
 
-// Shared building blocks for Home, /services/:vertical and /occasions/:slug.
+// Shared building blocks for Home (and anywhere else that lists photographers as cards).
 
 export function SectionHead({ title, sub, to, cta = 'See all' }) {
   return (
@@ -42,16 +41,15 @@ export function RatingInline({ p, count = false }) {
 const dayName = (key) => fromKey(key).toLocaleDateString('en-US', { weekday: 'short' })
 
 // Airbnb-style card: a big photo, then who, rating and price.
-//   showVertical: name the vertical in the subtitle (for shelves that mix verticals)
-export function ProviderCard({ p, showVertical = false, wide = false }) {
+export function ProviderCard({ p, wide = false }) {
   const price = priceFrom(p)
   const badge =
     p.tasteMatch != null ? `${p.tasteMatch}% match` : p.freeDates?.length ? `Free ${p.freeDates.map(dayName).join(' & ')}` : null
   const [sharing, setSharing] = useState(false)
   return (
     <>
-    {/* The card is a wrapper: the link covers photo + text, and the share / add-to-event buttons
-        are its siblings laid over the photo (a <button> inside an <a> is invalid markup). */}
+    {/* The card is a wrapper: the link covers photo + text, and the share button is
+        its sibling laid over the photo (a <button> inside an <a> is invalid markup). */}
     <div className={`hd-card ${wide ? 'wide' : ''}`}>
     <Link to={`/u/${p.id}`} className="hd-card-link" aria-label={`${p.name}${price ? `, ${price}` : ''}`}>
       <div className="hd-card-img">
@@ -70,7 +68,7 @@ export function ProviderCard({ p, showVertical = false, wide = false }) {
             <RatingInline p={p} />
           </span>
         </div>
-        <div className="muted tiny ellipsis">{[subtitleOf(p, { withVertical: showVertical }), p.city?.split(',')[0]].filter(Boolean).join(' · ')}</div>
+        <div className="muted tiny ellipsis">{[subtitleOf(p), p.city?.split(',')[0]].filter(Boolean).join(' · ')}</div>
         {price && <div className="tiny mt-xs"><b>{price}</b></div>}
       </div>
     </Link>
@@ -87,12 +85,11 @@ export function ProviderCard({ p, showVertical = false, wide = false }) {
       >
         <Send size={15} />
       </button>
-      <AddToEventButton provider={p} variant="card" />
     </div>
     </div>
     {sharing && (
       <ShareSheet
-        item={{ kind: 'provider', id: p.id, title: p.name, subtitle: [subtitleOf(p, { withVertical: true }), p.city?.split(',')[0]].filter(Boolean).join(' · '), image: p.cover || p.avatar }}
+        item={{ kind: 'provider', id: p.id, title: p.name, subtitle: [subtitleOf(p), p.city?.split(',')[0]].filter(Boolean).join(' · '), image: p.cover || p.avatar }}
         onClose={() => setSharing(false)}
       />
     )}
@@ -101,7 +98,7 @@ export function ProviderCard({ p, showVertical = false, wide = false }) {
 }
 
 // Compact list row (photo, name, services, rating, price).
-export function ProviderRow({ p, showVertical = false }) {
+export function ProviderRow({ p }) {
   const photo = p.covers?.[1] || p.cover
   const price = priceFrom(p)
   return (
@@ -111,7 +108,7 @@ export function ProviderRow({ p, showVertical = false }) {
         <div className="person-name small">
           {p.name} {p.idVerified && <IdVerified />} {p.pro && <ProBadge />}
         </div>
-        <div className="muted tiny ellipsis">{subtitleOf(p, { withVertical: showVertical })}</div>
+        <div className="muted tiny ellipsis">{subtitleOf(p)}</div>
         <div className="tiny row gap-xs mt-xs">
           <RatingInline p={p} count />
           {price && <span className="muted ellipsis">· {price}</span>}

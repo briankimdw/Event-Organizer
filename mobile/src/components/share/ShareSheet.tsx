@@ -2,10 +2,9 @@
 // or people, add a note, Send. Each chosen chat gets one message with a card.
 // "Share to…" opens the system share sheet (RN Share), which also offers Copy.
 //
-//   <ShareSheet item={{ kind: 'post'|'provider'|'event'|'plan', id, title?, image?, subtitle?, providerId?, link? }} onClose={...} />
+//   <ShareSheet item={{ kind: 'post'|'provider', id, title?, image?, subtitle?, providerId?, link? }} onClose={...} />
 //
-// Mount it when it should show, or pass open={bool}. kind 'plan' (an unsaved plan)
-// only offers the system share sheet.
+// Mount it when it should show, or pass open={bool}.
 import * as Linking from 'expo-linking'
 import { router } from 'expo-router'
 import { Check, Link2, Search, Share2, Users } from 'lucide-react-native'
@@ -13,16 +12,17 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, ScrollView, Share, TextInput, View } from 'react-native'
 
 import {
-  listConversations, mergeShareTargets, messageError, searchPeople, shareLink, shareRecipients, shareSupport, shareToChats,
+  listConversations, mergeShareTargets, messageError, searchPeople, shareLink, shareRecipients, shareToChats,
 } from '@shared/api/messages.js'
 import { Avatar, Button, Loading, Photo, Sheet, Text, TextField } from '@/components'
 import useQuery from '@/hooks/useQuery'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
+import { BRAND } from '@/lib/photo'
 import { makeStyles, useTheme } from '@/theme'
 
 export type ShareItem = {
-  kind: 'post' | 'provider' | 'event' | 'plan'
+  kind: 'post' | 'provider'
   id: string
   title?: string | null
   image?: string | null
@@ -34,7 +34,7 @@ export type ShareItem = {
 type Target = ReturnType<typeof mergeShareTargets>[number]
 
 const MAX_PICK = 20
-const NOUN: Record<ShareItem['kind'], string> = { post: 'post', provider: 'vendor', event: 'event', plan: 'plan' }
+const NOUN: Record<ShareItem['kind'], string> = { post: 'post', provider: 'profile' }
 
 export function ShareSheet({ item, onClose, open = true }: { item: ShareItem | null; onClose: () => void; open?: boolean }) {
   const s = useStyles()
@@ -42,11 +42,11 @@ export function ShareSheet({ item, onClose, open = true }: { item: ShareItem | n
   const { user } = useAuth()
   const { toast } = useStore()
   if (!item) return null
-  const path = item.link || shareLink(item)
+  const path = item.link || shareLink(item) || '/'
   const url = Platform.OS === 'web' && typeof window !== 'undefined' ? `${window.location.origin}${path}` : Linking.createURL(path)
 
   const shareOut = () => {
-    const title = item.title || 'Event Organizer'
+    const title = item.title || BRAND
     Share.share(Platform.OS === 'ios' ? { title, url } : { title, message: `${title}\n${url}` }, { dialogTitle: 'Share', subject: title }).catch(() => {})
   }
   const copy = async () => {
@@ -83,7 +83,7 @@ export function ShareSheet({ item, onClose, open = true }: { item: ShareItem | n
           </View>
         </View>
       )}
-      {user && item.kind !== 'plan' ? (
+      {user ? (
         <SendTo item={item} onDone={onClose} actions={actions} />
       ) : (
         <>
@@ -113,7 +113,6 @@ function SendTo({ item, onDone, actions }: { item: ShareItem; onDone: () => void
   const { c } = useTheme()
   const { toast } = useStore()
   const { data: conversations, loading } = useQuery(() => listConversations(), [])
-  const { data: support } = useQuery(() => shareSupport(), [])
   const [q, setQ] = useState('')
   const [people, setPeople] = useState<unknown[]>([])
   const [searching, setSearching] = useState(false)
@@ -166,15 +165,6 @@ function SendTo({ item, onDone, actions }: { item: ShareItem; onDone: () => void
       toast(messageError(e))
       setBusy(false)
     }
-  }
-
-  if (support && item.kind === 'event' && !support.event) {
-    return (
-      <>
-        <Text variant="small" muted style={s.note}>Sending events in chat needs a database update. You can still share the link.</Text>
-        <View style={s.footer}>{actions}</View>
-      </>
-    )
   }
 
   return (

@@ -1,6 +1,6 @@
 // Request a booking: native version of frontend/src/screens/BookingRequest.jsx.
-// Package (with its price unit), hours or a Guests / Items quantity for per-person and
-// per-item packages, dates from a 4-week strip showing the vendor's free days (dates from a
+// Package (with its price unit), hours (or a quantity, only for old per-person / per-item
+// packages), dates from a 4-week strip showing the pro's free days (dates from a
 // search arrive pre-selected via ?dates=), a start time, location, add-ons, notes and a live total.
 // Each selected date becomes its own request.
 import { bookingError, requestBooking } from '@shared/api/bookings.js'
@@ -21,7 +21,7 @@ import { makeStyles, useTheme } from '@/theme'
 import type { Package, Provider } from '@/types'
 import { Callout, Note, PersonRow, PolicyTable, Row, Summary, TotalRow } from './parts'
 
-// Start times offered (sent as HH:MM in the vendor's time zone).
+// Start times offered (sent as HH:MM in the pro's time zone).
 const TIMES: [string, string][] = [
   ['09:00', '9:00 AM'],
   ['11:00', '11:00 AM'],
@@ -33,7 +33,7 @@ const STRIP_DAYS = 28
 const MAX_DATES = 14 // the database accepts at most 14 dates per request
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-type Params = { providerId: string; pkg?: string; dates?: string; event?: string }
+type Params = { providerId: string; pkg?: string; dates?: string }
 type Qty = { type: string; label: string; min: number; max: number; default: number }
 type Addon = { id: string; name: string; price: number | null }
 type Pkg = Package & { id: string; name: string; priceType: string; price: number | null; hours: number | null; depositPct: number | null; attributes: Record<string, unknown> }
@@ -81,7 +81,7 @@ function RequestForm({ p }: { p: Provider }) {
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
 
-  // The next few weeks plus any dates carried over from a search: which ones is this vendor free on?
+  // The next few weeks plus any dates carried over from a search: which ones are they free on?
   const stripKeys = useMemo(() => Array.from({ length: STRIP_DAYS }, (_, i) => toKey(addDays(today(), i + 1))), [])
   const checkKeys = useMemo(() => [...new Set([...stripKeys, ...requestedDates])].sort(), [stripKeys, requestedDates])
   const { data: free, loading: freeLoading } = useQuery<Set<string>>(() => freeDays(p.id, checkKeys), [p.id, checkKeys.join(',')])
@@ -114,11 +114,10 @@ function RequestForm({ p }: { p: Provider }) {
 
   const send = async () => {
     if (!user) {
-      // Keep the whole request (incl. ?event= from an event's board) for after signing in.
+      // Keep the whole request for after signing in.
       const query = new URLSearchParams({
         ...(params.pkg ? { pkg: params.pkg } : {}),
         ...(params.dates ? { dates: params.dates } : {}),
-        ...(params.event ? { event: params.event } : {}),
       }).toString()
       router.push({ pathname: '/sign-in', params: { next: `${pathname}${query ? `?${query}` : ''}` } })
       return
@@ -135,7 +134,6 @@ function RequestForm({ p }: { p: Provider }) {
         addonIds: addons,
         location: loc.trim(),
         notes: note.trim(),
-        eventId: params.event || null, // from an event's board (/events/[id])
       } as any)
       toast(rows.length > 1 ? `${rows.length} requests sent. ${first} has 48h to respond.` : `Request sent. ${first} has 48h to respond.`)
       if (rows.length === 1) router.replace({ pathname: '/bookings/[id]', params: { id: rows[0].id } })

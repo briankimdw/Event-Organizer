@@ -6,6 +6,8 @@
 // Values stay as typed (numbers are strings while editing); run them through
 // cleanAttributes(fields, values) from @shared/verticals before saving.
 // Selects are chips (tap again to clear), since a native dropdown adds a dependency.
+// Fields with a `group` ('photo' | 'video', photography's package fields) get a small
+// "Photo" / "Video" heading; the ungrouped ones after them sit under "Photo & video".
 import { Plus, X } from 'lucide-react-native'
 import { useState } from 'react'
 import { View } from 'react-native'
@@ -28,7 +30,10 @@ export type FieldDef = {
   placeholder?: string
   maxLength?: number
   custom?: boolean
+  group?: 'photo' | 'video' | string
 }
+
+const GROUP_LABEL: Record<string, string> = { photo: 'Photo', video: 'Video' }
 
 type Values = Record<string, any>
 
@@ -36,22 +41,31 @@ export default function PackageFields({ fields = [], values = {}, onChange }: { 
   const s = useStyles()
   if (!fields.length) return null
   const set = (key: string, v: unknown) => onChange({ ...values, [key]: v })
-  // Short number fields sit two to a row.
+  // Short number fields (of the same group) sit two to a row.
   const rows: FieldDef[][] = []
   for (const f of fields) {
     const last = rows[rows.length - 1]
-    if (f.type === 'number' && last?.length === 1 && last[0].type === 'number') last.push(f)
+    if (f.type === 'number' && last?.length === 1 && last[0].type === 'number' && last[0].group === f.group) last.push(f)
     else rows.push([f])
+  }
+  const grouped = fields.some((f) => f.group)
+  const heading = (row: FieldDef[], i: number) => {
+    const g = row[0].group || ''
+    if (!grouped || (i > 0 && (rows[i - 1][0].group || '') === g)) return null
+    return <Text variant="label" style={s.groupLabel} accessibilityRole="header">{GROUP_LABEL[g] || (g ? g : 'Photo & video')}</Text>
   }
   return (
     <View>
-      {rows.map((row) => (
-        <View key={row[0].key} style={[s.mt, row.length > 1 && s.pair]}>
-          {row.map((f) => (
-            <View key={f.key} style={row.length > 1 ? s.grow : undefined}>
-              <Field field={f} value={values[f.key]} onChange={(v) => set(f.key, v)} />
-            </View>
-          ))}
+      {rows.map((row, i) => (
+        <View key={row[0].key}>
+          {heading(row, i)}
+          <View style={[s.mt, row.length > 1 && s.pair]}>
+            {row.map((f) => (
+              <View key={f.key} style={row.length > 1 ? s.grow : undefined}>
+                <Field field={f} value={values[f.key]} onChange={(v) => set(f.key, v)} />
+              </View>
+            ))}
+          </View>
         </View>
       ))}
     </View>
@@ -139,4 +153,5 @@ const useStyles = makeStyles((t) => ({
   grow: { flex: 1 },
   label: { marginBottom: 6 },
   addBtn: { alignSelf: 'center' },
+  groupLabel: { marginTop: t.space.lg, color: t.c.muted },
 }))

@@ -2,7 +2,7 @@
 // profile header (with "Edit profile"), the Hiring/Business switch and the
 // client ("Hiring") view. The provider view lives in Me.tsx with the Dashboard.
 import { useRouter } from 'expo-router'
-import { Bookmark, Briefcase, ChevronRight, Heart, Info, Layers, MapPin, Pencil, Sparkles, Star, Store } from 'lucide-react-native'
+import { Bookmark, Briefcase, Camera, ChevronRight, Heart, Info, Layers, MapPin, Pencil, Sparkles, Star, Store } from 'lucide-react-native'
 import { useState, type ReactNode } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 
@@ -11,15 +11,14 @@ import { getTasteProfile } from '@shared/api/discover.js'
 import { listCollections } from '@shared/api/social.js'
 import { today } from '@shared/lib/dates.js'
 import { avatarUrl } from '@shared/lib/format.js'
-import { nounFor, nounTitle, verticalMeta } from '@shared/verticals/index.js'
-import { Avatar, Button, EmptyState, ErrorState, IdVerified, Loading, Photo, Sheet, Text, TextField, VerticalIcon } from '@/components'
+import { Avatar, Button, EmptyState, ErrorState, IdVerified, Loading, Photo, Sheet, Text, TextField } from '@/components'
 import useQuery, { type QueryState } from '@/hooks/useQuery'
 import { supabase } from '@/lib/supabase'
 import { StatusPill } from '@/screens/bookings/parts'
-import { EventsShelf } from '@/screens/events/parts'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
 import { IMAGE_BUTTON_ROLE } from '@/lib/a11y'
+import { isPhotoListing } from '@/lib/photo'
 import { makeStyles, useTheme } from '@/theme'
 
 // Bookings that still need something from someone.
@@ -29,7 +28,7 @@ export const rating = (n: number | null | undefined) => (n == null ? null : Numb
 export function SignedOut() {
   const s = useStyles()
   const router = useRouter()
-  const { data: providers } = useQuery<any[]>(listProviders, [])
+  const { data: providers } = useQuery<any[]>(() => listProviders().then((list: any[]) => list.filter(isPhotoListing)), [])
   const art = (providers || []).map((p) => p.cover).filter(Boolean).slice(0, 3) as string[]
   return (
     <View style={s.signedOut}>
@@ -39,7 +38,7 @@ export function SignedOut() {
         </View>
       )}
       <Text variant="h3" center>Your bookings, favorites and messages, in one place</Text>
-      <Text variant="small" muted center>Sign in to request bookings, message vendors and keep your shortlist across devices.</Text>
+      <Text variant="small" muted center>Sign in to book photographers and videographers, message them and keep your shortlist across devices.</Text>
       <Button title="Sign in or create an account" variant="accent" block onPress={() => router.push({ pathname: '/sign-in', params: { next: '/me' } })} style={s.mt} />
     </View>
   )
@@ -118,14 +117,14 @@ export function ProfileHero({ provider }: { provider: any }) {
             style={({ pressed }) => [s.ratingCell, isProvider && s.ratingOn, pressed && { opacity: 0.7 }]}
             onPress={() => router.push({ pathname: '/u/[id]', params: { id: myProvider.id, tab: 'reviews' } })}
             accessibilityRole="link"
-            accessibilityLabel={`See the reviews on your ${nounFor(myProvider.vertical)} profile`}
+            accessibilityLabel="See the reviews on your business profile"
           >
             <View style={s.inline}>
               <Star size={14} color={c.star} fill={c.star} />
               <Text weight="700"> {rating(provider?.rating) ?? 'New'} </Text>
               <ChevronRight size={14} color={c.muted} />
             </View>
-            <Text variant="tiny" muted>as a {nounFor(myProvider.vertical)} · {reviewCount} review{reviewCount === 1 ? '' : 's'}</Text>
+            <Text variant="tiny" muted>as a pro · {reviewCount} review{reviewCount === 1 ? '' : 's'}</Text>
           </Pressable>
         ) : (
           <View style={[s.ratingCell, isProvider && s.ratingOn]}>
@@ -149,7 +148,7 @@ export function ProfileHero({ provider }: { provider: any }) {
 export function RoleSwitch({ myBookings, providerBookings }: { myBookings?: any[]; providerBookings?: any[] }) {
   const s = useStyles()
   const { c } = useTheme()
-  const { mode, setMode, myProvider, myProviders } = useStore()
+  const { mode, setMode, myProvider } = useStore()
   const activeBookings = (myBookings || []).filter((b) => ACTIVE.includes(b.status)).length
   const pending = (providerBookings || []).filter((r) => r.status === 'requested').length
   const isProvider = mode === 'provider'
@@ -168,8 +167,8 @@ export function RoleSwitch({ myBookings, providerBookings }: { myBookings?: any[
       {side(!isProvider, () => setMode('client'), <Briefcase size={18} color={c.ink} />, 'Hiring',
         myBookings ? `${activeBookings} active booking${activeBookings === 1 ? '' : 's'}` : 'Your bookings')}
       {side(isProvider, () => setMode('provider'),
-        myProvider ? <VerticalIcon name={verticalMeta(myProvider.vertical).icon} size={18} /> : <Store size={18} color={c.ink} />,
-        myProviders.length > 1 ? 'My business' : myProvider ? nounTitle(myProvider.vertical) : 'Vendor',
+        myProvider ? <Camera size={18} color={c.ink} /> : <Store size={18} color={c.ink} />,
+        'Business',
         !myProvider ? 'Start taking bookings' : pending ? `${pending} new request${pending === 1 ? '' : 's'}` : 'Your business',
         pending > 0 && !isProvider ? pending : undefined)}
     </View>
@@ -252,7 +251,6 @@ export function ClientView({ bookings }: { bookings: QueryState<any[]> }) {
         </>
       )}
 
-      <EventsShelf showEmpty title="Events" />
       <Text variant="h4" style={s.section}>Shortlisted</Text>
       {shortlisted.length ? (
         <PeopleRow people={shortlisted} />
@@ -267,7 +265,7 @@ export function ClientView({ bookings }: { bookings: QueryState<any[]> }) {
         <PeopleRow people={followed} />
       ) : (
         <View style={s.padX}>
-          <EmptyCard icon={Heart} title={providers || !following.size ? 'Not following anyone yet' : 'Loading…'} text="Follow vendors to see their new work first." onPress={() => router.push('/search')} />
+          <EmptyCard icon={Heart} title={providers || !following.size ? 'Not following anyone yet' : 'Loading…'} text="Follow photographers to see their new work first." onPress={() => router.push('/search')} />
         </View>
       )}
 
@@ -275,7 +273,7 @@ export function ClientView({ bookings }: { bookings: QueryState<any[]> }) {
       <View style={s.padX}>
         {taste.loading ? <Loading inline /> : taste.error ? <ErrorState error={taste.error} onRetry={taste.reload} /> : !taste.data?.styles?.length ? (
           <EmptyCard icon={Sparkles} title={taste.data?.swipes ? 'Still learning your taste' : 'We don’t know your taste yet'}
-            text="Like a few photos in Discover and we’ll match you with vendors whose style fits." onPress={() => router.push('/discover')} />
+            text="Like a few photos in Discover and we’ll match you with photographers whose style fits." onPress={() => router.push('/discover')} />
         ) : (
           <View style={s.infoCard}>
             <Text variant="tiny" muted>Learned from {taste.data.swipes} swipe{taste.data.swipes === 1 ? '' : 's'} ({taste.data.likes} liked)</Text>
@@ -331,7 +329,7 @@ export function ClientView({ bookings }: { bookings: QueryState<any[]> }) {
 
       <View style={[s.padX, s.inline, s.mt]}>
         <Info size={12} color={c.muted} />
-        <Text variant="tiny" muted> Vendors see your client rating when you send a request.</Text>
+        <Text variant="tiny" muted> Photographers see your client rating when you send a request.</Text>
       </View>
     </View>
   )

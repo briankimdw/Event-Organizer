@@ -34,8 +34,8 @@ export default function Verify() {
               <h2 className="h3">Identity verification is coming soon</h2>
               <p className="muted small">
                 {myProvider
-                  ? 'Vendors need to verify their identity before accepting paid bookings. You’ll scan a government ID and take a quick selfie. This is free and separate from Verified Pro.'
-                  : 'Verification is for vendors taking paid bookings. Clients don’t need it to book.'}
+                  ? 'Photographers need to verify their identity before accepting paid bookings. You’ll scan a government ID and take a quick selfie. This is free and separate from Verified Pro.'
+                  : 'Verification is for photographers taking paid bookings. Clients don’t need it to book.'}
               </p>
               <div className="note left-text">
                 Verification will be handled by Stripe Identity. We’ll only keep whether you passed, never your ID images or face data.
@@ -45,7 +45,7 @@ export default function Verify() {
                 <b className="small">{myProvider ? 'Not verified' : 'No listing yet'}</b>
               </div>
               <button className="btn accent block mt" disabled>Verify with Stripe (coming soon)</button>
-              {!myProvider && <Link to="/new-listing" className="btn ghost block mt-sm">List your services</Link>}
+              {!myProvider && <Link to="/new-listing" className="btn ghost block mt-sm">Set up your listing</Link>}
             </div>
           )}
         </div>

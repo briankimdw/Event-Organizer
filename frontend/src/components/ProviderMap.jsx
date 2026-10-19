@@ -1,4 +1,4 @@
-// Full-screen map of providers (any vertical): round avatar pins where they're based,
+// Full-screen map of photographers: round avatar pins where they’re based,
 // ringed in their vertical's color.
 // Tap a pin to see how far they travel (their service radius) and a compact
 // card with a link to their profile and to book. Lazy-loaded (see map/LazyMap.jsx).
@@ -258,7 +258,7 @@ export default function ProviderMap({ providers, userLocation, onLocate, focusId
         </button>
       </div>
 
-      {selected && <ProviderCard key={selected.id} provider={selected} linkQuery={linkQuery} showVertical={!vertical} onClose={() => setSelectedId(null)} />}
+      {selected && <ProviderCard key={selected.id} provider={selected} linkQuery={linkQuery} onClose={() => setSelectedId(null)} />}
     </div>
   )
 }

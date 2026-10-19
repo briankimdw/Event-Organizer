@@ -26,6 +26,7 @@ import { CODE_LENGTH, MIN_PASSWORD, coverMix } from '@shared/components/auth/aut
 import { KeyboardView, Photo, Segmented, Text } from '@/components'
 import useQuery from '@/hooks/useQuery'
 import { focusOn } from '@/lib/a11y'
+import { BRAND, isPhotoListing } from '@/lib/photo'
 import { supabase } from '@/lib/supabase'
 import { completeAuthFromUrl } from '@/screens/account/authLink'
 import { AuthButton, AuthField, AuthMessage, Badge, CodeInput, GoogleLogo, Legal, PasswordField, TextLink } from '@/screens/auth/AuthUI'
@@ -75,7 +76,7 @@ export default function SignIn() {
   const params = useLocalSearchParams<{ next?: string; mode?: string }>()
   const next = safeNext(params.next)
   const { user, profile, needsWelcome } = useAuth()
-  const { data: providers } = useQuery<Provider[]>(() => listProviders(), [])
+  const { data: providers } = useQuery<Provider[]>(() => listProviders().then((list: Provider[]) => list.filter(isPhotoListing)), [])
   const collage = coverMix(providers, 6)
 
   const [mode, setMode] = useState<'login' | 'signup'>(params.mode === 'signup' ? 'signup' : 'login')
@@ -305,9 +306,9 @@ export default function SignIn() {
           </Pressable>
 
           <View style={s.startBody}>
-            <Text variant="display">Event Organizer<Text variant="display" color="accent" accessibilityRole="none">.</Text></Text>
-            <Text variant="h1" style={s.headline}>Plan any event. Book trusted vendors.</Text>
-            <Text muted style={s.sub}>Photographers, caterers, venues, DJs and more, all in one place.</Text>
+            <Text variant="display">{BRAND}<Text variant="display" color="accent" accessibilityRole="none">.</Text></Text>
+            <Text variant="h1" style={s.headline}>Book photographers & videographers you’ll love.</Text>
+            <Text muted style={s.sub}>Weddings, portraits, headshots, films and reels. Swipe real work, then book.</Text>
 
             <View style={s.actions}>
               <AuthButton title="Continue with Google" variant="outline" left={<GoogleLogo />} onPress={google} loading={busy} />
@@ -333,7 +334,7 @@ export default function SignIn() {
           <ArrowLeft size={22} color={c.ink} />
         </Pressable>
         <Text variant="h3" weight="800" importantForAccessibility="no" accessibilityElementsHidden accessibilityRole="none">
-          Event Organizer<Text variant="h3" weight="800" color="accent">.</Text>
+          {BRAND}<Text variant="h3" weight="800" color="accent">.</Text>
         </Text>
         <Pressable onPress={close} style={s.barBtn} accessibilityRole="button" accessibilityLabel="Close">
           <X size={22} color={c.ink} />

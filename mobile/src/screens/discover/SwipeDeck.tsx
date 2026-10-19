@@ -1,30 +1,30 @@
-// Discover -> "For you": the swipe deck for Everything or one vertical (all 18), filtered by
-// service and occasion. Native port of frontend/src/components/discover/SwipeDeck.jsx with the
-// same data flow, all from the shared api/discover.js:
-//   getDeck() in small batches (photo cards where vendors have posted, vendor cards for vendors
-//   who haven't, incl. DJs / planners / officiants), topped up as the deck runs low;
+// Discover -> "For you": the swipe deck of photo & video work, narrowed by service chips
+// (photography only: no vertical picker, no occasions). Native port of
+// frontend/src/components/discover/SwipeDeck.jsx with the same data flow, all from the
+// shared api/discover.js:
+//   getDeck() in small batches (photo cards where photographers have posted, vendor cards for
+//   photographers who haven't), topped up as the deck runs low;
 //   logSwipe / undoSwipe (vendor cards log provider_id only), getDeckMatches() for % match,
-//   "Not into this" (tags / traits, or hide a vendor), the session history in the store.
-//   The choice (vertical / service / occasion) is remembered with read/writeDeckChoice.
+//   "Not into this" (tags / traits, or hide a photographer), the session history in the store.
+//   The service chip is remembered with read/writeDeckChoice.
 // The card itself (drag, fly-out, taps) is SwipeCard.tsx; the sheets are DeckSheets.tsx.
 import { useRouter } from 'expo-router'
-import { Bookmark, Compass, Heart, Info, RotateCcw, Send, Sparkles, Store, X, type LucideIcon } from 'lucide-react-native'
+import { Bookmark, Camera, Compass, Heart, Info, RotateCcw, Send, Sparkles, X, type LucideIcon } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { countProvidersByVertical, listProviders } from '@shared/api/catalog.js'
+import { listProviders } from '@shared/api/catalog.js'
 import {
   EVERYTHING, deckWords, getDeck, getDeckMatches, getHiddenVendors, hideVendor, logSwipe, normalizeDeckChoice, readDeckChoice, undoSwipe,
   unhideVendor, writeDeckChoice,
 } from '@shared/api/discover.js'
-import { deckChoices, listPostIndex, postFacets, withArticle } from '@shared/api/home.js'
+import { listPostIndex, postFacets } from '@shared/api/home.js'
 import { startInquiry } from '@shared/api/messages.js'
-import { OCCASIONS, getOccasion, getVertical } from '@shared/verticals/catalog.js'
-import { lowerFirst } from '@shared/verticals/index.js'
+import { SERVICE_CHIPS } from '@shared/verticals/catalog.js'
 import { Button, Chip, EmptyState, ErrorState, Loading, iconByName } from '@/components'
-import type { Occasion, Provider } from '@/types'
+import type { Provider } from '@/types'
 import { useInvite } from '@/screens/home/Browse'
 import useQuery from '@/hooks/useQuery'
 import { useAuth } from '@/state/auth'
@@ -35,15 +35,15 @@ import { CorrectSheet, DetailsSheet, MatchOverlay, ShortlistSheet, TasteSheet } 
 import { DiscoverHeader, PillButton } from './DiscoverHeader'
 import { BehindCard, SwipeCard, type TapZone } from './SwipeCard'
 import type { DeckCard, HistoryEntry, SwipeAction } from './types'
-import { TintChip, VerticalPickerChip, VerticalPickerSheet, type DeckChoice, type DeckChoices } from './VerticalPicker'
 
 const BATCH = 8 // cards per feed request (signed in: small batches so ranking keeps up with swipes; services/ml/eval: 8 vs 20 roughly triples early like rate)
 const BATCH_SIGNED_OUT = 50 // signed out the feed doesn't change, so take as much as it gives
 const LOW_WATER = 3 // fetch more when fewer cards than this are left
 
-type SheetName = null | 'details' | 'correct' | 'taste' | 'shortlist' | 'vertical'
+type SheetName = null | 'details' | 'correct' | 'taste' | 'shortlist'
 
-type Choice = { vertical: string; service: string | null; occasion: string | null }
+type Choice = { vertical: string; service: string | null; occasion: null }
+type ServiceChip = { slug: string; name: string; icon: string }
 // Remembered on the device (the localStorage shim is backed by AsyncStorage).
 const storage = (): Storage | null => {
   try {
@@ -52,14 +52,13 @@ const storage = (): Storage | null => {
     return null
   }
 }
-// ?v= / ?s= / ?o= win over the remembered choice.
-const startChoice = (v?: string, sv?: string, o?: string): Choice => {
-  const saved = readDeckChoice(storage()) as Choice
-  if (!v && !o) return saved
-  return normalizeDeckChoice({ vertical: v || EVERYTHING, service: sv ?? null, occasion: o ?? null }) as Choice
+// ?s= wins over the remembered choice.
+const startChoice = (sv?: string): Choice => {
+  if (!sv) return readDeckChoice(storage()) as Choice
+  return normalizeDeckChoice({ vertical: EVERYTHING, service: sv, occasion: null }) as Choice
 }
 
-export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasion }: { tabs: ReactNode; initialVertical?: string; initialService?: string; initialOccasion?: string }) {
+export function SwipeDeck({ tabs, initialService }: { tabs: ReactNode; initialService?: string }) {
   const s = useStyles()
   const router = useRouter()
   const { user } = useAuth()
@@ -71,19 +70,19 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
   const signIn = () => router.push({ pathname: '/sign-in', params: { next: '/discover' } })
   const invite = useInvite()
 
-  const [choice, setChoiceState] = useState<Choice>(() => startChoice(initialVertical, initialService, initialOccasion))
-  const { vertical, service: category, occasion } = choice
+  const [choice, setChoiceState] = useState<Choice>(() => startChoice(initialService))
+  const { service: category } = choice
   const setChoice = (next: Partial<Choice>) => {
     const c = normalizeDeckChoice({ ...choice, ...next }) as Choice
     setChoiceState(c)
     writeDeckChoice(storage(), c)
     syncParams(c)
   }
-  // Mirror the choice in the route params (?v=&s=&o=), so Explore picks it up and back keeps it.
+  // Mirror the choice in the route params (?s=), so Explore picks it up and back keeps it.
   const syncParams = (c: Choice) => {
-    if (c.vertical === (initialVertical ?? null) && c.service === (initialService ?? null) && c.occasion === (initialOccasion ?? null)) return
+    if (c.service === (initialService ?? null)) return
     try {
-      router.setParams({ v: c.vertical, s: c.service ?? undefined, o: c.occasion ?? undefined } as any)
+      router.setParams({ s: c.service ?? undefined, v: undefined, o: undefined } as any)
     } catch (e) {
       console.warn(e) // not mounted yet: the choice is still remembered on the device
     }
@@ -101,33 +100,22 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
   const chipRow = useRef<ScrollView>(null)
   const dragProgress = useSharedValue(0)
 
-  // Links into Discover (?v= from a vertical page, ?o= from an occasion) switch the deck.
+  // A link into Discover with ?s= (a service) switches the deck.
   useEffect(() => {
-    if (initialVertical || initialOccasion) setChoice(startChoice(initialVertical, initialService, initialOccasion))
-  }, [initialVertical, initialService, initialOccasion]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (initialService) setChoice(startChoice(initialService))
+  }, [initialService]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const all = vertical === EVERYTHING
-  const verticalInfo = all ? null : getVertical(vertical)!
-  const occasionInfo = occasion ? getOccasion(occasion) ?? null : null
-  const feedKey = `${vertical}|${category ?? ''}|${occasion ?? ''}`
-  const words = deckWords(vertical) as { plural: string; finding: string; empty: string }
-  // Picker data: vendors and posts per vertical (shared deckChoices / postFacets).
-  const verticalCounts = useQuery<Record<string, number>>(() => countProvidersByVertical(), [])
+  const feedKey = category ?? ''
+  const words = deckWords() as { plural: string; finding: string; empty: string }
+  // Chip data: posts and photographers per service (shared postFacets).
   const posts = useQuery<any[]>(() => listPostIndex(), [])
   const providers = useQuery<Provider[]>(() => listProviders(), [])
-  const choices = deckChoices(verticalCounts.data || {}, (posts.data ?? null) as any) as DeckChoices
-  const allChoices: DeckChoice[] = choices.groups.flatMap((g) => g.verticals)
-  const current = all ? null : allChoices.find((v) => v.slug === vertical) ?? null
-  const facets = postFacets(posts.data || [], { vertical, service: category } as any) as { total: number; occasions: Record<string, number>; services: Record<string, number> }
-  const swipingPhotos = all ? choices.everything.posts > 0 : current?.mode === 'photos'
-  // Service chips: the vertical's services that have posts or vendors offering them.
-  const offered = new Set((providers.data || []).filter((p) => p.vertical === vertical).flatMap((p) => p.categorySlugs || []))
-  const categories = (verticalInfo?.services ?? []).filter((x: { slug: string }) => x.slug !== 'meetups' && (x.slug === category || facets.services[x.slug] || offered.has(x.slug)))
-  const categoryName = categories.find((x: { slug: string }) => x.slug === category)?.name
-  // Occasion chips: occasions tagged on posts in scope.
-  const occasions = (OCCASIONS as Occasion[]).filter((o) => o.slug === occasion || facets.occasions[o.slug])
-  // Quick switches on the "everything" deck: verticals with something to swipe, most posts first.
-  const quick = all ? allChoices.filter((v) => v.mode !== 'empty').sort((a, b) => b.posts - a.posts || b.count - a.count) : []
+  const facets = postFacets(posts.data || [], { service: category } as any) as { total: number; services: Record<string, number> }
+  // Service chips (photo and video): the ones with posts or photographers offering them.
+  const offered = new Set((providers.data || []).flatMap((p) => p.categorySlugs || []))
+  const categories = (SERVICE_CHIPS as ServiceChip[]).filter((x) => x.slug === category || facets.services[x.slug] || offered.has(x.slug))
+  const categoryName = categories.find((x) => x.slug === category)?.name
+  const nobodyYet = providers.data?.length === 0 && posts.data?.length === 0
   const matches = useQuery<Map<string, number>>(uid ? () => getDeckMatches() : null, [uid])
   // Vendors hidden with "Not into this" (getDeck leaves them out too; this hides them at once).
   useEffect(() => {
@@ -165,7 +153,7 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
     setFeed((f) => ({ ...f, loading: true }))
     const { cards: had, seen: swipedBefore } = latest.current
     const seenCards = [...had, ...history.map((h) => h.card).filter(Boolean)]
-    getDeck({ vertical, service: category, occasion, limit: uid ? BATCH : BATCH_SIGNED_OUT, exclude: [...swipedBefore], seen: seenCards } as any).then(
+    getDeck({ service: category, limit: uid ? BATCH : BATCH_SIGNED_OUT, exclude: [...swipedBefore], seen: seenCards } as any).then(
       (rows: DeckCard[]) => {
         if (gen !== generation.current) return
         const { cards: have, seen: swiped, hidden: isHidden } = latest.current
@@ -232,10 +220,10 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
     setExit(null)
     setShot(0)
     busy.current = false
-    // The match moment. Photos: the second liked photo from one vendor. A vendor card is liked
-    // once: celebrate the first liked vendor in each vertical (not more often than every 6 cards).
+    // The match moment. Photos: the second liked photo from one photographer. A vendor card is
+    // liked once: celebrate the first liked vendor card (not more often than every 6 cards).
     const firstVendorLikeHere = c.kind === 'vendor' && liked &&
-      !likes.some((h) => h.card?.kind === 'vendor' && h.card.vertical === c.vertical) &&
+      !likes.some((h) => h.card?.kind === 'vendor') &&
       history.length - lastMatchAt.current >= 6
     if (liked && !matched.has(c.authorId) && ((c.kind !== 'vendor' && likedFromAuthor === 2) || firstVendorLikeHere)) {
       lastMatchAt.current = history.length + 1
@@ -309,16 +297,6 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
     setChoice({ service: slug })
     setShot(0)
   }
-  const pickVertical = (slug: string) => {
-    setSheet(null)
-    if (slug === vertical) return
-    setChoice({ vertical: slug, service: null, occasion: null })
-    setShot(0)
-  }
-  const pickOccasion = (slug: string | null) => {
-    setChoice({ occasion: slug })
-    setShot(0)
-  }
   // "Not into this" on a vendor card: hide them from Discover (signed in; undo in Your taste).
   const hideCardVendor = () => {
     if (!uid || !card) return
@@ -337,7 +315,7 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
     return unhideVendor(id)
   }
 
-  const scopeName = [categoryName, occasionInfo?.name].filter(Boolean).join(' · ')
+  const scopeName = categoryName || ''
   const cardMatch = card ? matchOf(card.provider.id) : null
   const matchProvider = match ? cards.find((c) => c.authorId === match)?.provider || likedCardsFrom(match)[0]?.provider : null
 
@@ -355,27 +333,10 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
 
       <View>
         <ScrollView ref={chipRow} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-          <VerticalPickerChip vertical={verticalInfo ?? choices.everything} onPress={() => setSheet('vertical')} />
-          {(quick.length > 0 || categories.length > 0) && <View style={s.divider} />}
-          {quick.map((v) => (
-            <TintChip key={v.slug} info={v} label={v.name} a11yLabel={`Swipe ${v.name}`} onPress={() => pickVertical(v.slug)} />
+          <Chip label="All" toggle select on={!category} onPress={() => pickCategory(null)} style={s.chip} accessibilityLabel="All photo and video work" />
+          {categories.map((x) => (
+            <Chip key={x.slug} label={x.name} icon={iconByName(x.icon)} toggle select on={category === x.slug} onPress={() => pickCategory(category === x.slug ? null : x.slug)} style={s.chip} />
           ))}
-          {categories.length > 0 && (
-            <>
-              <Chip label="All" toggle on={!category} onPress={() => pickCategory(null)} style={s.chip} />
-              {categories.map((x: { slug: string; name: string }) => (
-                <Chip key={x.slug} label={x.name} toggle on={category === x.slug} onPress={() => pickCategory(category === x.slug ? null : x.slug)} style={s.chip} />
-              ))}
-            </>
-          )}
-          {occasions.length > 0 && (
-            <>
-              <View style={s.divider} />
-              {occasions.map((o) => (
-                <TintChip key={o.slug} info={o} label={o.name} on={occasion === o.slug} a11yLabel={`For ${o.name}`} onPress={() => pickOccasion(occasion === o.slug ? null : o.slug)} />
-              ))}
-            </>
-          )}
         </ScrollView>
       </View>
 
@@ -384,23 +345,22 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
           <ErrorState error={feed.error} onRetry={() => setFeed((f) => ({ ...f, error: null }))} />
         ) : !feed.done ? (
           <Loading label={words.finding} />
-        ) : verticalInfo && current?.count === 0 && !(posts.data && facets.total) && !history.some((h) => h.card?.vertical === vertical) ? (
+        ) : nobodyYet && !history.length ? (
           <EmptyState
-            icon={iconByName(verticalInfo.icon)}
-            title={`No ${lowerFirst(verticalInfo.plural)} here yet`}
-            text={`Be the first ${verticalInfo.noun} on photomatch, or invite one you love. You’ll be able to swipe through their work here.`}
+            icon={Camera}
+            title="No photographers here yet"
+            text="Be the first photographer or videographer on photomatch, or invite one you love. You’ll be able to swipe through their work here."
             action={
               <View style={s.emptyActions}>
-                <Button title="List your services" icon={Store} size="sm" onPress={() => router.push({ pathname: '/new-listing', params: { v: vertical } } as any)} />
-                <Button title={`Invite ${withArticle(verticalInfo.noun)}`} icon={Send} variant="ghost" size="sm" onPress={() => invite(verticalInfo)} />
-                <Button title="Swipe everything" variant="ghost" size="sm" onPress={() => pickVertical(EVERYTHING)} />
+                <Button title="List your work" icon={Camera} size="sm" onPress={() => router.push('/new-listing')} />
+                <Button title="Invite a photographer" icon={Send} variant="ghost" size="sm" onPress={invite} />
               </View>
             }
           />
         ) : (
           <EmptyState
             icon={Compass}
-            title={`You’ve seen everything${scopeName ? ` in ${scopeName}` : verticalInfo ? ` in ${verticalInfo.name}` : ''}`}
+            title={`You’ve seen everything${scopeName ? ` in ${scopeName}` : ''}`}
             text={
               uid
                 ? `${words.empty} Check your shortlist, or try something else.`
@@ -409,8 +369,7 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
             action={
               <View style={s.emptyActions}>
                 {shortlist.size > 0 && <Button title={`See shortlist (${shortlist.size})`} size="sm" onPress={() => setSheet('shortlist')} />}
-                {(!!category || !!occasion) && <Button title={`All ${verticalInfo ? verticalInfo.name : 'of it'}`} variant="ghost" size="sm" onPress={() => setChoice({ service: null, occasion: null })} />}
-                {!all && !category && !occasion && <Button title="Swipe everything" variant="ghost" size="sm" onPress={() => pickVertical(EVERYTHING)} />}
+                {!!category && <Button title="All photo & video" variant="ghost" size="sm" onPress={() => pickCategory(null)} />}
                 <Button title={uid ? 'Check again' : 'Start over'} variant="ghost" size="sm" onPress={startOver} />
               </View>
             }
@@ -444,14 +403,6 @@ export function SwipeDeck({ tabs, initialVertical, initialService, initialOccasi
       </View>
 
       <DetailsSheet card={card ?? null} shot={shot} match={cardMatch} open={sheet === 'details'} onClose={() => setSheet(null)} onMessage={message} />
-      <VerticalPickerSheet
-        open={sheet === 'vertical'}
-        onClose={() => setSheet(null)}
-        choices={choices}
-        loading={verticalCounts.loading && !verticalCounts.data}
-        value={vertical}
-        onPick={pickVertical}
-      />
 
       <CorrectSheet
         open={sheet === 'correct'}
@@ -525,7 +476,6 @@ const useStyles = makeStyles((t) => ({
   root: { flex: 1, backgroundColor: t.c.bg },
   chips: { flexDirection: 'row', gap: 6, paddingHorizontal: t.space.lg, paddingVertical: 4, alignItems: 'center' },
   chip: { minHeight: 34, justifyContent: 'center' },
-  divider: { width: 1, alignSelf: 'stretch', marginVertical: 6, marginHorizontal: 2, backgroundColor: t.c.line },
   deck: { flex: 1, marginHorizontal: 16, marginTop: 12, justifyContent: 'center' },
   emptyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, paddingTop: 14, paddingBottom: 12 },

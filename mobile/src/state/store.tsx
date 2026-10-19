@@ -1,6 +1,6 @@
 // App-wide state for the signed-in user. Native port of frontend/src/store.jsx,
 // same value shape (follows, shortlist, likes, saves, "Not into this" tags,
-// the user's provider listings (one per vertical; one selected), toast), using the same shared api/* calls.
+// the user's photo / video listing, toast), using the same shared api/* calls.
 // Screen-specific data (bookings, messages, profiles) is loaded by each screen.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
@@ -9,6 +9,7 @@ import { invalidate } from '@shared/api/catalog.js'
 import { addCorrections as saveCorrections, getTasteProfile, likePhoto, removeCorrection as deleteCorrection } from '@shared/api/discover.js'
 import { getMyProviders } from '@shared/api/portfolio.js'
 import * as social from '@shared/api/social.js'
+import { isPhotoListing } from '@/lib/photo'
 import { useAuth } from './auth'
 
 type Setter = React.Dispatch<React.SetStateAction<Set<string>>>
@@ -17,7 +18,7 @@ type PhotoRef = string | { id: string; albumId?: string; providerId?: string }
 type StoreValue = {
   /** The selected listing (providers row + `vertical` slug), or null. */
   myProvider: any | null
-  /** All of the user's listings (one per vertical), oldest first. */
+  /** The user's photo / video listings, oldest first (one, normally; other verticals are left out). */
   myProviders: any[]
   /** Reload my listings; pass a provider id to switch to it (e.g. one just created). */
   refreshProvider: (select?: string | null) => Promise<void>
@@ -100,7 +101,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refreshProvider = useCallback(async (select: string | null = null) => {
     if (!uid) return setMyProviders([])
     try {
-      setMyProviders(await getMyProviders(uid))
+      setMyProviders((await getMyProviders(uid)).filter(isPhotoListing))
       if (typeof select === 'string') selectProvider(select)
     } catch (e) {
       console.warn(e)
@@ -131,7 +132,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ])
       .then(([providers, follows, short, likes, saves, taste]) => {
         if (!live) return
-        setMyProviders(providers)
+        setMyProviders(providers.filter(isPhotoListing))
         setFollowing(new Set(follows))
         setShortlist(new Set(short))
         setLiked(new Set(likes))
@@ -164,12 +165,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return optimistic(setFollowing, providerId, on, () => {
       invalidate('providers') // follower counts
       return on ? social.follow(providerId) : social.unfollow(providerId)
-    }, 'follow vendors')
+    }, 'follow photographers')
   }
 
   const toggleShortlist = (providerId: string) => {
     const on = !shortlist.has(providerId)
-    return optimistic(setShortlist, providerId, on, () => (on ? social.addToShortlist(providerId) : social.removeFromShortlist(providerId)), 'save vendors')
+    return optimistic(setShortlist, providerId, on, () => (on ? social.addToShortlist(providerId) : social.removeFromShortlist(providerId)), 'save photographers')
   }
 
   const toggleLike = (photo: PhotoRef) => {

@@ -21,7 +21,7 @@ const attentionFor = (b) => {
   if (b.status === 'delivered') {
     return deliversMedia(b.vertical)
       ? { title: b.vertical === 'videography' ? 'Your video is ready' : 'Your photos are ready', cta: 'Review delivery', to: `/bookings/${b.id}/delivery` }
-      : { title: `${(b.provider.shortName || firstName(b.provider.name)) || 'Your vendor'} marked this done`, cta: 'Confirm' }
+      : { title: `${(b.provider.shortName || firstName(b.provider.name)) || 'Your photographer'} marked this done`, cta: 'Confirm' }
   }
   if (b.status === 'completed' && b.reviewWindowOpen && !b.myReview) return { title: 'How did it go?', cta: 'Leave a review', to: `/bookings/${b.id}/review` }
   return null
@@ -112,11 +112,11 @@ export default function Bookings() {
               {futureSelected.length > 0 && (
                 <>
                   <button className="btn accent block" onClick={findPhotographers}>
-                    <Search size={16} /> Find vendors for {futureSelected.length === 1 ? fmtChip(fromKey(futureSelected[0])) : `${futureSelected.length} dates`}
+                    <Search size={16} /> Find photographers for {futureSelected.length === 1 ? fmtChip(fromKey(futureSelected[0])) : `${futureSelected.length} dates`}
                   </button>
                   {freeCount != null && (
                     <div className="muted tiny bk-free-hint">
-                      {freeCount === 0 ? 'Nobody is free then yet. Try other dates.' : `${freeCount} vendor${freeCount === 1 ? '' : 's'} free`}
+                      {freeCount === 0 ? 'Nobody is free then yet. Try other dates.' : `${freeCount} photographer${freeCount === 1 ? '' : 's'} free`}
                     </div>
                   )}
                 </>
@@ -138,7 +138,7 @@ export default function Bookings() {
       {authLoading ? (
         <Loading />
       ) : !user ? (
-        <SignInPrompt title="Sign in to see your bookings" text="Your requests, upcoming events and past bookings show up here." />
+        <SignInPrompt title="Sign in to see your bookings" text="Your requests, upcoming shoots and past bookings show up here." />
       ) : loading && !data ? (
         <Loading />
       ) : error ? (
@@ -173,7 +173,7 @@ export default function Bookings() {
                 compact
                 icon={CalendarX}
                 title="Nothing coming up"
-                text={bookings.length ? 'Requests and confirmed bookings will show here.' : 'Book a photographer, caterer, DJ or venue and it shows up here.'}
+                text={bookings.length ? 'Requests and confirmed bookings will show here.' : 'Book a photographer or videographer and it shows up here.'}
                 action={<Link to="/search" className="btn sm">Find vendors</Link>}
               />
             )}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ImagePlus, Lock, MapPinOff, Store, X } from 'lucide-react'
+import { ChevronLeft, ImagePlus, Lock, MapPinOff, X } from 'lucide-react'
 import Segmented from '../components/Segmented.jsx'
 import Sheet from '../components/Sheet.jsx'
 import { ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
@@ -8,15 +8,14 @@ import VerticalIcon from '../components/verticals/VerticalIcon.jsx'
 import PhotoPicker from '../components/upload/PhotoPicker.jsx'
 import usePhotoItems from '../components/upload/usePhotoItems.js'
 import CameraSettings, { SETTING_FIELDS, readFields, settingsSummary } from '../components/upload/CameraSettings.jsx'
-import { CaptionField, CategoryField, Disclosure, OccasionField, PlaceDateFields, TitleField, prettyDay, validatePost } from '../components/upload/PostFields.jsx'
-import { CreditsField } from '../components/upload/Credits.jsx'
+import { CaptionField, CategoryField, Disclosure, PlaceDateFields, TitleField, prettyDay, validatePost } from '../components/upload/PostFields.jsx'
 import ListingPicker from '../components/upload/ListingPicker.jsx'
 import { Posted, PostFailed, Posting } from '../components/upload/PostingStatus.jsx'
 import { useAuth } from '../auth.jsx'
 import { useStore } from '../store.jsx'
 import { invalidate } from '../api/catalog.js'
-import { creditsSupported, getMyProviders, getProviderServiceIds, getServicesOf, postAlbum } from '../api/portfolio.js'
-import { autoPostTitle, getOccasion, occasionsFor, postConfig } from '../verticals/index.js'
+import { getMyProviders, getProviderServiceIds, getServicesOf, postAlbum } from '../api/portfolio.js'
+import { autoPostTitle, postConfig } from '../verticals/index.js'
 import '../components/upload/upload.css'
 
 const lastCategoryKey = (providerId) => `pm:last-category:${providerId}`
@@ -27,7 +26,7 @@ const writeLast = (key, value) => {
   try { localStorage.setItem(key, value) } catch { /* private mode */ }
 }
 
-// Camera settings are only kept for photo / video work; other vendors' posts save none.
+// Every camera setting (for a config that turns camera settings off: none are kept).
 const ALL_SETTINGS = SETTING_FIELDS.map(([key]) => key)
 
 const friendlyError = (err) => {
@@ -37,10 +36,9 @@ const friendlyError = (err) => {
   return msg || 'Something went wrong.'
 }
 
-// Post work to one of your listings. Signed-in vendors only: people without a listing get
-// a short explanation and a way to set one up. The post's wording, categories and options
-// follow the listing's vertical; with several listings you pick which one it's for
-// (starting with the one selected on the Me tab).
+// Post photo & video work to your listing. Signed-in photographers only: people without a
+// listing get a short explanation and a way to set one up. Camera settings (EXIF) are always
+// offered. Accounts with two listings (from the multi-vendor days) pick which one it's for.
 export default function Upload() {
   const { user, loading } = useAuth()
   const { myProvider } = useStore()
@@ -63,7 +61,7 @@ export default function Upload() {
     return (
       <div className="up-screen">
         <Header title="New post" />
-        <SignInPrompt title="Sign in to post your work" text="Share your work on your listing so people planning an event can find and book you." />
+        <SignInPrompt title="Sign in to post your work" text="Share your photos and stills on your listing so clients can find and book you." />
       </div>
     )
   }
@@ -83,7 +81,7 @@ export default function Upload() {
       </div>
     )
   }
-  if (!providers.length) return <NotAVendor />
+  if (!providers.length) return <NotAPhotographer />
   const initial = providers.find((p) => p.id === selectedId) || providers[0]
   return <Composer providers={providers} initialId={initial.id} userId={user.id} />
 }
@@ -111,40 +109,26 @@ function Header({ title, subtitle, onBack, close = false, right }) {
   )
 }
 
-// Signed in, but no listing: posting is for vendors.
-function NotAVendor() {
+// Signed in, but no listing: posting is for photographers.
+function NotAPhotographer() {
   const navigate = useNavigate()
   const location = useLocation()
   const back = () => (location.key === 'default' ? navigate('/', { replace: true }) : navigate(-1))
-  const examples = [
-    ['UtensilsCrossed', '#f97316', 'A caterer’s dishes'],
-    ['Building', '#0ea5e9', 'A venue’s spaces'],
-    ['Flower2', '#f43f5e', 'A florist’s arrangements'],
-    ['Camera', '#6366f1', 'A photographer’s shoots'],
-  ]
   return (
     <div className="up-screen">
       <Header title="New post" close onBack={back} />
       <div className="pad uv">
-        <div className="uv-icon"><Store size={28} /></div>
-        <h2 className="uv-title">Posting is for vendors</h2>
+        <div className="uv-icon"><VerticalIcon name="Camera" size={28} /></div>
+        <h2 className="uv-title">Posting is for photographers</h2>
         <p className="muted small uv-text">
-          Posts show off a vendor’s work on their listing, so people planning an event can see it and book them.
+          Posts show off a photographer’s or videographer’s work on their listing, so clients can see it and book them.
         </p>
-        <div className="uv-examples">
-          {examples.map(([icon, tint, text]) => (
-            <div key={text} className="uv-example">
-              <span className="lp-icon" style={{ '--tint': tint }}><VerticalIcon name={icon} size={15} /></span>
-              <span className="small">{text}</span>
-            </div>
-          ))}
-        </div>
-        <p className="small uv-text">Offer a service? Set up a free listing in about a minute, then post your work.</p>
+        <p className="small uv-text">Shoot photo or video? Set up a free listing in about a minute, then post your work.</p>
         <div className="uv-actions">
-          <Link to="/new-listing" className="btn accent block">Set up a listing</Link>
+          <Link to="/new-listing" className="btn accent block">Set up your listing</Link>
           <button type="button" className="btn ghost block" onClick={back}>Not now</button>
         </div>
-        <div className="muted tiny uv-foot">Planning an event? <Link to="/search" className="accent-text">Find vendors</Link></div>
+        <div className="muted tiny uv-foot">Looking to book someone? <Link to="/search" className="accent-text">Find a photographer</Link></div>
       </div>
     </div>
   )
@@ -163,16 +147,12 @@ function Composer({ providers, initialId, userId }) {
   const provider = providers.find((p) => p.id === providerId) || providers[0]
   const vertical = provider.vertical || 'photography'
   const post = postConfig(vertical)
-  const occasions = useMemo(() => occasionsFor(vertical), [vertical])
 
   const [step, setStep] = useState(1)
   const [phase, setPhase] = useState('edit') // edit | posting | done | failed
   const [mode, setMode] = useState('photos') // photos | before_after
   const [title, setTitle] = useState('')
   const [categoryId, setCategoryId] = useState(null)
-  const [occasion, setOccasion] = useState(null)
-  const [credits, setCredits] = useState([])
-  const [canCredit, setCanCredit] = useState(false)
   const [caption, setCaption] = useState('')
   const [place, setPlace] = useState(provider.city || '')
   const [shotOn, setShotOn] = useState('')
@@ -186,13 +166,6 @@ function Composer({ providers, initialId, userId }) {
   const [dropping, setDropping] = useState(false)
   const [posting, setPosting] = useState(null) // { list, perPhoto, error, albumId, cover }
   const body = useRef()
-
-  // Credits need the album_credits table (a migration); hide them until it's there.
-  useEffect(() => {
-    let live = true
-    creditsSupported().then((ok) => live && setCanCredit(ok)).catch(() => {})
-    return () => { live = false }
-  }, [])
 
   // The listing's categories, and a sensible default: the last one used, or the only one it offers.
   useEffect(() => {
@@ -212,13 +185,12 @@ function Composer({ providers, initialId, userId }) {
     return () => { live = false }
   }, [provider.id, vertical])
 
-  // Switching listing: drop what the new vertical doesn't offer.
+  // Switching listing (accounts with two listings).
   const switchListing = (id) => {
     const next = providers.find((p) => p.id === id)
     if (!next || id === providerId) return
     setProviderId(id)
     setErrors({})
-    setCredits((list) => list.filter((c) => c.providerId !== id))
     if (!postConfig(next.vertical).beforeAfter && mode === 'before_after') setMode('photos')
     if (!place.trim() || place === provider.city) setPlace(next.city || '')
   }
@@ -237,7 +209,7 @@ function Composer({ providers, initialId, userId }) {
 
   const fields = useMemo(() => (post.showCamera ? readFields(used) : []), [used, post.showCamera])
   const serviceName = services?.find((s) => s.id === categoryId)?.name
-  const fallbackTitle = autoPostTitle({ service: serviceName, occasion: getOccasion(occasion)?.name, slug: vertical })
+  const fallbackTitle = autoPostTitle({ service: serviceName })
 
   // Warn before closing the tab with unposted photos (or mid-upload).
   const dirty = items.length > 0 && phase !== 'done'
@@ -314,8 +286,6 @@ function Composer({ providers, initialId, userId }) {
         location: place.trim(),
         shotOn,
         categoryId,
-        occasion,
-        credits: canCredit ? credits : [],
         files,
         hiddenFields: post.showCamera ? [...hidden] : ALL_SETTINGS,
         onPhotoProgress: (i, p) => setPosting((s) => {
@@ -339,8 +309,6 @@ function Composer({ providers, initialId, userId }) {
     photos.reset()
     setTitle('')
     setCaption('')
-    setOccasion(null)
-    setCredits([])
     setDateTouched(false)
     setHidden(new Set())
     setErrors({})
@@ -418,10 +386,8 @@ function Composer({ providers, initialId, userId }) {
 
           <CategoryField label="What is it?" value={categoryId} services={services} error={errors.category}
             onChange={(v) => { setCategoryId(v); errors.category && setErrors((e) => ({ ...e, category: undefined })) }} />
-          <OccasionField value={occasion} onChange={setOccasion} occasions={occasions} />
           <TitleField value={title} onChange={(v) => { setTitle(v); errors.title && setErrors((e) => ({ ...e, title: undefined })) }} error={errors.title}
             placeholder={post.title} fallback={categoryId ? fallbackTitle : null} />
-          {canCredit && <CreditsField value={credits} onChange={setCredits} exclude={[provider.id]} />}
 
           <Disclosure title="More details" badge={<span className="pf-optional">optional</span>} summary={moreSummary || 'Caption, location, date'}
             open={openMore} onToggle={() => setOpenMore((o) => !o)}>

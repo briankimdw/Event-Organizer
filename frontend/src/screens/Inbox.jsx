@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Briefcase, CalendarDays, MessageCircle, PenSquare, Search, Users } from 'lucide-react'
+import { Briefcase, MessageCircle, PenSquare, Search, Users } from 'lucide-react'
 import { PersonAvatar } from '../components/ProfileLink.jsx'
 import { EmptyState, ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
 import { useAuth } from '../auth.jsx'
@@ -42,7 +42,7 @@ export default function Inbox() {
       {authLoading ? (
         <Loading />
       ) : !user ? (
-        <SignInPrompt title="Sign in to see your messages" text="Chat with vendors about bookings, pricing and style." />
+        <SignInPrompt title="Sign in to see your messages" text="Chat with photographers about bookings, pricing and style." />
       ) : (
         <>
           <div className="pad-x">
@@ -59,7 +59,7 @@ export default function Inbox() {
             <EmptyState
               icon={MessageCircle}
               title="No messages yet"
-              text="Message anyone on photomatch, ask a vendor a question, or request a booking to start a thread."
+              text="Message anyone on photomatch, ask a photographer a question, or request a booking to start a thread."
               action={<Link className="btn sm" to="/inbox/new">New message</Link>}
             />
           ) : !list.length ? (
@@ -80,7 +80,6 @@ export default function Inbox() {
                         {c.kind === 'booking' && <span className="tag"><Briefcase size={10} /> Booking</span>}
                         {c.kind === 'inquiry' && <span className="tag">Inquiry</span>}
                         {c.kind === 'group' && <span className="tag"><Users size={10} /> Group</span>}
-                        {c.kind === 'event' && <span className="tag"><CalendarDays size={10} /> Event</span>}
                       </div>
                       <div className={`small ellipsis convo-preview ${c.unread ? 'unread' : 'muted'}`}>{preview(c)}</div>
                     </div>

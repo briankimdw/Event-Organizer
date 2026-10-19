@@ -7,25 +7,25 @@ import { useAuth } from '../../auth.jsx'
 import { useStore } from '../../store.jsx'
 import useQuery from '../../lib/useQuery.js'
 import {
-  listConversations, mergeShareTargets, messageError, searchPeople, shareLink, shareRecipients, shareSupport, shareToChats,
+  listConversations, mergeShareTargets, messageError, searchPeople, shareLink, shareRecipients, shareToChats,
 } from '../../api/messages.js'
 import './share.css'
 
 const MAX_PICK = 20
-const KIND_NOUN = { post: 'post', provider: 'vendor', event: 'event', plan: 'plan' }
+const KIND_NOUN = { post: 'post', provider: 'profile' }
 
 // "Send to" sheet (like Instagram's): pick recent chats or people, add a note,
 // Send. Each chosen chat gets one message with a card. Copy link and the
 // system share sheet are secondary actions.
 //
-//   <ShareSheet item={{ kind: 'post'|'provider'|'event'|'plan', id, title?, image?, subtitle?, providerId?, link? }} onClose={...} />
+//   <ShareSheet item={{ kind: 'post'|'provider', id, title?, image?, subtitle?, providerId?, link? }} onClose={...} />
 //
-// Mount it when it should show (or pass open={bool}). kind 'plan' (an unsaved
-// plan) only offers the link actions.
+// Mount it when it should show (or pass open={bool}). (Sharing events and plans was
+// archived with the event platform.)
 export default function ShareSheet({ item, onClose, open = true }) {
   const { user } = useAuth()
   const { toast } = useStore()
-  const link = item ? item.link || shareLink(item) : '/'
+  const link = (item && (item.link || shareLink(item))) || '/'
   const url = typeof window !== 'undefined' ? `${window.location.origin}${link}` : link
   const noun = KIND_NOUN[item?.kind] || 'link'
 
@@ -40,7 +40,7 @@ export default function ShareSheet({ item, onClose, open = true }) {
   const shareOut = async () => {
     if (navigator.share) {
       try {
-        await navigator.share({ title: item?.title || 'Event Organizer', url })
+        await navigator.share({ title: item?.title || 'photomatch', url })
         return
       } catch (e) {
         if (e?.name === 'AbortError') return
@@ -62,7 +62,7 @@ export default function ShareSheet({ item, onClose, open = true }) {
             </div>
           </div>
         )}
-        {user && item.kind !== 'plan' ? (
+        {user ? (
           <SendTo item={item} onDone={onClose} actions={<Actions onCopy={copy} onShare={shareOut} />} />
         ) : (
           <>
@@ -97,7 +97,6 @@ function Actions({ onCopy, onShare }) {
 function SendTo({ item, onDone, actions }) {
   const { toast } = useStore()
   const { data: conversations, loading } = useQuery(listConversations, [])
-  const { data: support } = useQuery(shareSupport, [])
   const [q, setQ] = useState('')
   const [people, setPeople] = useState([])
   const [searching, setSearching] = useState(false)
@@ -142,8 +141,6 @@ function SendTo({ item, onDone, actions }) {
     }
   }
 
-  const unsupported = support && item.kind === 'event' && !support.event
-
   const send = async () => {
     if (!picked.length || busy) return
     setBusy(true)
@@ -157,15 +154,6 @@ function SendTo({ item, onDone, actions }) {
       toast(messageError(e))
       setBusy(false)
     }
-  }
-
-  if (unsupported) {
-    return (
-      <>
-        <div className="sh-signin muted small">Sending events in chat needs a database update. You can still share the link.</div>
-        {actions}
-      </>
-    )
   }
 
   return (

@@ -2,17 +2,16 @@ import { Link } from 'react-router-dom'
 import { LayoutGrid, Plus } from 'lucide-react'
 import ProfileLink from '../components/ProfileLink.jsx'
 import SearchLauncher from '../components/SearchLauncher.jsx'
-import PlanCard from '../components/planner/PlanCard.jsx'
-import EventsShelf from '../components/events/EventsShelf.jsx'
 import { StatusPill } from '../components/Booking.jsx'
 import { ErrorState } from '../components/States.jsx'
 import { CardsSkeleton, ProviderCard, ProviderRow, RowsSkeleton, SectionHead } from '../components/home/Cards.jsx'
-import { ComingSoonCard, OccasionRow, VerticalRail } from '../components/home/Browse.jsx'
+import { TintIcon } from '../components/home/CatalogIcon.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
 import { fmtChip, today } from '../lib/dates.js'
 import { listMyBookings } from '../api/bookings.js'
 import { buildHomeFeed, comingWeekend, listBrowseProviders, listExplorePhotos, weekendAvailability } from '../api/home.js'
+import { SERVICE_CHIPS } from '../verticals/index.js'
 
 // Booking states where the client has something to do.
 const NEEDS_ACTION = {
@@ -21,13 +20,16 @@ const NEEDS_ACTION = {
   delivered: 'Your photos are ready',
 }
 
+// Service icons: photo services in the brand indigo, video ones in violet.
+const SERVICE_TINT = { photo: '#6366f1', video: '#8b5cf6' }
+
 const greeting = () => {
   const h = new Date().getHours()
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 }
 
-// Home = plan & browse: search, the AI planner, every service as a tinted icon,
-// occasions, then intent shelves ("free this weekend", "top rated") from real data.
+// Home: search, your bookings, the kinds of shoot (photo and video services), then
+// shelves from real data: available this weekend, the Explore teaser, top rated, new.
 export default function Home() {
   const { user, profile } = useAuth()
   const uid = user?.id ?? null
@@ -45,7 +47,6 @@ export default function Home() {
     weekendLabel: weekendDays.map(fmtChip).join(' – '),
   })
   const loading = all.loading && !all.data
-  const mixed = feed.live.length > 1
 
   const myBookings = bookings.data || []
   const actionItems = myBookings.filter((b) => b.role === 'client' && NEEDS_ACTION[b.status])
@@ -54,7 +55,7 @@ export default function Home() {
     .sort((a, b) => a.start - b.start)
   const bookingTiles = [...actionItems, ...upcoming]
 
-  // Three real portfolio shots (different providers) for the Explore teaser.
+  // Three real portfolio shots (different photographers) for the Explore teaser.
   const teaser = []
   for (const ph of photos.data || []) {
     if (teaser.length === 3) break
@@ -68,7 +69,7 @@ export default function Home() {
       <header className="home-header">
         <div>
           <div className="hd-greet">{firstName ? `${greeting()}, ${firstName}` : greeting()}</div>
-          <h1 className="hd-title">What are you planning?</h1>
+          <h1 className="hd-title">Find your photographer</h1>
         </div>
         <Link to="/upload" className="post-btn" aria-label="Post your work">
           <Plus size={18} aria-hidden="true" /> Post
@@ -76,7 +77,7 @@ export default function Home() {
       </header>
 
       <div className="pad-x">
-        <SearchLauncher placeholder="Photographers, venues, caterers…" />
+        <SearchLauncher placeholder="Photographers, videographers, styles…" />
       </div>
 
       {bookings.error && (
@@ -106,20 +107,9 @@ export default function Home() {
         </section>
       )}
 
-      <EventsShelf />
-
       <section>
-        <SectionHead title="Browse services" sub="Everything for your event, in one place" />
-        <VerticalRail counts={all.data ? feed.counts : null} />
-      </section>
-
-      <div className="pad-x">
-        <PlanCard />
-      </div>
-
-      <section>
-        <SectionHead title="Plan by occasion" sub="A checklist of who you’ll need" />
-        <OccasionRow />
+        <SectionHead title="What are you shooting?" sub="Photo and video, for every kind of day" />
+        <ServiceRail />
       </section>
 
       {all.error && (
@@ -129,11 +119,11 @@ export default function Home() {
       )}
       {loading && (
         <section>
-          <SectionHead title="Free this weekend" />
+          <SectionHead title="Available this weekend" />
           <CardsSkeleton />
         </section>
       )}
-      {firstShelf && <Shelf shelf={firstShelf} mixed={mixed} weekendLoading={weekend.loading} />}
+      {firstShelf && <Shelf shelf={firstShelf} weekendLoading={weekend.loading} />}
 
       {teaser.length === 3 && (
         <div className="pad-x mt-lg">
@@ -143,15 +133,15 @@ export default function Home() {
             </span>
             <span className="grow">
               <b>Not sure what you want?</b>
-              <span className="small block">Browse real work from local pros, then tap what you love.</span>
+              <span className="small block">Browse real work from local photographers, then tap what you love.</span>
             </span>
-            <LayoutGrid size={20} />
+            <LayoutGrid size={20} aria-hidden="true" />
           </Link>
         </div>
       )}
 
       {otherShelves.map((s) => (
-        <Shelf key={s.key} shelf={s} mixed={mixed} weekendLoading={weekend.loading} />
+        <Shelf key={s.key} shelf={s} weekendLoading={weekend.loading} />
       ))}
       {loading && (
         <section>
@@ -159,19 +149,26 @@ export default function Home() {
           <RowsSkeleton />
         </section>
       )}
-
-      {all.data && feed.soon.length > 0 && (
-        <section className="pad-x">
-          <ComingSoonCard soon={feed.soon} />
-        </section>
-      )}
       <div className="mt-lg" />
     </div>
   )
 }
 
-function Shelf({ shelf, mixed, weekendLoading = false }) {
-  const showVertical = mixed && !shelf.vertical
+// The kinds of shoot, two rows of tinted icons that scroll sideways. Each opens Search for it.
+function ServiceRail() {
+  return (
+    <nav className="hd-rail" aria-label="Kinds of shoot">
+      {SERVICE_CHIPS.map((s) => (
+        <Link key={s.slug} to={`/search?cat=${s.slug}`} className="hd-rail-item">
+          <TintIcon item={{ icon: s.icon, tint: SERVICE_TINT[s.kind] }} size={52} />
+          <span>{s.name}</span>
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+function Shelf({ shelf, weekendLoading = false }) {
   if (shelf.key === 'weekend' && weekendLoading) {
     return (
       <section>
@@ -188,11 +185,11 @@ function Shelf({ shelf, mixed, weekendLoading = false }) {
         <div className="pad-x muted small">{shelf.empty}</div>
       ) : shelf.layout === 'rows' ? (
         <div className="pad-x">
-          {shelf.items.map((p) => <ProviderRow key={p.id} p={p} showVertical={showVertical} />)}
+          {shelf.items.map((p) => <ProviderRow key={p.id} p={p} />)}
         </div>
       ) : (
         <div className="h-scroll hd-shelf">
-          {shelf.items.map((p) => <ProviderCard key={p.id} p={p} showVertical={showVertical} />)}
+          {shelf.items.map((p) => <ProviderCard key={p.id} p={p} />)}
         </div>
       )}
     </section>

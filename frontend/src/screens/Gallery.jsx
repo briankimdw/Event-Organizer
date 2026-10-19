@@ -11,7 +11,6 @@ import { fromPriceLabel } from '../components/Booking.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import ManagePostSheets from '../components/upload/ManagePost.jsx'
-import { CreditChips } from '../components/upload/Credits.jsx'
 import { useStore } from '../store.jsx'
 import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
@@ -25,7 +24,7 @@ const photoKey = (p) => p.id ?? p.seed
 const httpUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null)
 
 // Attribution for a photo that isn't the poster's own (photos.exif.credit: { by, license,
-// licenseUrl, url, source, demo }), e.g. the Creative Commons photos in the demo vendor posts.
+// licenseUrl, url, source, demo }), e.g. the Creative Commons photos in the demo posts.
 function PhotoCredit({ credit, label = '' }) {
   if (!credit?.by) return null
   const page = httpUrl(credit.url)
@@ -37,7 +36,7 @@ function PhotoCredit({ credit, label = '' }) {
         {page ? <a href={page} target="_blank" rel="noopener noreferrer">{credit.by}</a> : credit.by}
         {credit.license && <> · {license ? <a href={license} target="_blank" rel="noopener noreferrer">{credit.license}</a> : credit.license}</>}
         {credit.source && ` · ${credit.source}`}
-        {credit.demo && <span className="muted"> · Demo photo, not this vendor’s own work</span>}
+        {credit.demo && <span className="muted"> · Demo photo, not this photographer’s own work</span>}
       </p>
     </>
   )
@@ -555,7 +554,6 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
               ? <ProfileLink id={owner.profileId} className="reel-who" preview={owner.avatar ? { src: owner.avatar, name: owner.name, username: owner.username } : null}>{who}</ProfileLink>
               : <Link to={owner.profileTo || '/me'} className="reel-who profile-link">{who}</Link>
           })()}
-          {album.credits?.length > 0 && <div className="reel-credits"><CreditChips credits={album.credits} dark /></div>}
           {shortExif(photo.exif) && <div className="reel-exif">{shortExif(photo.exif)}</div>}
           {book && (
             <div className="reel-book">
@@ -580,12 +578,6 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
           {(album.location || album.date) && <span><MapPin size={13} /> {[album.location, album.date].filter(Boolean).join(' · ')}</span>}
           {album.realPhoto && <span className="ok"><Camera size={13} /> Real Photo · verified with the RAW file</span>}
         </div>
-        {album.credits?.length > 0 && (
-          <>
-            <h2 className="section-title h4">Credits</h2>
-            <CreditChips credits={album.credits} onNavigate={() => setInfo(false)} />
-          </>
-        )}
         {hasExif(photo.exif) && (
           <>
             <h2 className="section-title h4">Gear & settings{album.photos.length > 1 ? ` · photo ${photoIndex + 1}` : ''}</h2>
@@ -598,7 +590,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto, closeF
             <h2 className="section-title h4">Tags</h2>
             <div className="chips">
               {album.genre && <Link to={`/search?cat=${encodeURIComponent(album.genre)}`} className="chip solid chip-link" aria-label={`Find more ${album.genre}`}>{album.genre}</Link>}
-              {album.occasion && <Link to={`/occasions/${album.occasion.slug}`} className="chip chip-link" aria-label={`Plan a ${album.occasion.name}`}>{album.occasion.name}</Link>}
+              {album.occasion && <span className="chip">{album.occasion.name}</span>}
               {(album.tags || []).map((t) => <span key={t} className="chip">#{t}</span>)}
               {(album.autoTags || []).map((t) => (
                 <span key={t} className="chip auto" title="Suggested automatically from the photos"><Sparkles size={11} /> {t}</span>

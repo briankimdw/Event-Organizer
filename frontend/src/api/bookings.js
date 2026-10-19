@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase.js'
 import { ACTIVE_STATUSES, PAID_STATUSES, avatarUrl, callName, dollars, policyFromRules, toPackage } from '../lib/format.js'
 import { fmtBooking, fmtTime, toKey } from '../lib/dates.js'
 import { invalidate } from './catalog.js'
+import { PHOTO_VERTICAL, isPhotoVertical, normalizeVertical } from '../verticals/index.js'
 
 const must = ({ data, error }) => {
   if (error) throw error
@@ -61,11 +62,11 @@ export function toBooking(row, viewerId) {
     status: row.status,
     role, // 'client' if the viewer booked it, 'provider' if they're the photographer
     providerId: row.provider_id,
-    vertical: pr.vertical?.slug || 'photography', // the provider's vertical (wording, delivery steps)
-    quantity: row.quantity ?? null, // guests / items / days for per-person, per-item and daily packages
+    vertical: normalizeVertical(pr.vertical?.slug) || PHOTO_VERTICAL, // 'photography' (wording, delivery steps)
+    quantity: row.quantity ?? null, // only on old per-person / per-item / daily bookings from the multi-vendor days
     provider: {
       id: pr.id,
-      vertical: pr.vertical?.slug || 'photography',
+      vertical: normalizeVertical(pr.vertical?.slug) || PHOTO_VERTICAL,
       profileId: pr.profile_id,
       name: pr.display_name,
       shortName: callName(pr.display_name, pr.profile?.display_name), // "Maya" or "The Glasshouse DTLA"
@@ -133,12 +134,15 @@ async function viewer() {
   return data.session?.user.id ?? null
 }
 
+// Bookings with listings in other verticals (left from the multi-vendor days) are hidden.
+const isPhotoBooking = (row) => !row.provider?.vertical?.slug || isPhotoVertical(row.provider.vertical.slug)
+
 // Bookings I made as a client, newest shoot first.
 export async function listMyBookings() {
   const uid = await viewer()
   if (!uid) return []
   const rows = must(await supabase.from('bookings').select(BOOKING_COLUMNS).eq('client_id', uid).order('time_range', { ascending: false }))
-  return rows.map((r) => toBooking(r, uid))
+  return rows.filter(isPhotoBooking).map((r) => toBooking(r, uid))
 }
 
 // Bookings clients made with my photographer listing.
@@ -162,10 +166,10 @@ export async function getBooking(id) {
 const changed = () => invalidate('providers') // availability / ratings may have moved
 
 // Request a package on one or more days. dates: Date[] or 'YYYY-MM-DD'[]; startTime: 'HH:MM'.
-// quantity: guests / items / days for per_person, per_item and daily packages; leave it
-// null otherwise (it's only sent when set, so this works before the all-verticals migration).
-// Returns the new bookings (one per day).
-export async function requestBooking({ packageId, dates, startTime, hours = null, quantity = null, addonIds = [], location = null, notes = null, eventId = null }) {
+// quantity: only for old per_person / per_item packages; leave it null (it's only sent when set).
+// Returns the new bookings (one per day). (Booking from an event, `eventId`, was archived with
+// the event platform.)
+export async function requestBooking({ packageId, dates, startTime, hours = null, quantity = null, addonIds = [], location = null, notes = null }) {
   const args = {
     p_package_id: packageId,
     p_dates: dates.map((d) => (typeof d === 'string' ? d : toKey(d))),
@@ -176,7 +180,6 @@ export async function requestBooking({ packageId, dates, startTime, hours = null
     p_notes: notes || null,
   }
   if (quantity != null) args.p_quantity = Math.max(1, Math.round(quantity))
-  if (eventId) args.p_event_id = eventId // booked from an event's board: the booking belongs to it
   const rows = must(await supabase.rpc('request_booking', args))
   changed()
   return rows

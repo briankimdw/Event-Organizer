@@ -28,7 +28,7 @@ function ReviewView({ b, reload }) {
   const { toast } = useStore()
   const isClient = b.role === 'client'
   const other = isClient ? b.provider : b.client
-  const first = other.shortName || (other.name || '').split(' ')[0] || (isClient ? 'your vendor' : 'your client')
+  const first = other.shortName || (other.name || '').split(' ')[0] || (isClient ? 'your photographer' : 'your client')
   const [rating, setRating] = useState(0)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)

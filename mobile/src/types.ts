@@ -23,6 +23,5 @@ export type Review = {
   date: string
 }
 
-// A vertical / occasion from verticals/catalog.js (the 18 service types, the occasions).
+// The vertical from verticals/catalog.js (one now: photography, "Photo & video").
 export type Vertical = (typeof import('@shared/verticals/catalog.js'))['VERTICALS'][number]
-export type Occasion = (typeof import('@shared/verticals/catalog.js'))['OCCASIONS'][number]

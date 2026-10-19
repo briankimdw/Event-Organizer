@@ -4,19 +4,19 @@
 // The list is an inverted FlatList (newest at the bottom, stays pinned there);
 // KeyboardView keeps the composer above the keyboard on iOS and Android.
 // Long-press someone else's message to report it or block them.
+// Old event chats (kind 'event', from the archived Events feature) show as group chats.
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { AlertCircle, Calendar, CalendarHeart, ChevronLeft, ChevronRight, Info, MessageCircle, SendHorizontal } from 'lucide-react-native'
+import { AlertCircle, Calendar, ChevronLeft, ChevronRight, Info, MessageCircle, SendHorizontal } from 'lucide-react-native'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Pressable, TextInput, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { getBooking } from '@shared/api/bookings.js'
-import { eventForConversation } from '@shared/api/events.js'
 import {
   getConversation, listMessages, markRead, messageError, openChat, sendMessage,
 } from '@shared/api/messages.js'
 import { avatarUrl } from '@shared/lib/format.js'
-import { Avatar, Button, EmptyState, ErrorState, KeyboardView, Loading, Photo, Screen, SignInPrompt, Text, VerticalIcon } from '@/components'
+import { Avatar, Button, EmptyState, ErrorState, KeyboardView, Loading, Photo, Screen, SignInPrompt, Text } from '@/components'
 import useQuery from '@/hooks/useQuery'
 import { StatusPill } from '@/screens/bookings/parts'
 import { useAuth } from '@/state/auth'
@@ -76,9 +76,6 @@ export default function Chat() {
   const c = data?.conversation ?? null
   const messages = data?.messages || []
   const { data: booking } = useQuery<any>(c?.bookingId ? () => getBooking(c.bookingId) : null, [c?.bookingId])
-  // Event chats link to their board and wear the occasion's icon in the header.
-  const { data: chatEvent } = useQuery<{ id: string; tint: string; icon: string } | null>(c?.kind === 'event' ? () => eventForConversation(c.id) : null, [c?.id, c?.kind])
-  const eventId = chatEvent?.id ?? null
   const [draft, setDraft] = useState('')
   const [menu, setMenu] = useState<ModerationTarget | null>(null)
   const [info, setInfo] = useState(false)
@@ -140,7 +137,7 @@ export default function Chat() {
   }
   const discard = (m: Message) => setData((d) => d && { ...d, messages: d.messages.filter((x) => x.id !== m.id) })
 
-  const isGroup = !!c?.isGroup || c?.kind === 'event'
+  const isGroup = !!c?.isGroup // old event chats (archived) arrive as groups from api/messages.js
   const others = (c?.members || []) as ChatConversation['members']
   const other = others[0]
   const byProfile = useMemo(() => new Map(others.map((m) => [m.profileId, m])), [others])
@@ -204,19 +201,12 @@ export default function Chat() {
           accessibilityRole="button"
           accessibilityLabel={isGroup ? `${c.title}, group details` : `${c.title}, view profile`}
         >
-          {c.kind === 'event' ? (
-            <VerticalIcon name={chatEvent?.icon ?? 'PartyPopper'} tint={chatEvent?.tint ?? col.muted} size={16} bubble bubbleSize={32} />
-          ) : other && <Avatar uri={other.avatar} name={other.name} size={32} />}
+          {other && <Avatar uri={other.avatar} name={other.name} size={32} />}
           <View style={s.grow}>
             <Text variant="h4" numberOfLines={1}>{c.title}</Text>
             {!!subtitle && <Text variant="tiny" muted numberOfLines={1} color={typers.length ? 'accent' : undefined}>{subtitle}</Text>}
           </View>
         </Pressable>
-        {!!eventId && (
-          <Pressable onPress={() => router.push({ pathname: '/events/[id]', params: { id: eventId } })} hitSlop={10} style={s.iconBtn} accessibilityRole="button" accessibilityLabel="Event board">
-            <CalendarHeart size={22} color={col.ink} />
-          </Pressable>
-        )}
         <Pressable onPress={() => setInfo(true)} hitSlop={10} style={s.iconBtn} accessibilityRole="button" accessibilityLabel="Conversation details">
           <Info size={22} color={col.ink} />
         </Pressable>

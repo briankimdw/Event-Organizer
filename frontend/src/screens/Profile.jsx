@@ -14,7 +14,6 @@ import FollowersSheet from '../components/FollowersSheet.jsx'
 import { PolicyTable, priceLabel } from '../components/Booking.jsx'
 import { ModerationSheet, ShareSheet } from '../components/PostSheets.jsx'
 import SendToSheet from '../components/share/ShareSheet.jsx'
-import { AddToEventButton } from '../components/events/EventParts.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
 import { MapPreview } from '../components/map/LazyMap.jsx'
 import AttributeList from '../components/verticals/AttributeList.jsx'
@@ -25,7 +24,7 @@ import { useAuth } from '../auth.jsx'
 import useQuery from '../lib/useQuery.js'
 import { addDays, fmtBooking, fmtChip, fmtMonth, fromKey, parseDates, toKey, today } from '../lib/dates.js'
 import { freeDays, getCategories, getPerson, getProvider } from '../api/catalog.js'
-import { listAlbums, listTaggedAlbums, toViewerAlbum } from '../api/portfolio.js'
+import { listAlbums, toViewerAlbum } from '../api/portfolio.js'
 import { messageError, startDirectMessage, startInquiry } from '../api/messages.js'
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -97,23 +96,13 @@ export default function Profile() {
 
   const { data: person, loading, error, reload } = useQuery(() => loadPerson(id), [id])
   const provider = person?.kind === 'provider' ? person : null
-  // Visual verticals (photography, venues, florals...) lead with their portfolio; others
-  // (DJs, planners, officiants, staff) with packages and reviews.
-  const visual = provider ? provider.verticalInfo?.visual !== false : true
-  const tabs = !provider
-    ? []
-    : [
-        ...(visual ? ['portfolio'] : []),
-        'packages',
-        ...(['photography', 'videography'].includes(provider.vertical) || provider.gear.bodies.length || provider.gear.lenses.length ? ['gear'] : []),
-        'reviews',
-        ...(!visual && provider.albumCount > 0 ? ['portfolio'] : []),
-      ]
+  // Photographers lead with their portfolio, then packages, gear and reviews.
+  const tabs = !provider ? [] : TABS
   const activeTab = tabs.includes(tab) ? tab : tabs[0]
   const config = verticalConfig(provider?.vertical)
   // Specialties that are also service categories link to that category's search.
   const { data: categories } = useQuery(provider?.specialties?.length ? () => getCategories() : null, [provider?.id])
-  const myServices = categories?.find((v) => v.slug === provider?.vertical)?.services || []
+  const myServices = categories?.[0]?.services || []
   const categoryFor = (name) => myServices.find((c) => c.name.toLowerCase() === name.toLowerCase())?.slug
 
   // Switch tab and scroll down to it (the star rating opens Reviews).
@@ -129,13 +118,9 @@ export default function Profile() {
   }, [!!provider]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: albums, loading: albumsLoading, error: albumsError, reload: reloadAlbums } = useQuery(
-    provider && (visual || provider.albumCount > 0) ? () => listAlbums(provider.id).then((rows) => rows.filter((a) => a.photos?.length).map(toViewerAlbum)) : null,
+    provider ? () => listAlbums(provider.id).then((rows) => rows.filter((a) => a.photos?.length).map(toViewerAlbum)) : null,
     [provider?.id],
   )
-
-  // Other vendors' posts that credit this one ("Catering by Golden Spoon" on a wedding album).
-  // Empty (and the section hidden) until the album_credits migration exists.
-  const { data: tagged } = useQuery(provider ? () => listTaggedAlbums(provider.id) : null, [provider?.id])
 
   // Dates carried over from a date search, plus the strip's two weeks: one availability lookup.
   const datesParam = params.get('dates') || ''
@@ -203,9 +188,9 @@ export default function Profile() {
           {person.name} {provider?.idVerified && <IdVerified label explain name={person.name} />} {provider?.pro && <ProBadge explain name={person.name} />}
         </h2>
         <div className="row gap-xs wrap profile-where">
-          {provider && <Link to={`/search?v=${provider.vertical}`} aria-label={`More ${provider.verticalInfo.plural}`}><VerticalTag vertical={provider.vertical} /></Link>}
+          {provider && <Link to="/search" aria-label={`More ${provider.verticalInfo.plural.toLowerCase()}`}><VerticalTag vertical={provider.vertical} /></Link>}
           {person.city && (provider?.location ? (
-            <Link to={`/search?view=map&v=${provider.vertical}&focus=${provider.id}`} className="muted small inline-icon tap-text" aria-label={`${person.city}: see ${firstName} on the map`}>
+            <Link to={`/search?view=map&focus=${provider.id}`} className="muted small inline-icon tap-text" aria-label={`${person.city}: see ${firstName} on the map`}>
               <MapPin size={13} /> {person.city}
             </Link>
           ) : (
@@ -247,7 +232,7 @@ export default function Profile() {
             {provider.specialties.map((s) => {
               const slug = categoryFor(s)
               // Service categories filter by category; anything else (e.g. "Nightlife") is a text search.
-              const to = slug ? `/search?v=${provider.vertical}&cat=${encodeURIComponent(slug)}` : `/search?v=${provider.vertical}&q=${encodeURIComponent(s)}`
+              const to = slug ? `/search?cat=${encodeURIComponent(slug)}` : `/search?q=${encodeURIComponent(s)}`
               return <Link key={s} to={to} className="chip chip-link">{s}</Link>
             })}
           </div>
@@ -263,7 +248,6 @@ export default function Profile() {
               </button>
             </div>
             <div className="row gap-xs mt-sm full">
-              <AddToEventButton provider={provider} variant="button" />
               <Link to={`/book/${provider.id}${datesQuery && `?${datesQuery}`}`} className="btn accent grow">
                 Book {firstName}
               </Link>
@@ -325,26 +309,6 @@ export default function Profile() {
             <AttributeList fields={config.providerFields.filter((f) => f.key !== 'specialties')} attrs={provider.attributes} />
           </div>
         </div>
-      )}
-
-      {provider && tagged?.length > 0 && (
-        <section className="tagged mt">
-          <div className="section-head">
-            <div className="grow">
-              <h3>Tagged in</h3>
-              <div className="muted tiny">Posts by other vendors that credit {firstName}</div>
-            </div>
-          </div>
-          <div className="h-scroll">
-            {tagged.map((a) => (
-              <Link key={a.id} to={`/gallery/${a.by.id}?post=${a.id}`} className="tagged-tile" title={a.title}>
-                <img src={a.cover} alt="" loading="lazy" />
-                <b className="ellipsis">{a.title}</b>
-                <span className="muted tiny ellipsis">by {a.by.name}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
       )}
 
       {provider && (

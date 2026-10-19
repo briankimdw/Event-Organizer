@@ -24,7 +24,6 @@ import { announce, useReduceMotion } from '@/lib/a11y'
 import { useStore } from '@/state/store'
 import { makeStyles } from '@/theme'
 import type { Album } from '../profile/AlbumGrid'
-import { CreditChips } from '../provider/upload/Credits'
 
 type ViewerPhoto = { id: string; seed?: string; src: string; exif?: Record<string, any> | null }
 const photoKey = (p: ViewerPhoto) => p.id ?? p.seed
@@ -231,7 +230,6 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
               {owner.pro && <ProBadge />}
             </Pressable>
             </InA11yGroup>
-            {album.credits?.length > 0 && <CreditChips credits={album.credits} dark onOpen={(id) => router.push(`/u/${id}`)} />}
             {!!exif && <Text variant="tiny" style={s.exif}>{exif}</Text>}
             {book && (
               <View style={s.book}>
@@ -260,12 +258,6 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
             <MapPin size={13} color="#6b6b6b" />
             <Text variant="small" muted>{[album.location, album.date].filter(Boolean).join(' · ')}</Text>
           </View>
-        )}
-        {album.credits?.length > 0 && (
-          <>
-            <Text variant="h4" style={s.section}>Credits</Text>
-            <CreditChips credits={album.credits} onOpen={(id) => { setInfo(false); router.push(`/u/${id}`) }} />
-          </>
         )}
         {exifRows.length > 0 && (
           <>
@@ -296,7 +288,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
                 : credit.license)}
               {!!credit.source && ` · ${credit.source}`}
             </Text>
-            {!!credit.demo && <Text variant="tiny" muted>Demo photo, not this vendor’s own work</Text>}
+            {!!credit.demo && <Text variant="tiny" muted>Demo photo, not this photographer’s own work</Text>}
           </>
         )}
         {(!!album.genre || !!album.occasion || album.autoTags?.length > 0) && (
@@ -307,7 +299,7 @@ export function AlbumViewer({ albums, owner, book, startPost, startPhoto }: Prop
                 <Chip label={album.genre} solid onPress={() => { setInfo(false); router.push({ pathname: '/search', params: { cat: album.genre } }) }} />
               )}
               {!!album.occasion && (
-                <Chip label={album.occasion.name} onPress={() => { setInfo(false); router.push(`/occasions/${album.occasion!.slug}` as any) }} />
+                <Chip label={album.occasion.name} />
               )}
               {(album.autoTags || []).map((t: string) => <Chip key={t} label={t} icon={Sparkles} />)}
             </ChipRow>

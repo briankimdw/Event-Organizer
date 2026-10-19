@@ -27,7 +27,6 @@ config.resolver.blockList = [
 const REDIRECTS = {
   [path.join(SHARED, 'lib/supabase.js')]: path.join(MOBILE, 'src/lib/supabase.ts'), // import.meta.env + browser auth storage
   [path.join(SHARED, 'lib/images.js')]: path.join(MOBILE, 'src/shims/images.ts'), // canvas, createImageBitmap, exifr
-  [path.join(SHARED, 'components/planner/devMock.js')]: path.join(MOBILE, 'src/shims/planner-dev-mock.ts'), // web dev tool
 }
 
 const isShared = (file) => !!file && path.resolve(file).startsWith(SHARED + path.sep)

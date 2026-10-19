@@ -147,7 +147,7 @@ export function Section({ title, children, right, style }: { title?: string; chi
   )
 }
 
-// A person (vendor or client) that opens their profile (the web's components/PersonRow.jsx).
+// A person (pro or client) that opens their profile (the web's components/PersonRow.jsx).
 type PersonLike = { id?: string; name?: string | null; avatar?: string | null; idVerified?: boolean; pro?: boolean }
 export function PersonRow({ person, sub, right }: { person: PersonLike; sub?: string; right?: ReactNode }) {
   const s = useStyles()

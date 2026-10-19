@@ -5,8 +5,8 @@ import Explore from '../components/discover/Explore.jsx'
 import '../components/discover/discover.css'
 
 // Discover = get inspired. Two modes, switched in the header:
-//   For you  — the swipe deck: every vertical mixed, or one at a time (photo and vendor cards)
-//   Explore  — a masonry grid of real work across every vertical
+//   For you  - the swipe deck of photo & video work (photo cards, and cards for photographers who haven't posted)
+//   Explore  - a masonry grid of real work
 // The mode lives in the URL (?mode=explore) so Back returns to the same view.
 export default function Discover() {
   const [params, setParams] = useSearchParams()
@@ -15,8 +15,8 @@ export default function Discover() {
     if (next === mode) return
     const p = new URLSearchParams()
     if (next === 'explore') p.set('mode', 'explore')
-    // Keep what's being browsed (vertical, service, occasion) across the switch.
-    for (const k of ['v', 's', 'o']) if (params.get(k)) p.set(k, params.get(k))
+    // Keep the kind of shoot being browsed across the switch.
+    if (params.get('s')) p.set('s', params.get('s'))
     setParams(p, { replace: true })
     document.querySelector('.viewport')?.scrollTo({ top: 0 })
     // The other mode renders its own header: keep keyboard focus on the tab the user picked.

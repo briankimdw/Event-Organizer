@@ -1,50 +1,48 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Clock } from 'lucide-react'
 import { ErrorState, Loading, SignInPrompt } from '../components/States.jsx'
-import { VerticalGrid } from '../components/verticals/VerticalSwitcher.jsx'
 import { VerticalBadge } from '../components/verticals/VerticalIcon.jsx'
 import { useAuth } from '../auth.jsx'
 import { useStore } from '../store.jsx'
 import useQuery from '../lib/useQuery.js'
 import { getCategories, invalidate } from '../api/catalog.js'
 import { becomeProvider, slugify } from '../api/portfolio.js'
-import { getVertical, lowerFirst, nounFor, verticalMeta } from '../verticals/index.js'
+import { PHOTO_VERTICAL } from '../verticals/index.js'
 
 const friendlyError = (err) => {
   const msg = err?.message || ''
   if (/failed to fetch|networkerror|load failed/i.test(msg)) return 'Network problem. Check your connection and try again.'
   if (/jwt|not authenticated|row-level security/i.test(msg)) return 'Your session expired. Sign in again, then retry.'
-  if (/unknown category/i.test(msg)) return 'This service isn’t open for listings yet.'
-  if (/duplicate key.*profile_id/i.test(msg)) return 'You already have a listing for this service.'
+  if (/unknown category/i.test(msg)) return 'Listings aren’t open yet.'
+  if (/duplicate key.*profile_id/i.test(msg)) return 'You already have a listing.'
   return msg || 'Something went wrong.'
 }
 
-// /new-listing?v=catering: "What do you offer?" -> pick a vertical, its services,
-// then a name and link. A user can have one listing per vertical.
+const TITLE = 'Set up your photography listing'
+
+// /new-listing: name, link, city and the kinds of shoot you offer (photo and video), then
+// on to posting your first work. One listing per person (accounts from the multi-vendor
+// days may have more; they're told they already have one).
 export default function NewListing() {
   const { user, loading } = useAuth()
-  const [params] = useSearchParams()
   const navigate = useNavigate()
   const { setMode } = useStore()
-  const preset = getVertical(params.get('v')) ? params.get('v') : null
 
   if (!loading && !user) {
     return (
       <div className="up-screen">
-        <Header title="List your services" />
-        <SignInPrompt title="Sign in to list your services" text="Set up a listing so clients can find and book you." />
+        <Header title={TITLE} />
+        <SignInPrompt title="Sign in to set up your listing" text="Set up a listing so clients can find and book you." />
       </div>
     )
   }
-  if (loading) return <div className="up-screen"><Header title="List your services" /><Loading /></div>
+  if (loading) return <div className="up-screen"><Header title={TITLE} /><Loading /></div>
   return (
     <ListingSetup
-      initialVertical={preset}
-      onDone={(provider) => {
+      onDone={() => {
         setMode('provider')
-        // Visual services post their work first; everyone else starts with packages.
-        navigate(verticalMeta(provider.vertical).visual ? '/upload' : '/me?tab=packages', { replace: true })
+        navigate('/upload', { replace: true })
       }}
     />
   )
@@ -66,15 +64,18 @@ function Header({ title, onBack }) {
   )
 }
 
-// The setup form. Also used by /upload the first time someone posts (initialVertical
-// 'photography', lockVertical). onDone(provider) gets the new providers row (+ `vertical`).
-export function ListingSetup({ initialVertical = null, lockVertical = false, onDone, title }) {
+const SERVICE_GROUPS = [
+  { kind: 'photo', label: 'Photo' },
+  { kind: 'video', label: 'Video' },
+]
+
+// The setup form. Also used by /upload the first time someone posts. onDone(provider) gets
+// the new providers row (+ `vertical`). (initialVertical / lockVertical are accepted for old
+// callers; there's one vertical.)
+export function ListingSetup({ onDone, title }) {
   const { profile } = useAuth()
   const { myProviders, refreshProvider, toast } = useStore()
   const cats = useQuery(getCategories, [])
-  const taken = useMemo(() => new Set((myProviders || []).map((p) => p.vertical)), [myProviders])
-  const [step, setStep] = useState(initialVertical ? 2 : 1)
-  const [vertical, setVertical] = useState(initialVertical)
   const [name, setName] = useState(profile?.display_name || '')
   const [slug, setSlug] = useState(slugify(profile?.display_name || profile?.username || ''))
   const [slugTouched, setSlugTouched] = useState(false)
@@ -84,18 +85,10 @@ export function ListingSetup({ initialVertical = null, lockVertical = false, onD
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const live = useMemo(() => (cats.data ? new Set(cats.data.filter((v) => v.live).map((v) => v.slug)) : null), [cats.data])
-  const info = cats.data?.find((v) => v.slug === vertical)
-  const meta = verticalMeta(vertical)
-  const services = (info?.services || []).filter((s) => s.live)
+  const info = cats.data?.[0]
+  const services = useMemo(() => (info?.services || []).filter((s) => s.live), [info])
   const isLive = !!info?.live
-  const already = vertical && taken.has(vertical)
-  const noun = nounFor(vertical)
-
-  // A second listing gets its own link: suggest one with the vertical in it.
-  useEffect(() => {
-    if (!slugTouched && vertical && taken.size) setSlug(slugify(`${name || profile?.username || ''} ${vertical}`))
-  }, [vertical]) // eslint-disable-line react-hooks/exhaustive-deps
+  const already = (myProviders || []).length > 0
 
   const slugOk = /^[a-z0-9-]{3,40}$/.test(slug)
   const ready = name.trim().length > 0 && slugOk && isLive && !already
@@ -111,17 +104,17 @@ export function ListingSetup({ initialVertical = null, lockVertical = false, onD
     setError('')
     try {
       const ids = services.filter((s) => picked.has(s.slug)).map((s) => s.id)
-      const provider = await becomeProvider({ displayName: name.trim(), slug, city: city.trim(), serviceIds: ids, vertical })
+      const provider = await becomeProvider({ displayName: name.trim(), slug, city: city.trim(), serviceIds: ids })
       invalidate('providers')
       await refreshProvider(provider.id)
-      toast(meta.visual ? 'You’re set up. Now add your first photos.' : 'You’re set up. Now add a package.')
-      onDone({ ...provider, vertical })
+      toast('You’re set up. Now add your first photos.')
+      onDone({ ...provider, vertical: PHOTO_VERTICAL })
     } catch (err) {
       if (err.code === '23505' && /slug/i.test(err.message || '')) {
         setEditLink(true)
         setError('That profile link is taken. Try another.')
       } else if (err.code === '23505') {
-        setError('You already have a listing for this service.')
+        setError('You already have a listing.')
       } else {
         setError(friendlyError(err))
       }
@@ -130,66 +123,46 @@ export function ListingSetup({ initialVertical = null, lockVertical = false, onD
     }
   }
 
-  // ---- step 1: what do you offer? ----
-  if (step === 1) {
-    return (
-      <div className="up-screen">
-        <Header title={title || 'List your services'} />
-        <div className="pad bp">
-          <div className="bp-hero">
-            <h2>What do you offer?</h2>
-            <p className="muted small">Pick one. You can add more services later, each with its own listing.</p>
-          </div>
-          {cats.error && <ErrorState error={cats.error} onRetry={cats.reload} />}
-          <VerticalGrid value={vertical} onChange={setVertical} live={live} taken={taken} />
-        </div>
-        <div className="up-footer">
-          <button className="btn accent block" disabled={!vertical} onClick={() => setStep(2)}>
-            {vertical ? `Continue as a ${noun}` : 'Pick a service'}
-          </button>
-        </div>
-      </div>
-    )
-  }
+  const toggle = (slugToToggle) => setPicked((prev) => {
+    const n = new Set(prev)
+    n.has(slugToToggle) ? n.delete(slugToToggle) : n.add(slugToToggle)
+    return n
+  })
 
-  // ---- step 2: details ----
-  const back = lockVertical ? undefined : () => setStep(1)
   return (
     <form className="up-screen" onSubmit={save} noValidate>
-      <Header title={title || `Become a ${noun}`} onBack={back} />
+      <Header title={title || TITLE} />
       <div className="pad bp">
         <div className="bp-hero">
-          <VerticalBadge vertical={vertical} size={64} />
-          <h2>{meta.visual ? 'Show clients your work' : `Get booked as a ${noun}`}</h2>
+          <VerticalBadge vertical={PHOTO_VERTICAL} size={64} />
+          <h2>Show clients your work</h2>
           <p className="muted small">
-            {meta.visual ? `Set up your ${noun} profile once, then post your work.` : `Set up your ${noun} profile, then add your packages and prices.`} You can change any of this later.
+            Photographers and videographers: set up your profile once, then post your work and add packages. You can change any of this later.
           </p>
         </div>
 
-        {cats.loading && !cats.data ? (
+        {cats.error ? (
+          <ErrorState error={cats.error} onRetry={cats.reload} />
+        ) : cats.loading && !cats.data ? (
           <Loading inline />
         ) : already ? (
           <div className="callout">
-            <b className="small">You already have a {noun} listing.</b>
-            <div className="muted small mt-xs">Switch to it from your profile, or pick a different service.</div>
+            <b className="small">You already have a listing.</b>
+            <div className="muted small mt-xs">Manage it, post work and edit your packages from your profile.</div>
             <div className="row gap-xs mt-sm">
               <Link to="/me" className="btn sm">Go to my profile</Link>
-              {!lockVertical && <button type="button" className="btn ghost sm" onClick={() => setStep(1)}>Pick another</button>}
             </div>
           </div>
         ) : !isLive ? (
           <div className="callout coming-soon">
-            <div className="inline-icon"><Clock size={16} /> <b>{meta.name} is coming soon</b></div>
-            <div className="muted small mt-xs">
-              We’re opening {lowerFirst(meta.name)} listings shortly. Check back soon{lockVertical ? '' : ', or pick another service you offer'}.
-            </div>
-            {!lockVertical && <button type="button" className="btn ghost sm mt-sm" onClick={() => setStep(1)}>Pick another service</button>}
+            <div className="inline-icon"><Clock size={16} aria-hidden="true" /> <b>Listings open soon</b></div>
+            <div className="muted small mt-xs">We’re getting photo & video listings ready. Check back soon.</div>
           </div>
         ) : (
           <>
             <label className="field pf-field">
               <span className="pf-label">Name clients will see</span>
-              <input className="input" maxLength={80} placeholder={`e.g. ${placeholderName(vertical)}`} value={name} autoComplete="organization"
+              <input className="input" maxLength={80} placeholder="e.g. Alex Rivera Photography" value={name} autoComplete="organization"
                 onChange={(e) => { setName(e.target.value); if (!slugTouched) setSlug(slugify(e.target.value)) }} />
             </label>
             {editLink ? (
@@ -197,7 +170,7 @@ export function ListingSetup({ initialVertical = null, lockVertical = false, onD
                 <span className="pf-label">Profile link</span>
                 <div className="input-prefix">
                   <span>photomatch.app/</span>
-                  <input value={slug} maxLength={40} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                  <input value={slug} maxLength={40} autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-label="Profile link"
                     onChange={(e) => { setSlugTouched(true); setSlug(slugify(e.target.value)) }} />
                 </div>
                 {slug && !slugOk && <small className="field-hint">3–40 characters: letters, numbers and dashes.</small>}
@@ -215,16 +188,24 @@ export function ListingSetup({ initialVertical = null, lockVertical = false, onD
             </label>
 
             {services.length > 0 && (
-              <div className="field pf-field">
-                <span className="pf-label">What kinds of {lowerFirst(meta.name)}? <span className="pf-optional">optional</span></span>
-                <div className="chips">
-                  {services.map((s) => (
-                    <button type="button" key={s.slug} className={`chip toggle ${picked.has(s.slug) ? 'on' : ''}`} aria-pressed={picked.has(s.slug)}
-                      onClick={() => setPicked((prev) => { const n = new Set(prev); n.has(s.slug) ? n.delete(s.slug) : n.add(s.slug); return n })}>
-                      {s.name}
-                    </button>
-                  ))}
-                </div>
+              <div className="field pf-field" role="group" aria-label="What do you shoot?">
+                <span className="pf-label">What do you shoot? <span className="pf-optional">optional</span></span>
+                {SERVICE_GROUPS.map((g) => {
+                  const list = services.filter((s) => (s.kind || 'photo') === g.kind)
+                  if (!list.length) return null
+                  return (
+                    <div key={g.kind} className="mt-xs">
+                      <div className="muted tiny">{g.label}</div>
+                      <div className="chips mt-xs">
+                        {list.map((s) => (
+                          <button type="button" key={s.slug} className={`chip toggle ${picked.has(s.slug) ? 'on' : ''}`} aria-pressed={picked.has(s.slug)} onClick={() => toggle(s.slug)}>
+                            {s.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </>
@@ -239,9 +220,3 @@ export function ListingSetup({ initialVertical = null, lockVertical = false, onD
     </form>
   )
 }
-
-const PLACEHOLDER_NAMES = {
-  photography: 'Alex Rivera Photography', catering: 'Casa Taco Catering', venue: 'The Glasshouse', music: 'DJ Nova',
-  florals: 'Wild Poppy Florals', cakes: 'Sugar & Crumb', 'hair-makeup': 'Glow by Dana', planning: 'Golden Hour Events',
-}
-const placeholderName = (v) => PLACEHOLDER_NAMES[v] || `Your ${lowerFirst(verticalMeta(v).name)} business`

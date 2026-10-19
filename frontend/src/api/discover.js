@@ -1,20 +1,26 @@
-// Discover: the swipe deck for every vertical, swipe logging and undo, the taste
-// profile, "Not into this", and "% match". Plain JS (no React, no DOM): the Expo
-// app imports it too.
+// Discover: the swipe deck, swipe logging and undo, the taste profile, "Not into
+// this", and "% match". Plain JS (no React, no DOM): the Expo app imports it too.
+//
+// Photography only (one vertical; see verticals/catalog.js). The deck is every photo &
+// video creator's work; service chips narrow it. Changed in the photography pivot: no
+// vertical picker (`vertical` is accepted and means the whole deck; another vertical's
+// slug gives []), `service` works on the whole deck, and normalizeDeckChoice() returns
+// { vertical: 'all', service, occasion: null }. Vendor cards stay: they show photographers
+// who haven't posted yet.
 //
 // ---------------------------------------------------------------------------
 // API (stable names; mobile/ imports these)
 // ---------------------------------------------------------------------------
 // Deck
-//   EVERYTHING                        'all': the "For you: everything" deck (every vertical mixed)
-//   getDeck({ vertical = 'all', service = null, occasion = null, limit = 8, exclude = null, seen = null })
+//   EVERYTHING                        'all': the whole deck
+//   getDeck({ service = null, occasion = null, limit = 8, exclude = null, seen = null })
 //       -> Promise<DeckCard[]>  the next cards. exclude: card ids to leave out (fetched or swiped
 //          already); seen: cards already fetched/swiped (their albums are left out too). [] = done.
-//       Verticals with posts give photo cards (discover_feed, SigLIP-ranked; posts the ranking
-//       can't see yet, e.g. without embeddings, follow newest first). Vendors with no posts
-//       (every vendor in a vertical nobody has posted in, incl. non-visual ones like DJs and
-//       planners) give vendor cards, ranked by discover_vendors() when that migration is applied
-//       and by rankVendors() here otherwise. 'all' mixes them (two photos, one vendor).
+//       Posts give photo cards (discover_feed, SigLIP-ranked; posts the ranking can't see yet,
+//       e.g. without embeddings, follow newest first). Photographers with no posts give vendor
+//       cards, ranked by discover_vendors() when that migration is applied and by rankVendors()
+//       here otherwise. They're mixed: three photos, then one vendor card.
+//       occasion: only old posts tagged with that occasion (occasions can't be set any more).
 //   getFeed({ limit, category, occasion }) -> PhotoCard[]   the ranked photo feed alone
 //   getVendorCards({ vertical, service, occasion, limit, exclude }) -> VendorCard[]
 //   toVendorCard(provider, { reason, exploration, score }) -> VendorCard   (pure)
@@ -50,7 +56,7 @@ import { exifLine, photoUrl, startingPackage } from '../lib/format.js'
 import { cached, getMatches, invalidate, listProviders } from './catalog.js'
 import { listPostIndex } from './home.js'
 import {
-  getOccasion, getVertical, lowerFirst, optionLabel, postConfig, verticalConfig, verticalMeta, attributeLines,
+  getService, isPhotoVertical, lowerFirst, optionLabel, postConfig, verticalConfig, verticalMeta, attributeLines,
 } from '../verticals/index.js'
 
 const must = ({ data, error }) => {
@@ -61,7 +67,8 @@ const must = ({ data, error }) => {
 const viewer = async () => (await supabase.auth.getSession()).data.session?.user.id ?? null
 
 export const EVERYTHING = 'all'
-const isAll = (vertical) => !vertical || vertical === EVERYTHING
+// One vertical: 'all', none, 'photography' (or 'videography') all mean the whole deck.
+const isAll = (vertical) => !vertical || vertical === EVERYTHING || isPhotoVertical(vertical)
 
 // ---------------------------------------------------------------------------
 // Photo cards
@@ -108,7 +115,7 @@ async function photoCards(rows) {
         title: r.album_title ?? album.title,
         category: album.category?.name ?? null,
         categorySlug: album.category?.slug ?? null,
-        occasion: occSlug ? { slug: occSlug, name: getOccasion(occSlug)?.name || occTag.name || occSlug } : null,
+        occasion: occSlug ? { slug: occSlug, name: occTag.name || occSlug } : null,
         photos: ordered.map((p) => ({ id: p.id, src: photoUrl(p.display_path), exif: p.exif || {} })),
         tags: r.auto_tags || first.auto_tags || [],
         reason: r.reason ?? null,
@@ -123,14 +130,16 @@ async function photoCards(rows) {
 // Albums with an occasion tag: Set<albumId>.
 const occasionAlbums = async (occasion) => new Set((await listPostIndex()).filter((p) => p.occasion === occasion).map((p) => p.albumId))
 
-// The ranked photo feed (discover_feed). category: a vertical or service slug, or null for all.
-// occasion: keep only posts tagged with it.
-// Each card: see PhotoCard at the top. (photos[0] is the photo the feed picked)
+// The ranked photo feed (discover_feed). category: a service slug, or null for all (a vertical
+// slug counts as all). occasion: keep only posts tagged with it.
+// Each card: see PhotoCard at the top. (photos[0] is the photo the feed picked; posts by
+// listings outside photography are dropped, so the request asks for a few extra.)
 export async function getFeed({ limit = 20, category = null, occasion = null } = {}) {
-  const rows = must(await supabase.rpc('discover_feed', { p_limit: occasion ? 50 : limit, p_category: category }))
+  const service = category && !isPhotoVertical(category) && category !== EVERYTHING ? category : null
+  const rows = must(await supabase.rpc('discover_feed', { p_limit: occasion ? 50 : service ? limit : limit * 2, p_category: service }))
   if (!rows.length) return []
   const keep = occasion ? await occasionAlbums(occasion) : null
-  return photoCards(keep ? rows.filter((r) => keep.has(r.album_id)).slice(0, limit) : rows)
+  return (await photoCards(keep ? rows.filter((r) => keep.has(r.album_id)) : rows)).slice(0, limit)
 }
 
 // ---------------------------------------------------------------------------
@@ -346,20 +355,18 @@ let vendorRpc = true // false once we know discover_vendors() isn't in the datab
 const isMissingFn = (err) => !!err && (err.code === 'PGRST202' || err.code === '42883' || /could not find the function|does not exist/i.test(err.message || ''))
 
 /**
- * Vendor cards for vendors with nothing to swipe through as photos (no published posts),
- * best first. vertical: a slug or 'all'; service: a service slug; occasion: only the verticals it needs.
- * exclude: card ids to leave out.
+ * Vendor cards for photographers with nothing to swipe through as photos (no published posts),
+ * best first. service: a service slug. exclude: card ids to leave out.
+ * (vertical: another vertical's slug gives []; occasion: accepted and ignored.)
  */
-export async function getVendorCards({ vertical = EVERYTHING, service = null, occasion = null, limit = 8, exclude = null } = {}) {
+export async function getVendorCards({ vertical = EVERYTHING, service = null, limit = 8, exclude = null } = {}) {
+  if (!isAll(vertical)) return []
   const uid = await viewer()
   const [providers, posts, mine, hidden] = await Promise.all([listProviders(), listPostIndex(), mySwipes(), getHiddenVendors().catch(() => new Set())])
   const posted = new Set(posts.map((p) => p.providerId))
-  const occ = occasion ? getOccasion(occasion) : null
   const skip = new Set(exclude || [])
   const candidates = providers.filter((p) =>
-    (isAll(vertical) || p.vertical === vertical) &&
     (!service || (p.categorySlugs || []).includes(service)) &&
-    (!occ || occ.needs.includes(p.vertical)) &&
     !posted.has(p.id) &&
     !(uid && p.profileId === uid) &&
     !mine.vendors.has(p.id) &&
@@ -373,7 +380,7 @@ export async function getVendorCards({ vertical = EVERYTHING, service = null, oc
   if (vendorRpc) {
     const { data, error } = await supabase.rpc('discover_vendors', {
       p_limit: Math.min(100, limit + skip.size),
-      p_vertical: isAll(vertical) ? null : vertical,
+      p_vertical: null,
       p_service: service,
       p_without_posts: true,
     })
@@ -389,7 +396,7 @@ export async function getVendorCards({ vertical = EVERYTHING, service = null, oc
   }
   const liked = [...mine.liked].map((id) => byId.get(id)).filter(Boolean)
   const passed = [...mine.passed].map((id) => byId.get(id)).filter(Boolean)
-  return rankVendors(candidates, { liked, passed, diversify: isAll(vertical) })
+  return rankVendors(candidates, { liked, passed })
     .slice(0, limit)
     .map((r) => toVendorCard(r.provider, r))
 }
@@ -413,8 +420,7 @@ function interleaveByProvider(posts) {
 
 /** The next cards for the swipe deck. See the top of this file. */
 export async function getDeck({ vertical = EVERYTHING, service = null, occasion = null, limit = 8, exclude = null, seen = null } = {}) {
-  const all = isAll(vertical)
-  if (all) service = null
+  if (!isAll(vertical)) return []
   const uid = await viewer()
   const ids = new Set(exclude || [])
   const albumsSeen = new Set()
@@ -424,12 +430,12 @@ export async function getDeck({ vertical = EVERYTHING, service = null, occasion 
   }
   const [posts, mine, hidden, providers] = await Promise.all([listPostIndex(), mySwipes(), getHiddenVendors().catch(() => new Set()), listProviders()])
   const own = new Set(uid ? providers.filter((p) => p.profileId === uid).map((p) => p.id) : [])
-  const scoped = posts.filter((p) => (all || p.vertical === vertical) && (!service || p.service === service) && (!occasion || p.occasion === occasion))
+  const scoped = posts.filter((p) => (!service || p.service === service) && (!occasion || p.occasion === occasion))
 
   // 1. Photo cards: the ranked feed, then posts it doesn't rank (yet), newest first.
   let photos = []
   if (scoped.length) {
-    const ranked = await getFeed({ limit, category: service || (all ? null : vertical), occasion }).catch((e) => {
+    const ranked = await getFeed({ limit, category: service, occasion }).catch((e) => {
       console.warn(e)
       return []
     })
@@ -448,12 +454,11 @@ export async function getDeck({ vertical = EVERYTHING, service = null, occasion 
     }
   }
 
-  // 2. Vendor cards (vendors with no posts). Not when narrowing to an occasion's posts in one vertical.
-  const wantVendors = !(occasion && !all)
-  const vendors = wantVendors ? await getVendorCards({ vertical, service, occasion, limit, exclude: ids }) : []
+  // 2. Vendor cards (photographers with no posts). Not when narrowing to an occasion's posts.
+  const vendors = occasion ? [] : await getVendorCards({ service, limit, exclude: ids })
 
-  // 3. Mix: one vendor card after every two photos ('all') or three (one vertical), while both last.
-  const every = all ? 2 : 3
+  // 3. Mix: one vendor card after every three photos, while both last.
+  const every = 3
   const out = []
   let i = 0
   let j = 0
@@ -474,18 +479,15 @@ export async function getDeck({ vertical = EVERYTHING, service = null, occasion 
 // Wording
 // ---------------------------------------------------------------------------
 
-/** Deck wording for a vertical slug ('all' / null = every vertical). */
-export function deckWords(vertical) {
-  if (isAll(vertical)) {
-    return { noun: 'vendor', plural: 'vendors', things: 'work', finding: 'Finding vendors and work for you…', empty: 'New vendors and work show up here as they join and post.' }
-  }
-  const v = verticalMeta(vertical)
+/** Deck wording: { noun, plural, things, finding, empty }. (The argument is kept for old callers.) */
+export function deckWords() {
+  const v = verticalMeta()
   const plural = lowerFirst(v.plural)
   return {
     noun: v.noun,
     plural,
-    things: v.visual ? 'work' : plural,
-    finding: `Finding ${plural} for you…`,
+    things: 'work',
+    finding: 'Finding work for you…',
     empty: `New ${plural} and their work show up here as they join and post.`,
   }
 }
@@ -507,12 +509,10 @@ export function cardWords(card) {
 
 const DECK_KEY = 'discover:deck'
 
-/** A valid { vertical, service, occasion } (unknown slugs fall back to 'all' / null). */
+/** A valid { vertical: 'all', service, occasion: null } (an unknown service falls back to null). */
 export function normalizeDeckChoice(c) {
-  const vertical = c?.vertical && getVertical(c.vertical) ? c.vertical : EVERYTHING
-  const service = vertical !== EVERYTHING && c?.service && getVertical(vertical).services.some((s) => s.slug === c.service) ? c.service : null
-  const occasion = c?.occasion && getOccasion(c.occasion) ? c.occasion : null
-  return { vertical, service, occasion }
+  const service = c?.service && getService(c.service) ? c.service : null
+  return { vertical: EVERYTHING, service, occasion: null }
 }
 
 export function readDeckChoice(storage) {

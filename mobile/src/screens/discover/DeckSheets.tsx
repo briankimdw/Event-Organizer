@@ -190,7 +190,7 @@ export function CorrectSheet({ open, onClose, signedIn, tags, picked, vendor, on
           {tags.length > 0 ? (
             <>
               <Text variant="small" muted>
-                {vendor ? 'Pick what isn’t for you and we’ll show you fewer vendors like this. This counts more than a regular pass.' : 'Pick what you’d like to see less of. This counts more than a regular pass.'}
+                {vendor ? 'Pick what isn’t for you and we’ll show you fewer photographers like this. This counts more than a regular pass.' : 'Pick what you’d like to see less of. This counts more than a regular pass.'}
               </Text>
               <ChipRow style={s.mt}>
                 {tags.map((t) => <Chip key={t} label={t} toggle on={picked.has(t)} onPress={() => onToggle(t)} />)}
@@ -246,7 +246,7 @@ export function TasteSheet({ open, onClose, uid, corrections, removeCorrection, 
     <Sheet open={open} onClose={onClose} title="Your taste">
       {!uid ? (
         <>
-          <Text variant="small" muted>As you swipe, we learn what you like (styles, kinds of vendors, what they offer) and use it to rank vendors for you. Sign in so your swipes are saved.</Text>
+          <Text variant="small" muted>As you swipe, we learn what you like (styles, subjects, what photographers offer) and use it to rank photographers for you. Sign in so your swipes are saved.</Text>
           <Button title="Sign in" block onPress={onSignIn} style={s.mt} />
         </>
       ) : taste.loading && !t ? (
@@ -256,30 +256,14 @@ export function TasteSheet({ open, onClose, uid, corrections, removeCorrection, 
       ) : t ? (
         <>
           <Text variant="small" muted>
-            Learned from {t.swipes} swipe{t.swipes === 1 ? '' : 's'} ({t.likes} like{t.likes === 1 ? '' : 's'}). We use it to rank vendors for you.
+            Learned from {t.swipes} swipe{t.swipes === 1 ? '' : 's'} ({t.likes} like{t.likes === 1 ? '' : 's'}). We use it to rank photographers for you.
           </Text>
-          {(t.verticals?.length ?? 0) > 0 && (
-            <>
-              <Text variant="h4" style={s.section}>What you’ve been liking</Text>
-              <ChipRow>
-                {t.verticals.map((v) => {
-                  const m = verticalMeta(v.slug) as { icon: string; tint: string }
-                  return (
-                    <View key={v.slug} style={s.likeChip} accessible accessibilityLabel={`${v.name}, ${v.likes} like${v.likes === 1 ? '' : 's'}`}>
-                      <VerticalIcon name={m.icon} tint={m.tint} size={13} />
-                      <Text variant="tiny" weight="600">{v.name} · {v.likes}</Text>
-                    </View>
-                  )
-                })}
-              </ChipRow>
-            </>
-          )}
           <Text variant="h4" style={s.section}>Styles</Text>
           {t.styles.length === 0 && <Text variant="small" muted>Like a few photos and the styles you like will show up here.</Text>}
           <Bars items={t.styles} />
           {(t.traits?.length ?? 0) > 0 && (
             <>
-              <Text variant="h4" style={s.section}>In vendors</Text>
+              <Text variant="h4" style={s.section}>In photographers</Text>
               <Bars items={t.traits} />
             </>
           )}
@@ -291,7 +275,7 @@ export function TasteSheet({ open, onClose, uid, corrections, removeCorrection, 
           </ChipRow>
           <View style={[s.note, s.mt]}>
             <Compass size={14} color={c.ink} />
-            <Text variant="small" style={s.grow}>About 1 in 7 cards is something outside your usual taste, so you can find new styles and vendors.</Text>
+            <Text variant="small" style={s.grow}>About 1 in 7 cards is something outside your usual taste, so you can find new styles and photographers.</Text>
           </View>
         </>
       ) : null}
@@ -503,7 +487,6 @@ const useStyles = makeStyles((t) => ({
   // Large text: the shortlist actions wrap to a second line rather than breaking "Message" mid-word.
   wrapRow: { flexWrap: 'wrap' },
   fitBtn: { flexBasis: 'auto' },
-  likeChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.c.soft, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   tasteRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 },
   tasteTag: { width: 110 },
   tasteBar: { flex: 1, height: 8, borderRadius: 999, backgroundColor: t.c.soft, overflow: 'hidden' },

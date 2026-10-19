@@ -62,7 +62,7 @@ export default function PeoplePicker({ selected, onChange, exclude = [], autoFoc
         <Loading inline />
       ) : !list.length ? (
         <div className="muted small pp-empty">
-          {q.trim() ? `No one found for “${q.trim()}”.` : 'Search for anyone on photomatch: vendors or clients.'}
+          {q.trim() ? `No one found for “${q.trim()}”.` : 'Search for anyone on photomatch: photographers or clients.'}
         </div>
       ) : (
         <ul className="pp-list">

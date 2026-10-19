@@ -26,12 +26,7 @@ import AuthCallback from './screens/AuthCallback.jsx'
 import Welcome from './screens/Welcome.jsx'
 import ResetPassword from './screens/ResetPassword.jsx'
 import MyWork from './screens/MyWork.jsx'
-import Planner from './screens/Planner.jsx'
 import NewListing from './screens/NewListing.jsx'
-import ServiceHome from './screens/ServiceHome.jsx'
-import Occasion from './screens/Occasion.jsx'
-import Events, { NewEvent } from './screens/Events.jsx'
-import EventDetail from './screens/EventDetail.jsx'
 import NotFound from './screens/NotFound.jsx'
 import { useAuth } from './auth.jsx'
 import { APP_NAME } from './components/useDocumentTitle.js'
@@ -39,15 +34,14 @@ import { APP_NAME } from './components/useDocumentTitle.js'
 const TAB_ROUTES = ['/', '/discover', '/bookings', '/inbox', '/me']
 const AUTH_ROUTES = ['/sign-in', '/auth/callback', '/welcome', '/reset-password']
 
-// Default page titles; screens with a more specific name (TopBar title, a vendor's name) override them.
+// Default page titles; screens with a more specific name (TopBar title, a photographer's name) override them.
 const ROUTE_TITLES = [
-  [/^\/$/, 'Home'], [/^\/discover/, 'Discover'], [/^\/search/, 'Search'], [/^\/u\//, 'Vendor'], [/^\/(gallery|post)\//, 'Posts'],
+  [/^\/$/, 'Home'], [/^\/discover/, 'Discover'], [/^\/search/, 'Search'], [/^\/u\//, 'Profile'], [/^\/(gallery|post)\//, 'Posts'],
   [/^\/book\//, 'Request booking'], [/^\/bookings\/[^/]+\/delivery/, 'Delivery'], [/^\/bookings\/[^/]+\/review/, 'Review'],
   [/^\/bookings\/./, 'Booking'], [/^\/bookings/, 'Bookings'], [/^\/inbox\/new/, 'New message'], [/^\/inbox\/./, 'Chat'],
   [/^\/inbox/, 'Messages'], [/^\/me/, 'Profile'], [/^\/upload/, 'Post'], [/^\/verify/, 'Verification'], [/^\/settings/, 'Settings'],
   [/^\/ai-review/, 'Post in review'], [/^\/sign-in/, 'Sign in'], [/^\/auth/, 'Signing in'], [/^\/welcome/, 'Welcome'],
-  [/^\/reset-password/, 'New password'], [/^\/my-work/, 'My work'], [/^\/plan/, 'Plan with AI'], [/^\/new-listing/, 'New listing'],
-  [/^\/services\//, 'Services'], [/^\/occasions\//, 'Occasions'], [/^\/events\/new/, 'New event'], [/^\/events\/./, 'Event'], [/^\/events/, 'Events'],
+  [/^\/reset-password/, 'New password'], [/^\/my-work/, 'My work'], [/^\/new-listing/, 'New listing'],
 ]
 
 function RouteAnnouncer({ pathname }) {
@@ -116,13 +110,7 @@ export default function App() {
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/my-work" element={<MyWork />} />
-            <Route path="/plan" element={<Planner />} />
             <Route path="/new-listing" element={<NewListing />} />
-            <Route path="/services/:vertical" element={<ServiceHome />} />
-            <Route path="/occasions/:slug" element={<Occasion />} />
-            <Route path="/events" element={<Events />} />
-            <Route path="/events/new" element={<NewEvent />} />
-            <Route path="/events/:id" element={<EventDetail />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

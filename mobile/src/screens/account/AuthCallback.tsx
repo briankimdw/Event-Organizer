@@ -10,6 +10,7 @@ import { Link2Off } from 'lucide-react-native'
 import { ActivityIndicator, Platform, View } from 'react-native'
 
 import { Screen, Text } from '@/components'
+import { BRAND } from '@/lib/photo'
 import { AuthButton, Badge } from '@/screens/auth/AuthUI'
 import { safeNext, useAuth } from '@/state/auth'
 import { makeStyles, useTheme } from '@/theme'
@@ -68,7 +69,7 @@ export default function AuthCallback() {
   return (
     <Screen back={false} padded>
       <View style={s.center}>
-        <Text variant="display">Event Organizer<Text variant="display" color="accent" accessibilityRole="none">.</Text></Text>
+        <Text variant="display">{BRAND}<Text variant="display" color="accent" accessibilityRole="none">.</Text></Text>
         <ActivityIndicator size="large" color={c.ink} style={s.spinner} />
         <Text muted accessibilityLiveRegion="polite">Signing you in…</Text>
       </View>

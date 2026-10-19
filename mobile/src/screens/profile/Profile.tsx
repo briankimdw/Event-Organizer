@@ -1,10 +1,11 @@
 // /u/[id]: native port of frontend/src/screens/Profile.jsx. `id` may be a provider
 // id, a profile id, a provider slug or a username (the shared getPerson handles all).
-// Ported: header (cover, tap-to-view avatar, badges, vertical tag, city -> map, rating ->
-// reviews, followers sheet, bio, specialties), follow / shortlist / message / book, "your
-// dates" card + two-week availability strip (one freeDays call), "About" vertical fields,
-// and the tabs per vertical (Portfolio, Packages + service-area map + cancellation policy,
-// Gear, Reviews with the review detail sheet).
+// Ported: header (cover, tap-to-view avatar, badges, city -> map, rating -> reviews,
+// followers sheet, bio, specialties), follow / shortlist / message / book, "your dates"
+// card + two-week availability strip (one freeDays call), "About" fields, and the tabs
+// (Portfolio, Packages + service-area map + cancellation policy, Gear, Reviews with the
+// review detail sheet). Photography pivot: no vertical tag, no "Add to event", no
+// "Tagged in" (post credits are archived in archive/event-platform/mobile).
 // TODO(port): report / block menu (ModerationSheet), scroll to the tabs when the rating is tapped.
 import { callName } from '@shared/lib/format.js'
 import * as Linking from 'expo-linking'
@@ -13,31 +14,30 @@ import {
   CalendarCheck, CalendarX, Camera, CircleDot, Heart, Images, MapPin, MessageCircle, Package as PackageIcon, Plus, Send, Star, UserX,
 } from 'lucide-react-native'
 import { useMemo, useState } from 'react'
-import { Pressable, ScrollView, Share, View } from 'react-native'
+import { Pressable, Share, View } from 'react-native'
 
 import { freeDays, getPerson, getProvider } from '@shared/api/catalog.js'
 import { messageError, startDirectMessage, startInquiry } from '@shared/api/messages.js'
-import { listAlbums, listTaggedAlbums, toViewerAlbum } from '@shared/api/portfolio.js'
+import { listAlbums, toViewerAlbum } from '@shared/api/portfolio.js'
 import { fmtChip, fmtMonth, fromKey, parseDates, toKey } from '@shared/lib/dates.js'
 import { verticalConfig } from '@shared/verticals/index.js'
 import { VERTICALS } from '@shared/verticals/catalog.js'
 import {
-  AvailabilityStrip, Button, Chip, ChipRow, EmptyState, SectionHeader, ErrorState, IconButton, IdVerified, Loading, Photo, ProBadge, Screen, Segmented, Stars, Text,
-  VerticalIcon, ViewableAvatar, stripDates,
+  AvailabilityStrip, Button, Chip, ChipRow, EmptyState, ErrorState, IconButton, IdVerified, Loading, Photo, ProBadge, Screen, Segmented, Stars, Text,
+  ViewableAvatar, stripDates,
 } from '@/components'
 import { MapPreview } from '@/components/map'
 import { ShareSheet } from '@/components/share/ShareSheet'
 import useQuery from '@/hooks/useQuery'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
-import { makeStyles, useReadableTint, useTheme } from '@/theme'
+import { makeStyles, useTheme } from '@/theme'
 import type { Person, Provider, Vertical } from '@/types'
 import { AlbumGrid, type Album } from './AlbumGrid'
 import { AttributeList } from './AttributeList'
 import { FollowersSheet } from './FollowersSheet'
 import { PackageList } from './PackageList'
 import { ReviewList } from './ReviewList'
-import { AddToEventButton } from '@/screens/events/AddToEvent'
 
 const TABS = ['portfolio', 'packages', 'gear', 'reviews'] as const
 type Tab = (typeof TABS)[number]
@@ -55,7 +55,6 @@ const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v)
 export default function Profile() {
   const s = useStyles()
   const { c } = useTheme()
-  const readable = useReadableTint()
   const router = useRouter()
   const pathname = usePathname()
   const params = useLocalSearchParams<{ id: string; tab?: string; dates?: string }>()
@@ -71,30 +70,17 @@ export default function Profile() {
 
   const { data: person, loading, error, reload } = useQuery<Person | null>(() => loadPerson(id), [id])
   const provider = person?.kind === 'provider' ? (person as Provider) : null
-  // Visual verticals lead with their portfolio; others (DJs, planners...) with packages and reviews.
-  const visual = provider ? provider.verticalInfo?.visual !== false : true
-  const tabs: Tab[] = !provider
-    ? []
-    : [
-        ...(visual ? (['portfolio'] as Tab[]) : []),
-        'packages',
-        ...(['photography', 'videography'].includes(provider.vertical) || provider.gear.bodies.length || provider.gear.lenses.length ? (['gear'] as Tab[]) : []),
-        'reviews',
-        ...(!visual && provider.albumCount > 0 ? (['portfolio'] as Tab[]) : []),
-      ]
+  const tabs: Tab[] = provider ? [...TABS] : []
   const activeTab = tab && tabs.includes(tab) ? tab : tabs[0]
   const config = verticalConfig(provider?.vertical)
   const aboutFields = config.providerFields.filter((f: { key: string }) => f.key !== 'specialties')
 
   const albums = useQuery<Album[]>(
-    provider && (visual || provider.albumCount > 0)
+    provider
       ? () => listAlbums(provider.id).then((rows: any[]) => rows.filter((a) => a.photos?.length).map(toViewerAlbum))
       : null,
     [provider?.id],
   )
-
-  // Other vendors' posts that credit this one; [] (section hidden) until album_credits exists.
-  const tagged = useQuery<(Album & { by: { id: string; name: string } })[]>(provider ? () => listTaggedAlbums(provider.id) : null, [provider?.id])
 
   // Dates carried over from a date search, plus the strip's two weeks: one availability lookup.
   const dates: string[] = parseDates(datesParam)
@@ -120,11 +106,10 @@ export default function Profile() {
   const firstName = provider ? (provider as any).shortName || callName(provider.name) : (person.name || '').split(' ')[0]
   // A specialty that is a catalog service ("Wedding") filters by it; anything else is a text search.
   const categoryFor = (name: string) => {
-    const pool = [...VERTICALS.filter((v: Vertical) => v.slug === provider?.vertical), ...VERTICALS]
-    return pool.flatMap((v: Vertical) => v.services).find((sv) => sv.name.toLowerCase() === name.toLowerCase())?.slug
+    return VERTICALS.flatMap((v: Vertical) => v.services).find((sv) => sv.name.toLowerCase() === name.toLowerCase())?.slug
   }
   const openMap = provider?.location
-    ? () => router.push({ pathname: '/search', params: { view: 'map', v: provider.vertical, focus: provider.id } })
+    ? () => router.push({ pathname: '/search', params: { view: 'map', focus: provider.id } })
     : undefined
 
   const contact = async () => {
@@ -146,7 +131,7 @@ export default function Profile() {
     // Vendors: the in-app "Send to" sheet (cards in chat). People: the system share sheet.
     if (provider) return setSharing(true)
     const path = `/u/${person.username || person.id}`
-    Share.share({ message: `Check out ${handle ? `@${handle}` : person.name} on Event Organizer: ${Linking.createURL(path)}` }).catch(() => {})
+    Share.share({ message: `Check out ${handle ? `@${handle}` : person.name} on photomatch: ${Linking.createURL(path)}` }).catch(() => {})
   }
 
   return (
@@ -178,17 +163,6 @@ export default function Profile() {
           {provider?.pro && <ProBadge />}
         </View>
         <View style={s.inline}>
-          {provider?.verticalInfo && (
-            <Pressable
-              onPress={() => router.push({ pathname: '/search', params: { v: provider.vertical } })}
-              style={[s.vtag, { backgroundColor: `${provider.verticalInfo.tint}1a` }]}
-              accessibilityRole="link"
-              accessibilityLabel={`More ${provider.verticalInfo.plural}`}
-            >
-              <VerticalIcon name={provider.verticalInfo.icon} size={12} color={provider.verticalInfo.tint} />
-              <Text variant="tiny" weight="700" style={{ color: readable(provider.verticalInfo.tint, 5) }}>{provider.verticalInfo.name}</Text>
-            </Pressable>
-          )}
           {!!person.city && (
             <Pressable onPress={openMap} disabled={!openMap} style={[s.inline, s.city]} accessibilityRole={openMap ? 'link' : undefined}
               accessibilityLabel={openMap ? `${person.city}: see ${firstName} on the map` : person.city}>
@@ -235,7 +209,7 @@ export default function Profile() {
             {provider.specialties.map((sp: string) => {
               const slug = categoryFor(sp)
               return (
-                <Chip key={sp} label={sp} onPress={() => router.push({ pathname: '/search', params: slug ? { v: provider.vertical, cat: slug } : { v: provider.vertical, q: sp } })} />
+                <Chip key={sp} label={sp} onPress={() => router.push({ pathname: '/search', params: slug ? { cat: slug } : { q: sp } })} />
               )
             })}
           </ChipRow>
@@ -247,16 +221,12 @@ export default function Profile() {
               <Button title={following.has(provider.id) ? 'Following' : 'Follow'} variant={following.has(provider.id) ? 'ghost' : 'primary'} grow onPress={() => toggleFollow(provider.id)} />
               <Button title={contacting ? 'Opening…' : 'Ask a question'} icon={MessageCircle} variant="ghost" grow disabled={contacting} onPress={contact} />
             </View>
-            <View style={[s.row, s.wrapRow]}>
-              <AddToEventButton provider={provider} variant="button" style={s.fitBtn} />
-              <Button
-                title={`Book ${firstName}`}
-                variant="accent"
-                grow
-                style={s.fitBtn}
-                onPress={() => router.push({ pathname: '/book/[providerId]', params: { providerId: provider.id, ...datesQuery } })}
-              />
-            </View>
+            <Button
+              title={`Book ${firstName}`}
+              variant="accent"
+              block
+              onPress={() => router.push({ pathname: '/book/[providerId]', params: { providerId: provider.id, ...datesQuery } })}
+            />
           </View>
         )}
         {!provider && !isMine && (
@@ -310,27 +280,6 @@ export default function Profile() {
         <AboutCard firstName={firstName} fields={aboutFields} attrs={provider.attributes} />
       )}
 
-      {provider && !!tagged.data?.length && (
-        <View style={s.tagged}>
-          <SectionHeader title="Tagged in" sub={`Posts by other vendors that credit ${firstName}`} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.taggedRail}>
-            {tagged.data.map((a) => (
-              <Pressable
-                key={a.id}
-                onPress={() => router.push({ pathname: '/gallery/[personId]', params: { personId: a.by.id, post: a.id } })}
-                style={({ pressed }) => [s.taggedTile, pressed && { opacity: 0.8 }]}
-                accessibilityRole="button"
-                accessibilityLabel={`${a.title || 'Post'} by ${a.by.name}`}
-              >
-                <Photo uri={a.cover} style={s.taggedImg} />
-                <Text variant="small" weight="600" numberOfLines={1}>{a.title}</Text>
-                <Text variant="tiny" muted numberOfLines={1}>by {a.by.name}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
       {provider && tabs.length > 0 && (
         <View style={s.tabs}>
           <Segmented options={tabs.map((t) => ({ value: t, label: TAB_LABELS[t] }))} value={activeTab} onChange={setTab} />
@@ -367,7 +316,6 @@ export default function Profile() {
             <PackageList
               packages={provider.packages}
               addons={provider.addons}
-              vertical={provider.vertical}
               onSelect={isMine ? undefined : (pkg) => router.push({ pathname: '/book/[providerId]', params: { providerId: provider.id, pkg: pkg.id, ...datesQuery } })}
             />
           )}
@@ -464,28 +412,20 @@ const useStyles = makeStyles((t) => ({
   headOverCover: { marginTop: -58 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 },
   inline: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'center' },
-  // A long city / service area wraps under the vertical tag instead of running off-screen.
+  // A long city / service area wraps instead of running off-screen.
   city: { maxWidth: '100%', flexWrap: 'nowrap' },
   cityText: { flexShrink: 1 },
-  vtag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginRight: 4 },
   underline: { textDecorationLine: 'underline' },
   bio: { marginTop: t.space.sm },
   centerChips: { justifyContent: 'center', marginTop: 10, alignSelf: 'stretch' }, // full width, so a long specialty ellipsizes instead of widening the row
   actions: { alignSelf: 'stretch', marginTop: t.space.lg, gap: t.space.sm },
   row: { flexDirection: 'row', gap: t.space.sm },
-  // "Book <long business name>" gets its own full-width line (like the web) instead of wrapping.
-  wrapRow: { flexWrap: 'wrap' },
-  fitBtn: { flexBasis: 'auto' },
   padX: { paddingHorizontal: t.space.lg, marginBottom: t.space.sm },
   infoCard: { borderWidth: 1, borderColor: t.c.line, borderRadius: t.radius.lg, padding: 12 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   shrink: { flexShrink: 1 },
   mtSm: { marginTop: t.space.sm },
   tabs: { paddingHorizontal: t.space.lg, marginTop: t.space.sm },
-  tagged: { marginTop: t.space.sm, marginBottom: t.space.sm },
-  taggedRail: { paddingHorizontal: t.space.lg, gap: 10 },
-  taggedTile: { width: 132, gap: 1 },
-  taggedImg: { width: 132, height: 99, borderRadius: t.radius.md, marginBottom: 5 },
   tabBody: { marginTop: t.space.sm },
   pad: { padding: t.space.lg },
   grow: { flex: 1 },

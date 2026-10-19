@@ -1,23 +1,22 @@
-// Home's browse cards, mirroring the web's components/home/Browse.jsx and Home.jsx:
-//   useInvite()      "Know a great caterer? Invite them": the native share sheet (RN Share)
-//   ComingSoonCard   verticals with no providers yet, as one calm card (marketplace cold start)
+// Home's browse cards (the web Home.jsx):
+//   useInvite()      "Know a great photographer? Invite them": the native share sheet (RN Share)
+//   JoinCard         "Shoot photo or video?": list your work, or invite a photographer (cold start)
 //   ExploreTeaser    three real portfolio shots -> Discover's Explore grid
 import { useRouter } from 'expo-router'
-import { LayoutGrid, Send, Store } from 'lucide-react-native'
+import { Camera, LayoutGrid, Send } from 'lucide-react-native'
 import { Pressable, Share, View } from 'react-native'
 
-import { inviteMessage, pluralLower } from '@shared/api/home.js'
-import { Button, Photo, Text, VerticalIcon } from '@/components'
+import { inviteMessage } from '@shared/api/home.js'
+import { Button, Photo, Text } from '@/components'
 import { useStore } from '@/state/store'
-import { makeStyles } from '@/theme'
-import type { Vertical } from '@/types'
+import { makeStyles, useTheme } from '@/theme'
 
 // TODO(port): append the public web / store link once there is one (the web shares location.origin).
 
 export function useInvite() {
   const { toast } = useStore()
-  return async (vertical: Vertical | null = null) => {
-    const { title, text } = inviteMessage(vertical)
+  return async () => {
+    const { title, text } = inviteMessage(null)
     try {
       await Share.share({ title, message: text }, { dialogTitle: title, subject: title })
     } catch {
@@ -26,30 +25,26 @@ export function useInvite() {
   }
 }
 
-export function ComingSoonCard({ soon }: { soon: Vertical[] }) {
+export function JoinCard() {
   const s = useStyles()
+  const { c } = useTheme()
   const router = useRouter()
   const invite = useInvite()
-  if (!soon.length) return null
-  const names = soon.slice(0, 3).map((v, i) => (i ? pluralLower(v) : v.plural))
-  const more = soon.length - names.length
-  const first = soon[0]
+  const { isProvider } = useStore()
   return (
     <View style={s.soon}>
-      <View style={s.icons} accessibilityElementsHidden>
-        {soon.slice(0, 6).map((v) => (
-          <View key={v.slug} style={s.iconRing}>
-            <VerticalIcon name={v.icon} tint={v.tint} size={15} bubble bubbleSize={34} />
-          </View>
-        ))}
+      <View style={s.badge} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Camera size={18} color={c.accent} />
       </View>
-      <Text variant="h4" style={s.mtSm}>Coming soon near you</Text>
+      <Text variant="h4" style={s.mtSm}>{isProvider ? 'Know a great photographer?' : 'Shoot photo or video?'}</Text>
       <Text variant="small" muted style={s.body}>
-        {names.join(', ')}{more > 0 ? ` and ${more} more` : ''} are joining. Know a great {first.noun}? Invite them, and you’ll be able to book them here.
+        {isProvider
+          ? 'Invite them to photomatch. The more great work here, the more clients come looking.'
+          : 'List your work for free and get booked by clients near you. Or invite a photographer or videographer you love.'}
       </Text>
       <View style={s.row}>
-        <Button title="Invite a vendor" icon={Send} size="sm" grow style={s.half} onPress={() => invite(first)} />
-        <Button title="List your services" icon={Store} size="sm" variant="ghost" grow style={s.half} onPress={() => router.push('/new-listing')} />
+        <Button title="Invite" accessibilityLabel="Invite a photographer" icon={Send} size="sm" grow style={s.half} variant={isProvider ? 'primary' : 'ghost'} onPress={invite} />
+        {!isProvider && <Button title="List your work" icon={Camera} size="sm" grow style={s.half} onPress={() => router.push('/new-listing')} />}
       </View>
     </View>
   )
@@ -82,8 +77,7 @@ export function ExploreTeaser({ photos }: { photos: { id: string; src: string }[
 
 const useStyles = makeStyles((t) => ({
   soon: { borderWidth: 1, borderColor: t.c.line, borderRadius: t.radius.xl, padding: 16, backgroundColor: t.c.card },
-  icons: { flexDirection: 'row' },
-  iconRing: { marginRight: -8, borderRadius: 999, borderWidth: 2, borderColor: t.c.bg, backgroundColor: t.c.bg },
+  badge: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: t.c.accentSoft },
   mtSm: { marginTop: t.space.sm },
   body: { marginTop: 4, lineHeight: 19 },
   // Side by side when both labels fit (>= 2 x 140), otherwise one full-width button per line.

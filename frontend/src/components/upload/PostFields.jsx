@@ -1,5 +1,4 @@
 import { ChevronDown } from 'lucide-react'
-import VerticalIcon from '../verticals/VerticalIcon.jsx'
 import { postConfig } from '../../verticals/index.js'
 import './upload.css'
 
@@ -15,7 +14,7 @@ export const prettyDay = (key) =>
   key ? new Date(`${key}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 
 // Required fields first. Returns { field: message } for anything that needs fixing.
-// The title is optional (a post without one is named after its category and occasion).
+// The title is optional (a post without one is named after its category).
 export function validatePost({ title, categoryId, shotOn }) {
   const errors = {}
   if (title.trim().length > LIMITS.title) errors.title = `Keep the title under ${LIMITS.title} characters.`
@@ -45,7 +44,7 @@ export function CategoryField({ value, onChange, services, error, label = 'Categ
       <span className="pf-label">{label}</span>
       <div className="chips">
         {services === null ? <span className="muted tiny">Loading…</span>
-          : services.length === 0 ? <span className="muted tiny">No categories for this service yet.</span>
+          : services.length === 0 ? <span className="muted tiny">No categories yet.</span>
           : services.map((s) => (
             <button type="button" key={s.id} className={`chip toggle ${value === s.id ? 'on' : ''}`} aria-pressed={value === s.id}
               onClick={() => onChange(value === s.id ? null : s.id)}>
@@ -54,23 +53,6 @@ export function CategoryField({ value, onChange, services, error, label = 'Categ
           ))}
       </div>
       {error && <small className="field-hint" role="alert">{error}</small>}
-    </div>
-  )
-}
-
-// The event this was for (optional): one of OCCASIONS. occasions: from occasionsFor(vertical).
-export function OccasionField({ value, onChange, occasions }) {
-  return (
-    <div className="field pf-field" role="group" aria-label="Occasion">
-      <span className="pf-label">Occasion <span className="pf-optional">optional</span></span>
-      <div className="chips">
-        {occasions.map((o) => (
-          <button type="button" key={o.slug} className={`chip toggle ${value === o.slug ? 'on' : ''}`} aria-pressed={value === o.slug}
-            onClick={() => onChange(value === o.slug ? null : o.slug)}>
-            <VerticalIcon name={o.icon} size={13} /> {o.name}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

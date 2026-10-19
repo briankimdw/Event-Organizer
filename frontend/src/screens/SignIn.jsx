@@ -43,7 +43,7 @@ export default function SignIn() {
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
   const { user, profile, needsWelcome } = useAuth()
-  // Decorative collage: recent album covers from vendors on the app.
+  // Decorative collage: recent album covers from photographers on the app.
   const { data: providers } = useQuery(() => listProviders(), [])
   const collage = coverMix(providers, 6)
 
@@ -294,8 +294,8 @@ export default function SignIn() {
 
         <div className="au-start">
           <div className="wordmark">photomatch</div>
-          <h1 className="au-headline">Plan any event. Book trusted vendors.</h1>
-          <p className="au-sub">Photographers, caterers, venues, DJs and more, all in one place.</p>
+          <h1 className="au-headline">Book photographers & videographers you’ll love.</h1>
+          <p className="au-sub">Weddings, portraits, headshots, films and reels. Swipe real work, then book.</p>
 
           <div className="au-actions">
             <button className="au-btn au-btn-google" onClick={google} disabled={googleEnabled === false || googleBusy}

@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { onTablistKeyDown } from '../components/tabs.js'
 import {
-  Bookmark, Briefcase, Check, ChevronRight, CreditCard, Heart, Images, Info, Layers, MapPin, Package, Pencil, Plus, PlusSquare,
+  Bookmark, Briefcase, Check, ChevronRight, CreditCard, Heart, Images, Info, Layers, MapPin, Package, Pencil, PlusSquare,
   Settings, ShieldCheck, Sparkles, Star, Store,
 } from 'lucide-react'
 import VerticalIcon from '../components/verticals/VerticalIcon.jsx'
-import { nounFor, nounTitle, verticalMeta } from '../verticals/index.js'
+import { nounFor } from '../verticals/index.js'
 import Sheet from '../components/Sheet.jsx'
 import ProfileLink, { PersonAvatar } from '../components/ProfileLink.jsx'
 import { IdVerified } from '../components/Badges.jsx'
@@ -24,7 +24,6 @@ import { getProvider, listProviders, withMatches } from '../api/catalog.js'
 import { listMyBookings, listProviderBookings } from '../api/bookings.js'
 import { listCollections } from '../api/social.js'
 import { getTasteProfile } from '../api/discover.js'
-import EventsShelf from '../components/events/EventsShelf.jsx'
 
 // Bookings that still need something from someone.
 const ACTIVE = ['requested', 'countered', 'accepted', 'confirmed', 'in_progress', 'delivered', 'disputed']
@@ -93,7 +92,7 @@ function SignedOut() {
           </div>
         )}
         <h2 className="h3">Your bookings, favorites and messages, in one place</h2>
-        <p className="muted small">Sign in to request bookings, message vendors and keep your shortlist across devices.</p>
+        <p className="muted small">Sign in to request bookings, message photographers and keep your shortlist across devices.</p>
         <Link to="/sign-in?next=/me" className="btn accent block mt">Sign in or create an account</Link>
       </div>
     </div>
@@ -205,7 +204,7 @@ function RoleSwitch({ myBookings, providerBookings }) {
         <button role="tab" aria-selected={isProvider} tabIndex={isProvider ? 0 : -1} className={`role ${isProvider ? 'on' : ''}`} onClick={() => setMode('provider')}>
           {myProvider ? <VerticalIcon vertical={myProvider.vertical} size={18} /> : <Store size={18} />}
           <div>
-            <b>{myProviders.length > 1 ? 'My business' : myProvider ? nounTitle(myProvider.vertical) : 'Vendor'}</b>
+            <b>{myProvider ? 'My business' : 'Photographer'}</b>
             <small>{!myProvider ? 'Start taking bookings' : pending ? `${pending} new request${pending === 1 ? '' : 's'}` : 'Your business'}</small>
           </div>
           {pending > 0 && !isProvider && <span className="role-dot" aria-hidden="true">{pending}</span>}
@@ -264,8 +263,6 @@ function ClientView({ bookings }) {
         </>
       )}
 
-      <EventsShelf showEmpty title="Events" />
-
       <h2 className="section-title h4 pad-x">Shortlisted</h2>
       {shortlisted.length ? (
         <PeopleRow people={shortlisted} />
@@ -291,7 +288,7 @@ function ClientView({ bookings }) {
             <Heart size={20} />
             <div className="grow">
               <b className="small">{providers || !following.size ? 'Not following anyone yet' : 'Loading…'}</b>
-              <div className="muted tiny">Follow vendors to see their new work first.</div>
+              <div className="muted tiny">Follow photographers to see their new work first.</div>
             </div>
             <ChevronRight size={16} />
           </Link>
@@ -344,7 +341,7 @@ function ClientView({ bookings }) {
       </Sheet>
 
       <div className="pad-x mt muted tiny inline-icon">
-        <Info size={12} /> Vendors see your client rating when you send a request.
+        <Info size={12} /> Photographers see your client rating when you send a request.
       </div>
     </div>
   )
@@ -374,7 +371,7 @@ function TasteCard({ taste }) {
         <Sparkles size={20} />
         <div className="grow">
           <b className="small">{t?.swipes ? 'Still learning your taste' : 'We don’t know your taste yet'}</b>
-          <div className="muted tiny">Like a few photos in Discover and we’ll match you with vendors whose style fits.</div>
+          <div className="muted tiny">Like a few photos in Discover and we’ll match you with photographers whose style fits.</div>
         </div>
         <ChevronRight size={16} />
       </Link>
@@ -422,15 +419,13 @@ function ProviderView({ detail, bookings }) {
       <div className="mode-body pad-x">
         <EmptyState
           icon={Store}
-          title="Take bookings for your business"
-          text="Photographer, caterer, DJ, venue, florist… Set up a listing with your packages and clients can find and book you."
-          action={<Link to="/new-listing" className="btn accent">List your services</Link>}
+          title="Take bookings for your photo & video work"
+          text="Set up your photography listing with your packages and portfolio, and clients can find and book you."
+          action={<Link to="/new-listing" className="btn accent">Set up your listing</Link>}
         />
       </div>
     )
   }
-  const visual = verticalMeta(myProvider.vertical).visual
-
   const list = bookings.data || []
   const pending = list.filter((r) => r.status === 'requested').length
   const now = today()
@@ -446,7 +441,7 @@ function ProviderView({ detail, bookings }) {
     // Payouts (Stripe Connect) aren't built yet, so this can't be completed.
     { done: false, label: 'Set up payouts', sub: 'Coming soon: bank payouts aren’t available yet', Icon: CreditCard, disabled: true },
     { done: packageCount > 0, label: 'Add a package', sub: 'Clients book a package', Icon: Package, tab: 'packages' },
-    visual && { done: albumCount > 0, label: 'Add portfolio work', sub: 'Post at least one album', Icon: Images, tab: 'portfolio' },
+    { done: albumCount > 0, label: 'Add portfolio work', sub: 'Post at least one album', Icon: Images, tab: 'portfolio' },
     { done: !!provider?.location, label: 'Set your service area', sub: 'Where you’re based and how far you travel', Icon: MapPin, tab: 'calendar' },
   ].filter(Boolean)
   const doneCount = steps.filter((s) => s.done).length
@@ -506,9 +501,11 @@ function ProviderView({ detail, bookings }) {
   )
 }
 
-// Your listings (one per vertical): switch between them, or add another service.
+// Accounts from the multi-vendor days may have two photo & video listings (a photography and
+// a videography one): switch between them. Hidden with one listing (the normal case).
 function ListingSwitch() {
   const { myProvider, myProviders, selectProvider } = useStore()
+  if (myProviders.length < 2) return null
   return (
     <div className="listing-switch" aria-label="Your listings">
       {myProviders.map((p) => (
@@ -519,10 +516,9 @@ function ListingSwitch() {
           onClick={() => selectProvider(p.id)}
           title={p.display_name}
         >
-          <VerticalIcon vertical={p.vertical} size={13} /> {myProviders.length > 1 ? verticalMeta(p.vertical).name : p.display_name}
+          <VerticalIcon vertical={p.vertical} size={13} /> {p.display_name}
         </button>
       ))}
-      <Link to="/new-listing" className="chip toggle"><Plus size={13} /> Add a service</Link>
     </div>
   )
 }

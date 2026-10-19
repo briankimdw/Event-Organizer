@@ -6,7 +6,7 @@ import { verticalMeta } from '../../verticals/index.js'
 import './upload.css'
 
 // "Posting to": which of your listings a post belongs to. Only shown when you have more
-// than one (a caterer who also runs a bar). providers: providers rows (+ `vertical`).
+// than one (an account from the multi-vendor days with a photography and a videography listing). providers: providers rows (+ `vertical`).
 export default function ListingPicker({ providers, value, onChange }) {
   const [open, setOpen] = useState(false)
   if (!providers || providers.length < 2) return null
@@ -16,7 +16,7 @@ export default function ListingPicker({ providers, value, onChange }) {
     <>
       <button type="button" className="lp-pill" onClick={() => setOpen(true)} aria-haspopup="dialog">
         <span className="lp-icon" style={{ '--tint': meta.tint }}><VerticalIcon name={meta.icon} size={14} /></span>
-        <span className="lp-text">Posting to <b>{current.display_name}</b> · {meta.name}</span>
+        <span className="lp-text">Posting to <b>{current.display_name}</b></span>
         <ChevronDown size={16} />
       </button>
       <Sheet open={open} onClose={() => setOpen(false)} title="Post to which listing?">

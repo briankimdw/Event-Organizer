@@ -11,31 +11,20 @@ import DatePicker from '../components/DatePicker.jsx'
 import { IdVerified, ProBadge } from '../components/Badges.jsx'
 import { fromPriceLabel, money, startingPrice } from '../components/Booking.jsx'
 import { EmptyState, ErrorState, Loading } from '../components/States.jsx'
-import VerticalSwitcher from '../components/verticals/VerticalSwitcher.jsx'
-import { VerticalBadge, VerticalTag } from '../components/verticals/VerticalIcon.jsx'
-import EmptyVertical from '../components/verticals/EmptyVertical.jsx'
+import { VerticalBadge } from '../components/verticals/VerticalIcon.jsx'
 import { useAuth } from '../auth.jsx'
 import { useStore } from '../store.jsx'
 import { ProviderMap } from '../components/map/LazyMap.jsx'
 import useQuery from '../lib/useQuery.js'
 import { fmtChip, fromKey, isPast, parseDates } from '../lib/dates.js'
-import { countProvidersByVertical, getCategories, listProviders, searchProviders, withMatches } from '../api/catalog.js'
+import { getCategories, listProviders, searchProviders, withMatches } from '../api/catalog.js'
 import { distanceKm, fmtBbox, fmtKm, getMyLocation, lastKnownLocation, parseBbox, parsePoint, splitByArea } from '../api/locations.js'
-import {
-  VERTICALS, attributeLines, countLabel, getService, getVertical, matchesFilters, lowerFirst, nounFor, optionLabel, optionsOf, verticalConfig, verticalMeta, verticalOfService,
-} from '../verticals/index.js'
+import { SERVICE_CHIPS, attributeLines, countLabel, getService, nounFor, verticalConfig, verticalMeta } from '../verticals/index.js'
 
-// Starting-price filter, by how the vertical usually prices (per person, per day...).
-const PRICE_OPTIONS = {
-  default: [250, 500, 1500],
-  person: [50, 100, 150],
-  item: [50, 150, 500],
-  day: [1000, 3000, 6000],
-  hour: [100, 200, 400],
-}
-const priceOptions = (unit) => [
+// Starting-price filter.
+const PRICE_OPTIONS = [
   { value: null, label: 'Any' },
-  ...(PRICE_OPTIONS[unit] || PRICE_OPTIONS.default).map((v) => ({ value: v, label: `Under ${money(v)}${unit === 'person' ? ' pp' : unit === 'day' ? '/day' : unit === 'hour' ? '/hr' : ''}` })),
+  ...[250, 500, 1500, 3000].map((v) => ({ value: v, label: `Under ${money(v)}` })),
 ]
 const RATING_OPTIONS = [
   { value: null, label: 'Any' },
@@ -60,21 +49,16 @@ const SORTS = {
 const NO_FILTERS = { maxPrice: null, minRating: null, proOnly: false, idOnly: false, distance: null }
 const withinDistance = (p, d) => (d === 'travels' ? p.distanceKm <= (p.radiusKm ?? 0) : p.distanceKm <= d)
 
-// ?v= (vertical) and ?cat= (a service slug, a vertical slug, or a service name from
-// older links) -> { vertical, service }. A service implies its vertical.
-function resolveCategory(v, cat, dbVerticals) {
-  if (!cat) return { vertical: v || null, service: null }
-  if (getVertical(cat)) return { vertical: cat, service: null }
-  if (getService(cat)) return { vertical: verticalOfService(cat).slug, service: cat }
-  const all = dbVerticals?.flatMap((x) => x.services) || []
-  const db = all.find((s) => s.slug === cat)
-  if (db) return { vertical: db.vertical, service: db.slug }
-  if (dbVerticals?.some((x) => x.slug === cat)) return { vertical: cat, service: null }
-  // "Wedding" (a name): match within the chosen vertical first, then anywhere.
-  const pool = [...VERTICALS.filter((x) => x.slug === v), ...VERTICALS].flatMap((x) => x.services.map((s) => ({ ...s, vertical: x.slug })))
-  const byName = pool.find((s) => s.name.toLowerCase() === cat.toLowerCase())
-  if (byName) return { vertical: byName.vertical, service: byName.slug }
-  return { vertical: v || null, service: null, unknown: true }
+// ?cat= (a service slug, or a service name from older links) -> a service slug, or null.
+// `unknown` when it names nothing we know (yet: the database may have it).
+function resolveService(cat, dbServices) {
+  if (!cat) return { service: null }
+  if (getService(cat)) return { service: cat }
+  const db = (dbServices || []).find((s) => s.slug === cat || s.name.toLowerCase() === cat.toLowerCase())
+  if (db) return { service: db.slug }
+  const byName = SERVICE_CHIPS.find((s) => s.name.toLowerCase() === cat.toLowerCase())
+  if (byName) return { service: byName.slug }
+  return { service: null, unknown: true }
 }
 
 export default function Search() {
@@ -83,12 +67,10 @@ export default function Search() {
   const [params, setParams] = useSearchParams()
   const [query, setQueryState] = useState(() => params.get('q') || '') // ?q= lets other screens link to a text search
   const [filters, setFilters] = useState(NO_FILTERS)
-  const [vFilters, setVFilters] = useState({}) // the vertical's own filters: { guests, dietary... }
   const [sort, setSort] = useState('match')
   const [sheet, setSheet] = useState(null) // dates | filters | sort
 
   const setFilter = (key, value) => setFilters((f) => ({ ...f, [key]: value }))
-  const setVFilter = (key, value) => setVFilters((f) => ({ ...f, [key]: value }))
   const update = (fn) =>
     setParams((prev) => {
       const p = new URLSearchParams(prev)
@@ -131,31 +113,18 @@ export default function Search() {
     }
   }
 
-  // What: a vertical (?v=) and one of its services (?cat=).
+  // What: a service (?cat=), e.g. weddings or drone. (?v= from older links is ignored: one vertical.)
   const cats = useQuery(getCategories, [])
-  const counts = useQuery(countProvidersByVertical, [])
   const catParam = params.get('cat')
-  const { vertical, service, unknown } = resolveCategory(params.get('v'), catParam, cats.data)
-  const meta = verticalMeta(vertical)
-  const config = verticalConfig(vertical)
-  const vInfo = vertical ? cats.data?.find((v) => v.slug === vertical) : null
-  const services = vertical ? vInfo?.services || meta.services.map((s) => ({ ...s, vertical })) : []
-  const serviceName = service ? services.find((s) => s.slug === service)?.name || getService(service)?.name : null
-  const setVertical = (slug) => {
-    if (slug === vertical && !service) return
-    setVFilters({})
-    setFilter('maxPrice', null)
-    update((p) => {
-      slug ? p.set('v', slug) : p.delete('v')
-      p.delete('cat')
-    })
-  }
+  const dbServices = cats.data?.[0]?.services
+  const { service, unknown } = resolveService(catParam, dbServices)
+  const meta = verticalMeta()
+  const serviceName = service ? getService(service)?.name || dbServices?.find((s) => s.slug === service)?.name : null
   const setService = (slug) =>
     update((p) => {
-      if (vertical) p.set('v', vertical)
+      p.delete('v')
       slug ? p.set('cat', slug) : p.delete('cat')
     })
-  const clearWhat = () => update((p) => { p.delete('v'); p.delete('cat') })
 
   // Dates live in the URL so they survive going to a profile and back.
   const dates = parseDates(params.get('dates'))
@@ -163,10 +132,10 @@ export default function Search() {
   const toggleDate = (key) => setDates(dates.includes(key) ? dates.filter((k) => k !== key) : [...dates, key])
   const datesQuery = dates.length ? `dates=${dates.join(',')}` : ''
 
-  // Everyone (with % match when the user has swiped enough); the vertical is filtered here.
+  // Everyone (with % match when the user has swiped enough).
   const all = useQuery(() => listProviders().then(withMatches), [user?.id])
   // Dates, service, price, rating and Pro are filtered in the database.
-  const serverArgs = { dates, vertical, service, maxPrice: filters.maxPrice, minRating: filters.minRating, proOnly: filters.proOnly }
+  const serverArgs = { dates, service, maxPrice: filters.maxPrice, minRating: filters.minRating, proOnly: filters.proOnly }
   const needsServer = dates.length > 0 || !!service || filters.maxPrice != null || filters.minRating != null || filters.proOnly
   const waitingForCategory = !!unknown && !cats.data && !cats.error
   const searched = useQuery(needsServer && !waitingForCategory ? () => searchProviders(serverArgs) : null, [JSON.stringify(serverArgs), needsServer, waitingForCategory])
@@ -183,30 +152,19 @@ export default function Search() {
   const error = all.error || source.error
   const q = query.trim().toLowerCase()
   const allResults = (source.data || [])
-    .filter((p) => !vertical || p.vertical === vertical)
     .map((p) => ({ ...p, tasteMatch: matchOf.get(p.id) ?? null, distanceKm: distanceKm(userLocation, p.location) }))
     .filter((p) => distanceFilter == null || (p.distanceKm != null && withinDistance(p, distanceFilter)))
-    .filter((p) => !q || [p.name, p.username, p.city, p.verticalInfo?.name, ...p.specialties, ...p.categories].join(' ').toLowerCase().includes(q))
+    .filter((p) => !q || [p.name, p.username, p.city, ...p.specialties, ...p.categories].join(' ').toLowerCase().includes(q))
     .filter((p) => !filters.idOnly || p.idVerified)
-    .filter((p) => !vertical || matchesFilters(p, vFilters, vertical))
     .sort((a, b) => freeOn(b).length - freeOn(a).length || SORTS[sortKey].fn(a, b))
   const onMap = allResults.filter((p) => p.location)
   // In a map area: providers based in it, then ones based elsewhere who travel to it.
   const { inside: areaInside, travels: areaTravels } = splitByArea(onMap, area)
   const results = area ? [...areaInside, ...areaTravels] : allResults
   const fullyFree = results.filter((p) => freeOn(p).length === dates.length).length
-  const plural = nounFor(vertical, 2)
-  // Nobody at all in this vertical yet (new verticals before vendors join).
-  const verticalEmpty = !!vertical && counts.data && !counts.data[vertical] && !(all.data || []).some((p) => p.vertical === vertical)
+  const plural = nounFor(null, 2)
 
   // Removable chips for whatever is currently filtering the list.
-  const vChips = config.filters
-    .filter((f) => vFilters[f.key] != null && !(Array.isArray(vFilters[f.key]) && !vFilters[f.key].length))
-    .map((f) => ({
-      key: `v-${f.key}`,
-      label: f.type === 'guests' ? `${vFilters[f.key]}+ guests` : [].concat(vFilters[f.key]).map((v) => optionLabel(f, v)).join(', '),
-      clear: () => setVFilter(f.key, null),
-    }))
   const activeChips = [
     area && { key: 'area', label: 'Map area', icon: MapPin, clear: () => setArea(null) },
     filters.maxPrice != null && { key: 'maxPrice', label: `Under ${money(filters.maxPrice)}`, clear: () => setFilter('maxPrice', null) },
@@ -218,19 +176,16 @@ export default function Search() {
       label: DISTANCE_OPTIONS.find((o) => o.value === distanceFilter)?.label,
       clear: () => setFilter('distance', null),
     },
-    ...vChips,
   ].filter(Boolean)
   const filterCount = activeChips.filter((c) => c.key !== 'area').length // what the Filters sheet controls
 
   const reload = () => {
     all.reload()
     searched.reload()
-    counts.reload()
     if (cats.error) cats.reload()
   }
   const clearAll = () => {
     setFilters(NO_FILTERS)
-    setVFilters({})
     setQueryState('')
     update((p) => {
       p.delete('q')
@@ -240,30 +195,25 @@ export default function Search() {
 
   return (
     <div>
-      <TopBar title={serviceName || (vertical ? meta.plural : 'Find vendors')} subtitle={serviceName ? meta.name : null} />
+      <TopBar title={serviceName || 'Find a photographer'} subtitle={serviceName ? meta.name : null} />
 
       <div className="pad-x mt-sm">
         <div className="search">
           <SearchIcon size={16} />
-          <input autoFocus={!catParam && !vertical && !dates.length && view === 'list'} placeholder={`Search ${plural}, styles, cities`} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input autoFocus={!catParam && !dates.length && view === 'list'} aria-label="Search photographers and videographers" placeholder="Search names, styles, cities" value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && <button className="icon-btn" onClick={() => setQuery('')} aria-label="Clear"><X size={14} /></button>}
         </div>
       </div>
 
-      {/* What: vertical, then its services */}
-      <div className="mt-sm">
-        <VerticalSwitcher value={vertical} onChange={setVertical} counts={counts.data} />
+      {/* What: the kind of shoot (photo and video services) */}
+      <div className="chips scroll-x pad-x mt-sm" role="group" aria-label="Kind of shoot">
+        <button className={`chip toggle ${!service ? 'on' : ''}`} aria-pressed={!service} onClick={() => setService(null)}>All</button>
+        {[...SERVICE_CHIPS, ...(service && !SERVICE_CHIPS.some((s) => s.slug === service) ? [{ slug: service, name: serviceName || service }] : [])].map((s) => (
+          <button key={s.slug} className={`chip toggle ${service === s.slug ? 'on' : ''}`} aria-pressed={service === s.slug} onClick={() => setService(service === s.slug ? null : s.slug)}>
+            {s.name}
+          </button>
+        ))}
       </div>
-      {vertical && services.length > 0 && (
-        <div className="chips scroll-x pad-x mt-sm">
-          <button className={`chip toggle ${!service ? 'on' : ''}`} onClick={() => setService(null)}>All {lowerFirst(meta.name)}</button>
-          {services.map((s) => (
-            <button key={s.slug} className={`chip toggle ${service === s.slug ? 'on' : ''}`} onClick={() => setService(s.slug)}>
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* When: the dates you need someone for */}
       <div className="pad-x mt-sm">
@@ -305,8 +255,6 @@ export default function Search() {
         <ErrorState error={error} onRetry={reload} />
       ) : loading ? (
         <Loading label={`Finding ${plural}…`} />
-      ) : verticalEmpty ? (
-        <div className="pad-x"><EmptyVertical vertical={vertical} /></div>
       ) : (
         <>
           <div className="pad-x result-bar">
@@ -314,10 +262,10 @@ export default function Search() {
               {area && !dates.length
                 ? areaTravels.length
                   ? `${areaInside.length ? `${areaInside.length} based here · ` : ''}${areaTravels.length} travel${areaTravels.length === 1 ? 's' : ''} here`
-                  : `${countLabel(areaInside.length, vertical)} in this area`
+                  : `${countLabel(areaInside.length)} in this area`
                 : dates.length
                   ? `${fullyFree} free on ${dates.length === 1 ? 'your date' : `all ${dates.length} dates`}${results.length > fullyFree ? ` · ${results.length - fullyFree} partly free` : ''}${area ? ' here' : ''}`
-                  : countLabel(results.length, vertical)}
+                  : countLabel(results.length)}
               {view === 'map' && !area && results.length > onMap.length && onMap.length > 0 && ` · ${results.length - onMap.length} not on map`}
             </div>
             <div className="view-toggle" role="tablist" aria-label="View" onKeyDown={onTablistKeyDown}>
@@ -334,7 +282,6 @@ export default function Search() {
             onMap.length ? (
               <ProviderMap
                 providers={onMap}
-                vertical={vertical}
                 area={area}
                 onAreaChange={setArea}
                 userLocation={userLocation}
@@ -348,7 +295,7 @@ export default function Search() {
               <EmptyState
                 icon={MapPinOff}
                 title="Not on the map yet"
-                text={`${allResults.length === 1 ? `This ${nounFor(vertical)} hasn’t` : `These ${plural} haven’t`} set where they’re based yet.`}
+                text={`${allResults.length === 1 ? `This ${nounFor()} hasn’t` : `These ${plural} haven’t`} set where they’re based yet.`}
                 action={<button className="btn ghost sm" onClick={() => setView('list')}>Show the list</button>}
               />
             )
@@ -363,7 +310,7 @@ export default function Search() {
                     <div className="muted tiny">Based outside this map area; it’s within how far they travel.</div>
                   </div>
                 )}
-                <ResultCard p={p} free={freeOn(p)} dates={dates} datesQuery={datesQuery} showVertical={!vertical} />
+                <ResultCard p={p} free={freeOn(p)} dates={dates} datesQuery={datesQuery} />
               </Fragment>
             ))}
             {area && view === 'list' && results.length === 0 && allResults.length > 0 ? (
@@ -384,10 +331,9 @@ export default function Search() {
                 title={dates.length ? 'Nobody free on those dates' : `No ${plural} found`}
                 text={dates.length ? 'Nobody matching these filters is free on those dates.' : `No ${plural} match these filters.`}
                 action={
-                  (activeChips.length > 0 || dates.length > 0 || q || service || vertical) && (
+                  (activeChips.length > 0 || dates.length > 0 || q || service) && (
                     <div className="row gap-xs wrap">
                       {(filterCount > 0 || q || service) && <button className="btn ghost sm" onClick={clearAll}>Clear filters</button>}
-                      {vertical && !filterCount && !q && !service && <button className="btn ghost sm" onClick={clearWhat}>Show all vendors</button>}
                       {area && <button className="btn ghost sm" onClick={() => setArea(null)}>Search everywhere</button>}
                       {dates.length > 0 && <button className="btn ghost sm" onClick={() => setDates([])}>Clear dates</button>}
                     </div>
@@ -410,10 +356,7 @@ export default function Search() {
       </Sheet>
 
       <Sheet open={sheet === 'filters'} onClose={() => setSheet(null)} title="Filters">
-        {config.filters.map((f) => (
-          <VerticalFilter key={f.key} filter={f} value={vFilters[f.key] ?? null} onChange={(v) => setVFilter(f.key, v)} />
-        ))}
-        <FilterGroup label="Starting price" options={priceOptions(vertical ? meta.priceUnit : null)} value={filters.maxPrice} onChange={(v) => setFilter('maxPrice', v)} />
+        <FilterGroup label="Starting price" options={PRICE_OPTIONS} value={filters.maxPrice} onChange={(v) => setFilter('maxPrice', v)} />
         <FilterGroup label="Rating" options={RATING_OPTIONS} value={filters.minRating} onChange={(v) => setFilter('minRating', v)} />
         {userLocation ? (
           <FilterGroup label="Distance" options={DISTANCE_OPTIONS} value={filters.distance} onChange={(v) => setFilter('distance', v)} />
@@ -431,7 +374,7 @@ export default function Search() {
           <label className="toggle-row">
             <div className="grow">
               <div className="small">Verified Pro</div>
-              <div className="muted tiny">Vendors on the paid Verified Pro plan</div>
+              <div className="muted tiny">Photographers on the paid Verified Pro plan</div>
             </div>
             <input type="checkbox" className="switch" checked={filters.proOnly} onChange={(e) => setFilter('proOnly', e.target.checked)} />
           </label>
@@ -444,9 +387,9 @@ export default function Search() {
           </label>
         </div>
         <div className="row gap-xs mt">
-          <button className="btn ghost" disabled={!filterCount} onClick={() => { setFilters(NO_FILTERS); setVFilters({}) }}>Clear all</button>
+          <button className="btn ghost" disabled={!filterCount} onClick={() => setFilters(NO_FILTERS)}>Clear all</button>
           <button className="btn grow" onClick={() => setSheet(null)}>
-            {loading ? `Show ${plural}` : `Show ${countLabel(results.length, vertical)}`}
+            {loading ? `Show ${plural}` : `Show ${countLabel(results.length)}`}
           </button>
         </div>
       </Sheet>
@@ -471,9 +414,8 @@ export default function Search() {
   )
 }
 
-// One provider in the list. Visual verticals lead with their latest work; others
-// (DJs, planners...) with their details.
-function ResultCard({ p, free, dates, datesQuery, showVertical }) {
+// One photographer in the list, led by their latest work.
+function ResultCard({ p, free, dates, datesQuery }) {
   const thumbs = p.covers.slice(0, 3)
   const config = verticalConfig(p.vertical)
   const details = attributeLines(config.providerFields, p.attributes, config.cardKeys)
@@ -502,7 +444,6 @@ function ResultCard({ p, free, dates, datesQuery, showVertical }) {
               </div>
               {price && <span className="result-price">{price}</span>}
             </div>
-            {showVertical && <div className="mt-xs"><VerticalTag vertical={p.vertical} /></div>}
             {sub && <div className="muted small ellipsis">{sub}</div>}
             <div className="small row gap-xs mt-xs result-meta">
               {p.rating != null ? (
@@ -549,33 +490,4 @@ function FilterGroup({ label, options, value, onChange }) {
       </div>
     </div>
   )
-}
-
-// A vertical's own filter (verticals/<slug>/config.js `filters`): guests, dietary, setting...
-function VerticalFilter({ filter: f, value, onChange }) {
-  if (f.type === 'guests') {
-    return (
-      <FilterGroup
-        label={f.label}
-        options={[{ value: null, label: 'Any' }, ...f.options.map((n) => ({ value: n, label: `${n}+` }))]}
-        value={value}
-        onChange={onChange}
-      />
-    )
-  }
-  if (f.type === 'tags') {
-    const list = value || []
-    const toggle = (t) => onChange(list.includes(t) ? list.filter((x) => x !== t) : [...list, t])
-    return (
-      <div className="filter-group">
-        <div className="filter-label">{f.label}</div>
-        <div className="chips">
-          {optionsOf(f).map((o) => (
-            <button key={o.value} className={`chip toggle ${list.includes(o.value) ? 'on' : ''}`} aria-pressed={list.includes(o.value)} onClick={() => toggle(o.value)}>{o.label}</button>
-          ))}
-        </div>
-      </div>
-    )
-  }
-  return <FilterGroup label={f.label} options={[{ value: null, label: 'Any' }, ...optionsOf(f)]} value={value} onChange={onChange} />
 }

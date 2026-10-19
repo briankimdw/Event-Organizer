@@ -1,12 +1,12 @@
 // The post's detail fields (native port of the web's components/upload/PostFields.jsx
-// and CameraSettings.jsx): category, occasion, title (optional), caption, location, date,
+// and CameraSettings.jsx): category, title (optional), caption, location, date,
 // a disclosure section, and the camera settings with show / hide switches.
 import { ChevronDown } from 'lucide-react-native'
 import { useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 
 import { postConfig } from '@shared/verticals/index.js'
-import { Chip, ChipRow, Text, TextField, iconByName } from '@/components'
+import { Chip, ChipRow, Text, TextField } from '@/components'
 import { makeStyles, useTheme } from '@/theme'
 import { FieldHint, ToggleRow } from '../../account/ui'
 import type { PhotoItem } from './usePhotoItems'
@@ -22,7 +22,7 @@ export const prettyDay = (key: string) =>
   key && /^\d{4}-\d{2}-\d{2}$/.test(key) ? new Date(`${key}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 
 // Required fields first. Returns { field: message } for anything that needs fixing.
-// The title is optional (a post without one is named after its category and occasion).
+// The title is optional (a post without one is named after its category).
 export function validatePost({ title, categoryId, shotOn }: { title: string; categoryId: string | null; shotOn: string }) {
   const errors: Record<string, string | undefined> = {}
   if (title.trim().length > LIMITS.title) errors.title = `Keep the title under ${LIMITS.title} characters.`
@@ -63,23 +63,6 @@ export function CategoryField({ value, onChange, services, error, label = 'Categ
         </ChipRow>
       )}
       {!!error && <FieldHint error>{error}</FieldHint>}
-    </View>
-  )
-}
-
-export type OccasionOption = { slug: string; name: string; icon: string }
-
-// The event this was for (optional): one of OCCASIONS. occasions: from occasionsFor(vertical).
-export function OccasionField({ value, onChange, occasions }: { value: string | null; onChange: (v: string | null) => void; occasions: OccasionOption[] }) {
-  const s = useStyles()
-  return (
-    <View accessibilityLabel="Occasion">
-      <Text variant="small" muted style={s.label}>Occasion · optional</Text>
-      <ChipRow>
-        {occasions.map((o) => (
-          <Chip key={o.slug} label={o.name} icon={iconByName(o.icon)} toggle on={value === o.slug} onPress={() => onChange(value === o.slug ? null : o.slug)} />
-        ))}
-      </ChipRow>
     </View>
   )
 }

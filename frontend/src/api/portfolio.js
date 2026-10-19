@@ -1,13 +1,14 @@
 // Data layer for photographer listings and portfolio albums. Screens call these
 // functions instead of talking to Supabase directly.
+//
+// Removed in the photography pivot (2026-10-18), archived in
+// archive/event-platform/frontend/src/api/portfolio.credits-and-occasions.js:
+//   creditsSupported, listCredits, setAlbumCredits, searchVendors, listTaggedAlbums,
+//   setAlbumOccasion. Albums no longer carry `credits`; postAlbum / updateAlbum ignore
+//   `occasion` and `credits`. getMyProviders only returns photo & video listings.
 import { supabase } from '../lib/supabase.js'
 import { fileExtension, makeDisplayCopy, readCameraSettings } from '../lib/images.js'
-import { avatarUrl } from '../lib/format.js'
-import { getOccasion, getVertical, nounTitle } from '../verticals/index.js'
-
-// Bookings a new listing can hold at the same time when its vertical serves
-// several events at once (caterers, rentals). Owners can change it later.
-const DEFAULT_CONCURRENT = 3
+import { PHOTO_VERTICAL, VERTICALS, isPhotoVertical, normalizeVertical } from '../verticals/index.js'
 
 const must = ({ data, error }) => {
   if (error) throw error
@@ -20,8 +21,10 @@ export const publicUrl = (bucket, path) => supabase.storage.from(bucket).getPubl
 // Photographer listing
 // ---------------------------------------------------------------------------
 
-// All of the signed-in user's listings (one per vertical), oldest first.
-// Each is a providers row plus `vertical` (slug).
+// The signed-in user's photo & video listings, oldest first (normally one; an old
+// account may have two, e.g. a photography and a videography one). Listings in other
+// verticals from the multi-vendor days are left out. Each is a providers row plus
+// `vertical` ('photography').
 export async function getMyProviders(userId) {
   if (!userId) return []
   const rows = must(
@@ -31,7 +34,9 @@ export async function getMyProviders(userId) {
       .eq('profile_id', userId)
       .order('created_at'),
   )
-  return rows.map((r) => ({ ...r, vertical: r.vertical?.slug || 'photography' }))
+  return rows
+    .filter((r) => !r.vertical?.slug || isPhotoVertical(r.vertical.slug))
+    .map((r) => ({ ...r, vertical: normalizeVertical(r.vertical?.slug) || PHOTO_VERTICAL }))
 }
 
 // One of the user's listings, or null if they haven't set one up.
@@ -41,11 +46,15 @@ export async function getMyProvider(userId, pick = null) {
   return all.find((p) => p.id === pick || p.vertical === pick) || all[0] || null
 }
 
-// Services under a vertical (Wedding, Graduation, ... for photography), in display order: [{ id, slug, name, ... }].
-export async function getServicesOf(vertical = 'photography') {
-  const rows = must(await supabase.from('service_categories').select('id, slug, name, kind, parent_id, sort_order').eq('is_active', true).order('sort_order'))
-  const parent = rows.find((c) => c.slug === vertical)
-  return parent ? rows.filter((c) => c.parent_id === parent.id) : []
+// Photo & video services (Wedding, Headshots, ... Wedding film, Drone) that exist in the
+// database, in catalog order: [{ id, slug, name, kind, parent_id, sort_order }]. Matched by
+// slug, so the video services count even while the database still files them under
+// 'videography'. (`vertical` is kept for old callers and ignored.)
+export async function getServicesOf(_vertical = PHOTO_VERTICAL) {
+  const catalog = VERTICALS[0].services
+  const rows = must(await supabase.from('service_categories').select('id, slug, name, kind, parent_id, sort_order').eq('is_active', true).in('slug', catalog.map((s) => s.slug)))
+  const bySlug = new Map(rows.map((r) => [r.slug, r]))
+  return catalog.map((s, i) => bySlug.get(s.slug) && { ...bySlug.get(s.slug), name: s.name, sort_order: i + 1 }).filter(Boolean)
 }
 // Older name, kept for existing callers.
 export const getPhotographyServices = () => getServicesOf('photography')
@@ -62,23 +71,20 @@ export async function getProviderServiceIds(providerId) {
   return rows.map((r) => r.category_id)
 }
 
-// Create a listing in a vertical (active straight away), and record which services it offers.
-// A user can have one listing per vertical.
-export async function becomeProvider({ displayName, slug, city, serviceIds = [], vertical = 'photography', bio = null }) {
+// Create a photo & video listing (active straight away), and record which services it offers.
+// (`vertical` is kept for old callers; it's always photography.)
+export async function becomeProvider({ displayName, slug, city, serviceIds = [], bio = null }) {
   const provider = must(await supabase.rpc('become_provider', {
     p_display_name: displayName,
     p_slug: slug,
-    p_vertical_slug: vertical,
+    p_vertical_slug: PHOTO_VERTICAL,
     p_city: city || null,
     p_bio: bio || null,
   }))
   if (serviceIds.length) {
     must(await supabase.from('provider_services').insert(serviceIds.map((category_id) => ({ provider_id: provider.id, category_id }))))
   }
-  // max_concurrent only exists once the all-verticals migration is applied, and
-  // only concurrent verticals need it (they don't exist before that migration).
-  const changes = getVertical(vertical)?.concurrent ? { status: 'active', max_concurrent: DEFAULT_CONCURRENT } : { status: 'active' }
-  return must(await supabase.from('providers').update(changes).eq('id', provider.id).select().single())
+  return must(await supabase.from('providers').update({ status: 'active' }).eq('id', provider.id).select().single())
 }
 
 // "Maya Chen Photo" -> "maya-chen-photo"
@@ -107,23 +113,19 @@ export async function listMyAlbums(providerId) {
   )
 }
 
-// A provider's albums (everyone sees published ones; owners see all of theirs),
-// each with `credits` (the vendors tagged on it; [] until the credits migration is applied).
-export async function listAlbums(providerId) {
-  return withCredits(await listMyAlbums(providerId))
-}
+// A provider's albums (everyone sees published ones; owners see all of theirs).
+export const listAlbums = (providerId) => listMyAlbums(providerId)
 
 export async function getAlbum(albumId) {
-  const row = must(await supabase.from('albums').select(ALBUM_COLUMNS).eq('id', albumId).order('position', { referencedTable: 'photos' }).maybeSingle())
-  return row ? (await withCredits([row]))[0] : row
+  return must(await supabase.from('albums').select(ALBUM_COLUMNS).eq('id', albumId).order('position', { referencedTable: 'photos' }).maybeSingle())
 }
 
 const prettyDate = (iso) =>
   iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''
 
 // Shape a database album for the full-screen AlbumViewer.
-// Also carries the raw fields the owner's edit sheet needs (shotOn, categoryId, kind, occasion).
-// occasion: { slug, name } | null. credits: [{ providerId, name, avatar, vertical, role, label }].
+// Also carries the raw fields the owner's edit sheet needs (shotOn, categoryId, kind).
+// occasion: { slug, name } | null, only on old posts tagged with one (it can't be set any more).
 export function toViewerAlbum(a) {
   const photos = [...(a.photos || [])].sort((x, y) => x.position - y.position)
   // SigLIP tags shared by the album's photos, most common first.
@@ -136,8 +138,7 @@ export function toViewerAlbum(a) {
     id: a.id, providerId: a.provider_id, title: a.title, caption: a.caption, location: a.location_text,
     date: prettyDate(a.shot_on || a.created_at), genre: a.category?.name, status: a.status,
     shotOn: a.shot_on || '', categoryId: a.category_id ?? null, kind: a.kind, photoCount: photos.length,
-    occasion: occasionTag ? { slug: occasionSlug, name: getOccasion(occasionSlug)?.name || occasionTag.name } : null,
-    credits: a.credits || [],
+    occasion: occasionTag ? { slug: occasionSlug, name: occasionTag.name || occasionSlug } : null,
     tags: tagRows.filter((t) => t !== occasionTag).map((t) => t.name || t.slug),
     autoTags: [...tagCounts.entries()].sort((x, y) => y[1] - x[1]).map(([t]) => t).slice(0, 6), realPhoto: false,
     cover: photos[0] ? publicUrl('portfolio', (photos.find((p) => p.pair_role === 'after') || photos[0]).display_path) : null,
@@ -242,12 +243,8 @@ async function removeFiles(byBucket) {
 // from makeDisplayCopy) and settings (from readCameraSettings) were prepared ahead of time.
 // onProgress(donePhotos, total) after each photo; onPhotoProgress(index, { stage, fraction })
 // as each photo moves through preparing → uploading → saving → done (fraction 0..1, byte-based).
-// occasion: an OCCASIONS slug or null. credits: [{ providerId, role? }] (other vendors at the event).
-// Both are saved once the post is up; if that fails (or credits aren't in the database yet),
-// the post stays and the problem is only logged.
 export async function postAlbum({
   userId, providerId, kind, title, caption, location, shotOn, categoryId, files, hiddenFields = [], onProgress, onPhotoProgress,
-  occasion = null, credits = [],
 }) {
   const items = files.map((f) => (f instanceof Blob ? { file: f } : f))
   const album = must(
@@ -311,11 +308,6 @@ export async function postAlbum({
     await removeFiles(uploaded).catch(() => {})
     throw err
   }
-  const extras = await Promise.allSettled([
-    occasion ? setAlbumOccasion(album.id, occasion) : null,
-    credits.length ? setAlbumCredits(album.id, credits) : null,
-  ])
-  for (const r of extras) if (r.status === 'rejected') console.warn('postAlbum: the post is up, but not its occasion / credits', r.reason)
   return album.id
 }
 
@@ -323,9 +315,8 @@ export async function postAlbum({
 // Managing posts (owners only; RLS enforces it)
 // ---------------------------------------------------------------------------
 
-// Change a post's details. Pass only the fields to change. Returns the fresh album row (with credits).
-// occasion: slug, or null for none. credits: [{ providerId, role? }], replaces the list.
-export async function updateAlbum(albumId, { title, caption, location, shotOn, categoryId, occasion, credits }) {
+// Change a post's details. Pass only the fields to change. Returns the fresh album row.
+export async function updateAlbum(albumId, { title, caption, location, shotOn, categoryId }) {
   const patch = {}
   if (title !== undefined) patch.title = title.trim()
   if (caption !== undefined) patch.caption = caption.trim() || null
@@ -334,8 +325,6 @@ export async function updateAlbum(albumId, { title, caption, location, shotOn, c
   if (categoryId !== undefined) patch.category_id = categoryId || null
   const rows = must(await supabase.from('albums').update(patch).eq('id', albumId).select('id'))
   if (!rows.length) throw new Error('This post couldn’t be changed. It may have been deleted.')
-  if (occasion !== undefined) await setAlbumOccasion(albumId, occasion)
-  if (credits !== undefined && !creditsMissing) await setAlbumCredits(albumId, credits)
   return getAlbum(albumId)
 }
 
@@ -359,139 +348,6 @@ export async function reorderAlbums(albumIds) {
   for (const r of results) must(r)
 }
 
-// ---------------------------------------------------------------------------
-// Occasion: stored as an album tag 'occasion-<slug>' (no new column needed)
-// ---------------------------------------------------------------------------
-
+// Occasion tags on posts are stored as album tags 'occasion-<slug>'. Setting them (and post
+// credits) was archived with the event platform; old posts still show their occasion tag.
 const OCCASION_PREFIX = 'occasion-'
-
-// The tag id for an occasion, creating the tag the first time (signed-in users may add 'user' tags).
-async function occasionTagId(slug) {
-  const tagSlug = `${OCCASION_PREFIX}${slug}`
-  const find = async () => must(await supabase.from('tags').select('id').eq('slug', tagSlug).maybeSingle())?.id
-  const found = await find()
-  if (found) return found
-  const { data, error } = await supabase.from('tags').insert({ slug: tagSlug, name: getOccasion(slug)?.name || slug, kind: 'user' }).select('id').single()
-  if (!error) return data.id
-  if (error.code === '23505') return find() // created by someone else at the same moment
-  throw error
-}
-
-// Set a post's occasion (an OCCASIONS slug), or clear it with null.
-export async function setAlbumOccasion(albumId, slug) {
-  const rows = must(await supabase.from('album_tags').select('tag_id, tag:tags(slug)').eq('album_id', albumId))
-  const old = rows.filter((r) => r.tag?.slug?.startsWith(OCCASION_PREFIX)).map((r) => r.tag_id)
-  const tagId = slug ? await occasionTagId(slug) : null
-  const drop = old.filter((id) => id !== tagId)
-  if (drop.length) must(await supabase.from('album_tags').delete().eq('album_id', albumId).in('tag_id', drop))
-  if (tagId && !old.includes(tagId)) must(await supabase.from('album_tags').insert({ album_id: albumId, tag_id: tagId }))
-}
-
-// ---------------------------------------------------------------------------
-// Credits: other vendors tagged on a post (table album_credits, migration
-// 20261011000200_post_credits.sql). Until that migration is applied, reads
-// return no credits and creditsSupported() is false, so screens hide them.
-// ---------------------------------------------------------------------------
-
-let creditsMissing = false
-const isMissingTable = (err) =>
-  !!err && (err.code === 'PGRST205' || err.code === '42P01' || (/album_credits/.test(err.message || '') && /schema cache|does not exist|could not find/i.test(err.message || '')))
-
-const VENDOR_COLUMNS = 'id, display_name, slug, city, status, vertical:service_categories!providers_vertical_id_fkey(slug), profile:profiles!providers_profile_id_fkey(avatar_path)'
-
-// A providers row (VENDOR_COLUMNS) as a small vendor for pickers and chips.
-const toVendor = (p) => {
-  const vertical = p.vertical?.slug || 'photography'
-  return { id: p.id, name: p.display_name, slug: p.slug, city: p.city || null, vertical, label: nounTitle(vertical), avatar: avatarUrl(p.profile?.avatar_path, p.display_name) }
-}
-
-// A credit as screens use it: { providerId, name, avatar, vertical, role, label } (label: the role, else e.g. 'Photographer').
-const toCredit = (row) => {
-  const v = toVendor(row.provider)
-  return { providerId: v.id, name: v.name, avatar: v.avatar, vertical: v.vertical, role: row.role || null, label: row.role || v.label }
-}
-
-/** Is the credits table there? Cached; false until the migration is applied. */
-export async function creditsSupported() {
-  if (creditsMissing) return false
-  const { error } = await supabase.from('album_credits').select('album_id').limit(1)
-  if (isMissingTable(error)) creditsMissing = true
-  return !creditsMissing
-}
-
-/** Credits of several posts: Map(albumId -> [credit]). Empty when the table isn't there. */
-export async function listCredits(albumIds) {
-  const out = new Map()
-  const ids = [...new Set(albumIds.filter(Boolean))]
-  if (!ids.length || creditsMissing) return out
-  const { data, error } = await supabase
-    .from('album_credits')
-    .select(`album_id, role, created_at, provider:providers!album_credits_provider_id_fkey(${VENDOR_COLUMNS})`)
-    .in('album_id', ids)
-    .order('created_at')
-  if (error) {
-    if (isMissingTable(error)) creditsMissing = true
-    else console.warn('listCredits', error)
-    return out
-  }
-  for (const row of data || []) {
-    if (!row.provider) continue // that listing isn't active any more
-    if (!out.has(row.album_id)) out.set(row.album_id, [])
-    out.get(row.album_id).push(toCredit(row))
-  }
-  return out
-}
-
-// Album rows with `credits` attached (one extra query; credits never make the load fail).
-async function withCredits(rows) {
-  const credits = await listCredits(rows.map((r) => r.id)).catch(() => new Map())
-  return rows.map((r) => ({ ...r, credits: credits.get(r.id) || [] }))
-}
-
-/** Replace a post's credits. credits: [{ providerId, role? }]. Throws if the table isn't there. */
-export async function setAlbumCredits(albumId, credits) {
-  const list = [...new Map(credits.filter((c) => c?.providerId).map((c) => [c.providerId, c])).values()]
-  const del = await supabase.from('album_credits').delete().eq('album_id', albumId)
-  if (isMissingTable(del.error)) {
-    creditsMissing = true
-    throw new Error('Credits aren’t available yet.')
-  }
-  must(del)
-  if (!list.length) return
-  must(await supabase.from('album_credits').insert(list.map((c) => ({ album_id: albumId, provider_id: c.providerId, role: c.role?.trim() || null }))))
-}
-
-/**
- * Vendors to credit on a post (the Credits picker): active listings whose name contains `q`,
- * best rated first (with no query: the top ones). exclude: provider ids to leave out.
- * Returns [{ id, name, slug, city, vertical, label, avatar }].
- */
-export async function searchVendors(q = '', { exclude = [], limit = 12 } = {}) {
-  let query = supabase.from('providers').select(VENDOR_COLUMNS).eq('status', 'active')
-  const term = q.trim().replace(/[%_\\]/g, (c) => `\\${c}`)
-  if (term) query = query.ilike('display_name', `%${term}%`)
-  const rows = must(await query.order('rating_count', { ascending: false }).order('display_name').limit(limit + exclude.length))
-  return rows.filter((r) => !exclude.includes(r.id)).slice(0, limit).map(toVendor)
-}
-
-/**
- * Posts by other vendors that credit this provider ("Tagged in"), newest first, as viewer
- * albums plus `by` ({ id, name }: who posted it). [] until the credits migration is applied.
- */
-export async function listTaggedAlbums(providerId, { limit = 24 } = {}) {
-  if (!providerId || creditsMissing) return []
-  const { data, error } = await supabase
-    .from('album_credits')
-    .select(`created_at, album:albums!album_credits_album_id_fkey(${ALBUM_COLUMNS}, by:providers!albums_provider_id_fkey(id, display_name, status))`)
-    .eq('provider_id', providerId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  if (error) {
-    if (isMissingTable(error)) creditsMissing = true
-    else console.warn('listTaggedAlbums', error)
-    return []
-  }
-  const albums = (data || []).map((r) => r.album).filter((a) => a && a.status === 'published' && a.by?.status === 'active' && a.photos?.length)
-  const rows = await withCredits(albums)
-  return rows.map((a) => ({ ...toViewerAlbum(a), by: { id: a.by.id, name: a.by.display_name } }))
-}

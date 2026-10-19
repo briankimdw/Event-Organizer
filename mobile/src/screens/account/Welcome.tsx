@@ -3,7 +3,7 @@
 // say what brings you here ("I offer a service" goes on to /new-listing). The root layout
 // sends accounts without a name here (needsWelcome), like the web App does.
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { Check, CircleAlert, CircleCheck, PartyPopper, Store, User, type LucideIcon } from 'lucide-react-native'
+import { Camera, Check, CircleAlert, CircleCheck, Search, User, type LucideIcon } from 'lucide-react-native'
 import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, View, type TextInput } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -17,8 +17,8 @@ import { makeStyles, useTheme } from '@/theme'
 
 type Intent = '' | 'plan' | 'offer'
 const CHOICES: { value: Exclude<Intent, ''>; icon: LucideIcon; title: string; sub: string }[] = [
-  { value: 'plan', icon: PartyPopper, title: 'Planning an event', sub: 'Find and book vendors' },
-  { value: 'offer', icon: Store, title: 'I offer a service', sub: 'List your business, get booked' },
+  { value: 'plan', icon: Search, title: 'Booking a shoot', sub: 'Find and book photographers' },
+  { value: 'offer', icon: Camera, title: 'I shoot photo or video', sub: 'List your work, get booked' },
 ]
 
 export default function Welcome() {
@@ -106,7 +106,7 @@ export default function Welcome() {
             {ini ? <Text style={s.avatarText} maxFontSizeMultiplier={1.2}>{ini}</Text> : <User size={30} color={c.muted} />}
           </View>
           <Text variant="h1" style={s.title}>Make it yours</Text>
-          <Text muted>Vendors see your name when you message or book them.</Text>
+          <Text muted>Photographers see your name when you message or book them.</Text>
 
           <View style={s.form}>
             <AuthField

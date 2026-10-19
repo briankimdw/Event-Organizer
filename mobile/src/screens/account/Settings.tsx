@@ -46,7 +46,7 @@ export default function Settings() {
         <ListRow
           icon={ShieldCheck}
           title="Identity verification"
-          sub={verified ? 'Verified' : myProvider ? 'Not verified' : 'Only needed to take paid bookings as a vendor'}
+          sub={verified ? 'Verified' : myProvider ? 'Not verified' : 'Only needed to take paid bookings'}
           subColor={verified ? c.ok : undefined}
           onPress={() => router.push('/verify')}
         />

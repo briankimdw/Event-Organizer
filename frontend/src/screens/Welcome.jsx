@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, CircleAlert, CircleCheck, PartyPopper, Store, User } from 'lucide-react'
+import { Camera, Check, CircleAlert, CircleCheck, Search, User } from 'lucide-react'
 import { supabase } from '../lib/supabase.js'
 import { safeNext, useAuth } from '../auth.jsx'
 import { USERNAME_RE, initials, usernameTaken } from '../components/auth/authKit.js'
@@ -85,15 +85,15 @@ export default function Welcome() {
   }
 
   const choices = [
-    { value: 'plan', icon: PartyPopper, title: 'Planning an event', sub: 'Find and book vendors' },
-    { value: 'offer', icon: Store, title: 'I offer a service', sub: 'List your business, get booked' },
+    { value: 'plan', icon: Search, title: 'Booking a shoot', sub: 'Find and book photographers' },
+    { value: 'offer', icon: Camera, title: 'I shoot photo or video', sub: 'List your work, get booked' },
   ]
 
   return (
     <div className="au au-welcome">
       <div className={`au-avatar${initials(name) ? '' : ' empty'}`} aria-hidden="true">{initials(name) || <User size={30} />}</div>
       <h1 className="au-title">Make it yours</h1>
-      <p className="au-lede">Vendors see your name when you message or book them.</p>
+      <p className="au-lede">Photographers see your name when you message or book them.</p>
 
       <form onSubmit={save} className="au-form" noValidate>
         <div className="au-field">

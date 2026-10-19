@@ -1,9 +1,10 @@
 // /search: native port of frontend/src/screens/Search.jsx.
-// Params (like the web URL): ?q= text, ?v= vertical, ?cat= service (or vertical) slug,
+// Params (like the web URL): ?q= text, ?cat= service slug (or name, older links),
 // ?dates=YYYY-MM-DD,..., ?view=map, ?focus= provider to open on the map, ?bbox=w,s,e,n map area.
-// Ported: text search, vertical + service chips, dates (picker sheet + removable chips), list / map
-// views (react-native-maps; "Search this area"), filters sheet (the vertical's own filters, price by
-// price unit, rating, distance, Pro, ID), sort sheet (incl. Nearest), availability footer with Book.
+// (?v= from old links is ignored: photo & video is the only vertical.)
+// Ported: text search, service chips (photo and video services), dates (picker sheet + removable
+// chips), list / map views (react-native-maps; "Search this area"), filters sheet (price, rating,
+// distance, Pro, ID), sort sheet (incl. Nearest), availability footer with Book.
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import {
   ArrowUpDown, CalendarCheck, CalendarDays, Check, List, LocateFixed, Map as MapIcon, MapPin, MapPinOff, Plus, Search as SearchIcon, SearchX,
@@ -12,13 +13,11 @@ import {
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, Switch, View } from 'react-native'
 
-import { countProvidersByVertical, listProviders, searchProviders, withMatches } from '@shared/api/catalog.js'
+import { listProviders, searchProviders, withMatches } from '@shared/api/catalog.js'
 import { distanceKm, fmtBbox, fmtKm, getMyLocation, lastKnownLocation, parseBbox, parsePoint, splitByArea } from '@shared/api/locations.js'
 import { fmtChip, fromKey, isPast, parseDates } from '@shared/lib/dates.js'
 import { money, startingPrice } from '@shared/lib/format.js'
-import {
-  VERTICALS, countLabel, getService, getVertical, lowerFirst, matchesFilters, nounFor, optionLabel, optionsOf, verticalConfig, verticalMeta, verticalOfService,
-} from '@shared/verticals/index.js'
+import { PHOTO_VERTICAL, SERVICE_CHIPS, getService, isPhotoVertical, verticalMeta } from '@shared/verticals/index.js'
 import {
   Button, Chip, ChipRow, DatePicker, EmptyState, ErrorState, Loading, ProviderCard, Screen, Sheet, Text, TextField, iconByName,
 } from '@/components'
@@ -28,22 +27,12 @@ import { announce } from '@/lib/a11y'
 import { useAuth } from '@/state/auth'
 import { useStore } from '@/state/store'
 import { makeStyles, useTheme } from '@/theme'
-import type { Provider, Vertical } from '@/types'
+import type { Provider } from '@/types'
 
-// Starting-price filter, by how the vertical usually prices (per person, per day...).
-const PRICE_STEPS: Record<string, number[]> = {
-  default: [250, 500, 1500],
-  person: [50, 100, 150],
-  item: [50, 150, 500],
-  day: [1000, 3000, 6000],
-  hour: [100, 200, 400],
-}
-const priceOptions = (unit?: string | null) => [
+// Starting-price filter (a shoot's starting price).
+const PRICE_OPTIONS = [
   { value: null as number | null, label: 'Any' },
-  ...(PRICE_STEPS[unit || ''] || PRICE_STEPS.default).map((v) => ({
-    value: v as number | null,
-    label: `Under ${money(v)}${unit === 'person' ? ' pp' : unit === 'day' ? '/day' : unit === 'hour' ? '/hr' : ''}`,
-  })),
+  ...[250, 500, 1500].map((v) => ({ value: v as number | null, label: `Under ${money(v)}` })),
 ]
 const RATING_OPTIONS = [
   { value: null, label: 'Any' },
@@ -73,16 +62,15 @@ const withinDistance = (p: Result, d: Distance) => (d === 'travels' ? (p.distanc
 
 const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v)
 
-// ?v= vertical slug, ?cat= a service slug, a vertical slug, or a service name (older links).
-// Same rules as the web's resolveCategory (Search.jsx), using the static catalog.
-function resolveCategory(v?: string, cat?: string): { vertical: string | null; service: string | null } {
-  if (!cat) return { vertical: v && getVertical(v) ? v : null, service: null }
-  if (getVertical(cat)) return { vertical: cat, service: null }
-  if (getService(cat)) return { vertical: verticalOfService(cat)?.slug ?? null, service: cat }
-  const pool = [...VERTICALS.filter((x: Vertical) => x.slug === v), ...VERTICALS].flatMap((x: Vertical) => x.services.map((sv) => ({ ...sv, vertical: x.slug })))
-  const byName = pool.find((sv) => sv.name.toLowerCase() === cat.toLowerCase())
-  return byName ? { vertical: byName.vertical, service: byName.slug } : { vertical: v || null, service: null }
+// ?cat= a service slug, or a service name (older links). Anything else (an old vertical slug) = all.
+const META = verticalMeta()
+const PLURAL = 'photographers & videographers'
+function resolveService(cat?: string): string | null {
+  if (!cat) return null
+  if (getService(cat)) return cat
+  return META.services.find((sv: { slug: string; name: string }) => sv.name.toLowerCase() === cat.toLowerCase())?.slug ?? null
 }
+const countLabel = (n: number) => `${n} ${n === 1 ? 'pro' : 'pros'}`
 
 type Params = { q?: string; v?: string; cat?: string; dates?: string; view?: string; focus?: string; bbox?: string }
 
@@ -96,27 +84,16 @@ export default function Search() {
 
   const [query, setQuery] = useState(one(params.q) || '')
   const [filters, setFilters] = useState<Filters>(NO_FILTERS)
-  const [vFilters, setVFilters] = useState<Record<string, any>>({}) // the vertical's own filters: { guests, dietary... }
   const [sort, setSort] = useState<SortKey>('match')
   const [sheet, setSheet] = useState<null | 'dates' | 'filters' | 'sort'>(null)
   const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => setFilters((f) => ({ ...f, [key]: value }))
-  const setVFilter = (key: string, value: unknown) => setVFilters((f) => ({ ...f, [key]: value }))
   // Route params play the web URL's part: Back returns to the same search.
   const update = (patch: Partial<Record<keyof Params, string | undefined>>) => router.setParams(patch as any)
 
-  // What: a vertical (?v=) and one of its services (?cat=).
-  const { vertical, service } = resolveCategory(one(params.v), one(params.cat))
-  const meta = verticalMeta(vertical)
-  const config = verticalConfig(vertical)
-  const services: { slug: string; name: string }[] = vertical ? meta.services : []
-  const serviceName = service ? services.find((x) => x.slug === service)?.name || getService(service)?.name : null
-  const setVertical = (slug: string | null) => {
-    if (slug === vertical && !service) return
-    setVFilters({})
-    setFilter('maxPrice', null)
-    update({ v: slug ?? undefined, cat: undefined })
-  }
-  const setService = (slug: string | null) => update({ v: vertical ?? undefined, cat: slug ?? undefined })
+  // What: one of the photo / video services (?cat=).
+  const service = resolveService(one(params.cat))
+  const serviceName: string | null = service ? getService(service)?.name ?? null : null
+  const setService = (slug: string | null) => update({ v: undefined, cat: slug ?? undefined })
 
   // List or map; focus: a provider to open on the map; bbox: the searched map area.
   const view = one(params.view) === 'map' ? 'map' : 'list'
@@ -146,10 +123,9 @@ export default function Search() {
   const toggleDate = (key: string) => setDates(dates.includes(key) ? dates.filter((k) => k !== key) : [...dates, key])
   const datesParam = dates.length ? dates.join(',') : undefined
 
-  const counts = useQuery<Record<string, number>>(() => countProvidersByVertical(), [])
   const all = useQuery<Provider[]>(() => listProviders().then(withMatches), [user?.id])
-  // Dates, service, price, rating and Pro are filtered in the database; the vertical here.
-  const serverArgs = { dates, vertical, service, maxPrice: filters.maxPrice, minRating: filters.minRating, proOnly: filters.proOnly }
+  // Dates, service, price, rating and Pro are filtered in the database.
+  const serverArgs = { dates, service, maxPrice: filters.maxPrice, minRating: filters.minRating, proOnly: filters.proOnly }
   const needsServer = dates.length > 0 || !!service || filters.maxPrice != null || filters.minRating != null || filters.proOnly
   const searched = useQuery<Provider[]>(
     // JS default params (`dates = []`) infer as never[] in TS, hence the cast.
@@ -168,29 +144,20 @@ export default function Search() {
   const error = all.error || source.error
   const q = query.trim().toLowerCase()
   const allResults: Result[] = (source.data || [])
-    .filter((p) => !vertical || p.vertical === vertical)
+    .filter((p) => isPhotoVertical(p.vertical)) // the live data may still hold other verticals
     .map((p) => ({ ...p, tasteMatch: matchOf.get(p.id) ?? null, distanceKm: distanceKm(userLocation, p.location) }))
     .filter((p) => distanceFilter == null || (p.distanceKm != null && withinDistance(p, distanceFilter)))
     .filter((p) => !q || [p.name, p.username, p.city, p.verticalInfo?.name, ...p.specialties, ...p.categories].join(' ').toLowerCase().includes(q))
     .filter((p) => !filters.idOnly || p.idVerified)
-    .filter((p) => !vertical || matchesFilters(p, vFilters, vertical as any))
     .sort((a, b) => freeOn(b).length - freeOn(a).length || SORTS[sortKey].fn(a, b))
   const onMap = allResults.filter((p) => p.location) as (Result & MapProvider)[]
   // In a map area: providers based in it, then ones based elsewhere who travel to it.
   const { inside: areaInside, travels: areaTravels } = splitByArea(onMap, area) as { inside: Result[]; travels: Result[] }
   const results = area ? [...areaInside, ...areaTravels] : allResults
   const fullyFree = results.filter((p) => freeOn(p).length === dates.length).length
-  const plural = nounFor(vertical, 2)
-  const verticalEmpty = !!vertical && !!counts.data && !counts.data[vertical] && !(all.data || []).some((p) => p.vertical === vertical)
+  const plural = PLURAL
 
   // Removable chips for whatever is filtering the list.
-  const vChips = config.filters
-    .filter((f: any) => vFilters[f.key] != null && !(Array.isArray(vFilters[f.key]) && !vFilters[f.key].length))
-    .map((f: any) => ({
-      key: `v-${f.key}`,
-      label: f.type === 'guests' ? `${vFilters[f.key]}+ guests` : [].concat(vFilters[f.key]).map((v) => optionLabel(f, v)).join(', '),
-      clear: () => setVFilter(f.key, null),
-    }))
   const activeChips = [
     area && { key: 'area', label: 'Map area', icon: MapPin, clear: () => setArea(null) },
     filters.maxPrice != null && { key: 'maxPrice', label: `Under ${money(filters.maxPrice)}`, clear: () => setFilter('maxPrice', null) },
@@ -198,18 +165,15 @@ export default function Search() {
     filters.proOnly && { key: 'pro', label: 'Verified Pro', clear: () => setFilter('proOnly', false) },
     filters.idOnly && { key: 'id', label: 'ID verified', clear: () => setFilter('idOnly', false) },
     distanceFilter != null && { key: 'distance', label: DISTANCE_OPTIONS.find((o) => o.value === distanceFilter)?.label || '', clear: () => setFilter('distance', null) },
-    ...vChips,
   ].filter(Boolean) as { key: string; label: string; icon?: LucideIcon; clear: () => void }[]
   const filterCount = activeChips.filter((x) => x.key !== 'area').length
 
   const reload = () => {
     all.reload()
     searched.reload()
-    counts.reload()
   }
   const clearAll = () => {
     setFilters(NO_FILTERS)
-    setVFilters({})
     setQuery('')
     update({ cat: undefined, q: undefined })
   }
@@ -218,10 +182,10 @@ export default function Search() {
     area && !dates.length
       ? areaTravels.length
         ? `${areaInside.length ? `${areaInside.length} based here · ` : ''}${areaTravels.length} travel${areaTravels.length === 1 ? 's' : ''} here`
-        : `${countLabel(areaInside.length, vertical)} in this area`
+        : `${countLabel(areaInside.length)} in this area`
       : dates.length
         ? `${fullyFree} free on ${dates.length === 1 ? 'your date' : `all ${dates.length} dates`}${results.length > fullyFree ? ` · ${results.length - fullyFree} partly free` : ''}${area ? ' here' : ''}`
-        : countLabel(results.length, vertical)
+        : countLabel(results.length)
   const notOnMap = view === 'map' && !area && results.length > onMap.length && onMap.length > 0 ? ` · ${results.length - onMap.length} not on map` : ''
   // Screen readers hear the new result count once typing / filtering settles.
   const spoken = loading || error ? '' : summary.replace(/ · /g, ', ')
@@ -236,31 +200,29 @@ export default function Search() {
       <View style={s.pad}>
         <TextField
           icon={SearchIcon}
-          placeholder={`Search ${plural}, styles, cities`}
+          placeholder="Search names, styles, cities"
+          accessibilityLabel="Search photographers and videographers by name, style or city"
           value={query}
           onChangeText={setQuery}
           clearable
-          autoFocus={!one(params.cat) && !vertical && !dates.length && view === 'list'}
+          autoFocus={!one(params.cat) && !dates.length && view === 'list'}
           returnKeyType="search"
           autoCorrect={false}
         />
       </View>
 
-      {/* What: vertical, then its services */}
+      {/* What: a photo or video service */}
       <ChipRow scroll style={s.rowGap}>
-        <Chip label="All" accessibilityLabel="All services" toggle select on={!vertical} onPress={() => setVertical(null)} />
-        {VERTICALS.map((v: Vertical) => (
-          <Chip key={v.slug} label={v.name} icon={iconByName(v.icon)} iconTint={v.tint} toggle select on={vertical === v.slug} onPress={() => setVertical(v.slug)} />
+        <Chip label="All" accessibilityLabel="All photo and video services" toggle select on={!service} onPress={() => setService(null)} />
+        {/* The picked service first, so it's in view. */}
+        {[...SERVICE_CHIPS].sort((a: { slug: string }, b: { slug: string }) => Number(b.slug === service) - Number(a.slug === service)).map((x: { slug: string; name: string; icon: string }) => (
+          <Chip key={x.slug} label={x.name} icon={iconByName(x.icon)} toggle select on={service === x.slug} onPress={() => setService(service === x.slug ? null : x.slug)} />
         ))}
+        {/* A service that isn't a chip (coaching, meetups) still shows as selected. */}
+        {!!service && !SERVICE_CHIPS.some((x: { slug: string }) => x.slug === service) && (
+          <Chip label={serviceName || service} toggle select on onPress={() => setService(null)} />
+        )}
       </ChipRow>
-      {vertical && services.length > 0 && (
-        <ChipRow scroll style={s.rowGap}>
-          <Chip label={`All ${lowerFirst(meta.name)}`} on={!service} toggle select onPress={() => setService(null)} />
-          {services.map((x) => (
-            <Chip key={x.slug} label={x.name} toggle select on={service === x.slug} onPress={() => setService(x.slug)} />
-          ))}
-        </ChipRow>
-      )}
 
       {/* When: the dates you need someone for */}
       <View style={s.pad}>
@@ -289,7 +251,7 @@ export default function Search() {
         ))}
       </ChipRow>
 
-      {!error && !loading && !verticalEmpty && (
+      {!error && !loading && (
         <View style={s.resultBar}>
           <Text variant="small" muted numberOfLines={1} style={s.grow}>{summary}{notOnMap}</Text>
           <View style={s.toggle} accessibilityRole="tablist" accessibilityLabel="Show results as">
@@ -305,19 +267,12 @@ export default function Search() {
     <ErrorState error={error} onRetry={reload} />
   ) : loading ? (
     <Loading label={`Finding ${plural}…`} />
-  ) : verticalEmpty ? (
-    <EmptyState
-      icon={getVertical(vertical!) ? iconByName(getVertical(vertical!)!.icon) : SearchX}
-      title={`No ${plural} yet`}
-      text="We’re onboarding vendors here. Check back soon."
-      action={<Button title="Show all vendors" variant="ghost" size="sm" onPress={() => setVertical(null)} />}
-    />
   ) : null
 
   const emptyList = area && results.length === 0 && allResults.length > 0 ? (
     <EmptyState
       icon={MapPinOff}
-      title={`No ${plural} in this area`}
+      title="Nobody in this area"
       text="Nobody matching your search is based in this map area or travels to it."
       action={
         <View style={s.actions}>
@@ -329,13 +284,12 @@ export default function Search() {
   ) : results.length === 0 ? (
     <EmptyState
       icon={SearchX}
-      title={dates.length ? 'Nobody free on those dates' : `No ${plural} found`}
+      title={dates.length ? 'Nobody free on those dates' : 'No one found'}
       text={dates.length ? 'Nobody matching these filters is free on those dates.' : `No ${plural} match these filters.`}
       action={
-        activeChips.length > 0 || dates.length > 0 || q || service || vertical ? (
+        activeChips.length > 0 || dates.length > 0 || q || service ? (
           <View style={s.actions}>
             {(filterCount > 0 || !!q || !!service) && <Button title="Clear filters" variant="ghost" size="sm" onPress={clearAll} />}
-            {!!vertical && !filterCount && !q && !service && <Button title="Show all vendors" variant="ghost" size="sm" onPress={() => update({ v: undefined, cat: undefined })} />}
             {!!area && <Button title="Search everywhere" variant="ghost" size="sm" onPress={() => setArea(null)} />}
             {dates.length > 0 && <Button title="Clear dates" variant="ghost" size="sm" onPress={() => setDates([])} />}
           </View>
@@ -345,14 +299,14 @@ export default function Search() {
   ) : null
 
   return (
-    <Screen title={serviceName || (vertical ? meta.plural : 'Find vendors')} subtitle={serviceName ? meta.name : undefined} back scroll={false}>
+    <Screen title={serviceName || META.name} subtitle={serviceName ? META.name : undefined} back scroll={false}>
       {view === 'map' && !body ? (
         <View style={s.flex}>
           {header}
           {onMap.length > 0 ? (
             <ProviderMap
               providers={onMap}
-              vertical={vertical}
+              vertical={PHOTO_VERTICAL}
               area={area}
               onAreaChange={setArea}
               userLocation={userLocation}
@@ -367,7 +321,7 @@ export default function Search() {
             <EmptyState
               icon={MapPinOff}
               title="Not on the map yet"
-              text={`${allResults.length === 1 ? `This ${nounFor(vertical)} hasn’t` : `These ${plural} haven’t`} set where they’re based yet.`}
+              text={`${allResults.length === 1 ? 'This pro hasn’t' : 'These pros haven’t'} set where they’re based yet.`}
               action={<Button title="Show the list" variant="ghost" size="sm" onPress={() => setView('list')} />}
             />
           ) : emptyList}
@@ -427,10 +381,7 @@ export default function Search() {
       </Sheet>
 
       <Sheet open={sheet === 'filters'} onClose={() => setSheet(null)} title="Filters">
-        {config.filters.map((f: any) => (
-          <VerticalFilter key={f.key} filter={f} value={vFilters[f.key] ?? null} onChange={(v) => setVFilter(f.key, v)} />
-        ))}
-        <OptionGroup label="Starting price" options={priceOptions(vertical ? meta.priceUnit : null)} value={filters.maxPrice} onChange={(v) => setFilter('maxPrice', v)} />
+        <OptionGroup label="Starting price" options={PRICE_OPTIONS} value={filters.maxPrice} onChange={(v) => setFilter('maxPrice', v)} />
         <OptionGroup label="Rating" options={RATING_OPTIONS} value={filters.minRating} onChange={(v) => setFilter('minRating', v)} />
         {userLocation ? (
           <OptionGroup label="Distance" options={DISTANCE_OPTIONS} value={filters.distance} onChange={(v) => setFilter('distance', v)} />
@@ -444,11 +395,11 @@ export default function Search() {
           </View>
         )}
         <Text variant="label" style={s.groupLabel}>Trust</Text>
-        <ToggleRow label="Verified Pro" hint="Vendors on the paid Verified Pro plan" value={filters.proOnly} onChange={(v) => setFilter('proOnly', v)} />
+        <ToggleRow label="Verified Pro" hint="Pros on the paid Verified Pro plan" value={filters.proOnly} onChange={(v) => setFilter('proOnly', v)} />
         <ToggleRow label="ID verified" hint="Identity confirmed with a government ID" value={filters.idOnly} onChange={(v) => setFilter('idOnly', v)} />
         <View style={[s.actions, s.sheetActions]}>
-          <Button title="Clear all" variant="ghost" disabled={!filterCount} onPress={() => { setFilters(NO_FILTERS); setVFilters({}) }} />
-          <Button title={loading ? `Show ${plural}` : `Show ${countLabel(results.length, vertical)}`} grow onPress={() => setSheet(null)} />
+          <Button title="Clear all" variant="ghost" disabled={!filterCount} onPress={() => setFilters(NO_FILTERS)} />
+          <Button title={loading ? 'Show results' : `Show ${countLabel(results.length)}`} grow onPress={() => setSheet(null)} />
         </View>
       </Sheet>
 
@@ -505,36 +456,6 @@ function OptionGroup<T>({ label, options, value, onChange }: { label: string; op
       </ChipRow>
     </View>
   )
-}
-
-// A vertical's own filter (verticals/<slug>/config.js `filters`): guests, dietary, setting...
-function VerticalFilter({ filter: f, value, onChange }: { filter: any; value: any; onChange: (v: any) => void }) {
-  const s = useStyles()
-  if (f.type === 'guests') {
-    return (
-      <OptionGroup
-        label={f.label}
-        options={[{ value: null, label: 'Any' }, ...f.options.map((n: number) => ({ value: n, label: `${n}+` }))]}
-        value={value}
-        onChange={onChange}
-      />
-    )
-  }
-  if (f.type === 'tags') {
-    const list: string[] = value || []
-    const toggle = (t: string) => onChange(list.includes(t) ? list.filter((x) => x !== t) : [...list, t])
-    return (
-      <View>
-        <Text variant="label" style={s.groupLabel}>{f.label}</Text>
-        <ChipRow>
-          {optionsOf(f).map((o: { value: string; label: string }) => (
-            <Chip key={o.value} label={o.label} accessibilityLabel={`${f.label}: ${o.label}`} toggle on={list.includes(o.value)} onPress={() => toggle(o.value)} />
-          ))}
-        </ChipRow>
-      </View>
-    )
-  }
-  return <OptionGroup label={f.label} options={[{ value: null, label: 'Any' }, ...optionsOf(f)]} value={value} onChange={onChange} />
 }
 
 function ToggleRow({ label, hint, value, onChange }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void }) {

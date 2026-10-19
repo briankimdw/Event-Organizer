@@ -37,8 +37,8 @@ export default function Verify() {
           <Text variant="h3" center>Identity verification is coming soon</Text>
           <Text variant="small" muted center>
             {myProvider
-              ? 'Vendors need to verify their identity before accepting paid bookings. You’ll scan a government ID and take a quick selfie. This is free and separate from Verified Pro.'
-              : 'Verification is for vendors taking paid bookings. Clients don’t need it to book.'}
+              ? 'Photographers and videographers need to verify their identity before accepting paid bookings. You’ll scan a government ID and take a quick selfie. This is free and separate from Verified Pro.'
+              : 'Verification is for photographers and videographers taking paid bookings. Clients don’t need it to book.'}
           </Text>
           <Callout style={s.stretch}>
             <Text variant="small">Verification will be handled by Stripe Identity. We’ll only keep whether you passed, never your ID images or face data.</Text>

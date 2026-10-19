@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  Bookmark, Briefcase, ChevronLeft, ChevronRight, Compass, EyeOff, Heart, Images, Info, MessageCircle, RotateCcw, Send, Sparkles, Star, Store, ThumbsDown, X,
+  Bookmark, Briefcase, ChevronLeft, ChevronRight, Compass, EyeOff, Heart, Images, Info, MessageCircle, RotateCcw, Sparkles, Star, ThumbsDown, X,
 } from 'lucide-react'
 import Sheet from '../Sheet.jsx'
 import useDialog from '../useDialog.js'
@@ -11,22 +11,20 @@ import ProfileLink, { PersonAvatar } from '../ProfileLink.jsx'
 import { fromPriceLabel, priceLabel } from '../Booking.jsx'
 import { callName } from '../../lib/format.js'
 import { EmptyState, ErrorState, Loading } from '../States.jsx'
-import { VerticalPickerChip, VerticalPickerSheet } from './VerticalPicker.jsx'
 import { VendorDetails, VendorFace } from './VendorCard.jsx'
 import CatalogIcon, { TintIcon } from '../home/CatalogIcon.jsx'
-import { useInvite } from '../home/Browse.jsx'
 import { useStore } from '../../store.jsx'
 import { useAuth } from '../../auth.jsx'
 import useQuery from '../../lib/useQuery.js'
 import { addDays, toKey, today } from '../../lib/dates.js'
-import { countProvidersByVertical, freeDays, listProviders } from '../../api/catalog.js'
+import { freeDays, listProviders } from '../../api/catalog.js'
 import {
-  EVERYTHING, cardWords, deckWords, getDeck, getDeckMatches, getHiddenVendors, getTasteProfile, hideVendor, logSwipe,
+  cardWords, deckWords, getDeck, getDeckMatches, getHiddenVendors, getTasteProfile, hideVendor, logSwipe,
   normalizeDeckChoice, readDeckChoice, undoSwipe, unhideVendor, vendorFacts, writeDeckChoice,
 } from '../../api/discover.js'
 import { startInquiry } from '../../api/messages.js'
-import { deckChoices, listPostIndex, postFacets } from '../../api/home.js'
-import { OCCASIONS, getVertical, nounFor, verticalMeta } from '../../verticals/index.js'
+import { listPostIndex, serviceCounts } from '../../api/home.js'
+import { getService, verticalMeta } from '../../verticals/index.js'
 
 const THRESHOLD = 90
 const BATCH = 8 // cards per feed request (signed in: small batches so ranking keeps up with swipes; services/ml/eval: 8 vs 20 roughly triples early like rate)
@@ -42,10 +40,10 @@ const storage = () => {
 }
 const cap = (s = '') => s.charAt(0).toUpperCase() + s.slice(1)
 
-// Discover → "For you": the swipe deck. One vertical at a time, or everything mixed
-// ("For you: everything", the default). Verticals with posts show photo cards (SigLIP-ranked);
-// vendors with no posts, and non-visual verticals, show vendor cards. Service and occasion
-// chips narrow the deck. The choice lives in the URL (?v=&s=&o=) and is remembered on this device.
+// Discover → "For you": the swipe deck of photo & video work. Posts show photo cards
+// (SigLIP-ranked); photographers who haven't posted yet show vendor cards. Service chips
+// (Wedding, Headshots, Wedding film...) narrow the deck. The choice lives in the URL (?s=)
+// and is remembered on this device.
 //   tabs: the For you | Explore switch, rendered in the header
 export default function SwipeDeck({ tabs }) {
   const navigate = useNavigate()
@@ -56,19 +54,17 @@ export default function SwipeDeck({ tabs }) {
     toast, discoverHistory: history, setDiscoverHistory: setHistory,
     corrections, addCorrections, removeCorrection, shortlist, toggleShortlist,
   } = useStore()
-  const invite = useInvite()
 
   // ---- what we're swiping through ---------------------------------------------
   const [choice, setChoiceState] = useState(() =>
-    params.get('v') ? normalizeDeckChoice({ vertical: params.get('v'), service: params.get('s'), occasion: params.get('o') }) : readDeckChoice(storage()),
+    params.get('s') || params.get('v') ? normalizeDeckChoice({ service: params.get('s') }) : readDeckChoice(storage()),
   )
-  const { vertical, service, occasion } = choice
-  const all = vertical === EVERYTHING
+  const { vertical, service, occasion } = choice // vertical is always 'all', occasion null (one vertical, no occasions)
   const syncUrl = (c) => {
     const p = new URLSearchParams(params)
-    p.set('v', c.vertical)
+    p.delete('v')
+    p.delete('o')
     c.service ? p.set('s', c.service) : p.delete('s')
-    c.occasion ? p.set('o', c.occasion) : p.delete('o')
     if (p.toString() !== params.toString()) setParams(p, { replace: true })
   }
   const setChoice = (next) => {
@@ -89,38 +85,24 @@ export default function SwipeDeck({ tabs }) {
   // Keep the selected chips in view in the sideways-scrolling row.
   useEffect(() => {
     document.querySelectorAll('.discover .chips.scroll-x .chip.on').forEach((el) => el.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }))
-  }, [vertical, service, occasion])
+  }, [service])
   const [tappedSides, setTappedSides] = useState(false) // hide the photo hint once used
   const [drag, setDrag] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const [exit, setExit] = useState(null) // like | pass | save
-  const [sheet, setSheet] = useState(null) // details | correct | taste | shortlist | vertical
+  const [sheet, setSheet] = useState(null) // details | correct | taste | shortlist
   const [picked, setPicked] = useState(new Set())
   const [match, setMatch] = useState(null) // provider id
   const [matched, setMatched] = useState(new Set())
   const lastMatchAt = useRef(-99) // history length when the last match moment showed
   const start = useRef(null)
 
-  // Picker data: vendors and posts per vertical.
-  const verticalCounts = useQuery(() => countProvidersByVertical(), [])
+  // Service chips: the services that have posts or photographers offering them.
   const posts = useQuery(() => listPostIndex(), [])
   const providers = useQuery(() => listProviders(), [])
-  const choices = verticalCounts.data ? deckChoices(verticalCounts.data, posts.data || []) : null
-  const allChoices = choices ? choices.groups.flatMap((g) => g.verticals) : []
-  const current = all ? choices?.everything || { slug: 'all', name: 'Everything', icon: 'Sparkles', tint: '#334155' } : allChoices.find((v) => v.slug === vertical) || { ...getVertical(vertical), count: null }
-  const words = deckWords(vertical)
-  const meta = verticalMeta(all ? null : vertical)
-
-  // Service chips: the vertical's services that have posts or vendors.
-  const facets = postFacets(posts.data || [], { vertical, service })
-  const offered = new Set((providers.data || []).filter((p) => p.vertical === vertical).flatMap((p) => p.categorySlugs || []))
-  const services = all ? [] : getVertical(vertical).services.filter((s) => s.slug !== 'meetups' && (s.slug === service || facets.services[s.slug] || offered.has(s.slug)))
-  const serviceName = services.find((s) => s.slug === service)?.name
-  // Occasion chips: occasions tagged on posts in scope.
-  const occasions = OCCASIONS.filter((o) => o.slug === occasion || facets.occasions[o.slug])
-  const occasionName = OCCASIONS.find((o) => o.slug === occasion)?.name
-  // Quick switches on the "everything" deck: verticals with something to swipe.
-  const quick = all ? [...allChoices].filter((v) => v.mode !== 'empty').sort((a, b) => b.posts - a.posts || b.count - a.count) : []
+  const words = deckWords()
+  const services = serviceCounts(providers.data || [], posts.data || []).filter((s) => s.slug === service || s.posts || s.providers)
+  const serviceName = getService(service)?.name
 
   // % match per vendor (signed in, after a few likes).
   const matches = useQuery(uid ? () => getDeckMatches() : null, [uid])
@@ -140,7 +122,7 @@ export default function SwipeDeck({ tabs }) {
   const [feed, setFeed] = useState({ loading: false, error: null, done: false })
   const [restartKey, setRestartKey] = useState(0)
   const generation = useRef(0)
-  const deckKey = `${vertical}|${service || ''}|${occasion || ''}`
+  const deckKey = service || ''
 
   const seen = new Set(history.map((h) => h.id))
   const hidden = (c) => hiddenVendors.has(c.authorId) || c.tags.some((t) => corrections.includes(t))
@@ -342,12 +324,6 @@ export default function SwipeDeck({ tabs }) {
     setRestartKey((k) => k + 1)
   }
 
-  const pickVertical = (slug) => {
-    setSheet(null)
-    if (slug === vertical) return
-    setChoice({ vertical: slug, service: null, occasion: null })
-  }
-
   const exitTransform = {
     like: 'translate(140%, 0) rotate(20deg)',
     pass: 'translate(-140%, 0) rotate(-20deg)',
@@ -400,9 +376,6 @@ export default function SwipeDeck({ tabs }) {
       ).filter(Boolean).join(', ')
     : ''
 
-  const emptyVertical = !all && current?.count === 0 && !(posts.data && facets.total)
-  const scopeName = [serviceName, occasionName].filter(Boolean).join(' · ')
-
   return (
     <div className="discover">
       <header className="home-header">
@@ -417,34 +390,13 @@ export default function SwipeDeck({ tabs }) {
         </div>
       </header>
 
-      <div className="chips scroll-x pad-x" role="group" aria-label="What to swipe through">
-        <VerticalPickerChip vertical={current} onClick={() => setSheet('vertical')} />
-        {(quick.length > 0 || services.length > 0) && <span className="dc-chip-divider" aria-hidden="true" />}
-        {quick.map((v) => (
-          <button key={v.slug} className="chip dc-vfilter" style={{ '--tint': v.tint }} onClick={() => pickVertical(v.slug)} aria-label={`Swipe ${v.name}`}>
-            <CatalogIcon name={v.icon} size={13} /> {v.name}
+      <div className="chips scroll-x pad-x" role="group" aria-label="Kind of shoot">
+        <button className={`chip toggle ${!service ? 'on' : ''}`} aria-pressed={!service} onClick={() => setChoice({ service: null })}>All</button>
+        {services.map((c) => (
+          <button key={c.slug} className={`chip toggle ${service === c.slug ? 'on' : ''}`} aria-pressed={service === c.slug} onClick={() => setChoice({ service: service === c.slug ? null : c.slug })}>
+            {c.name}
           </button>
         ))}
-        {services.length > 0 && (
-          <>
-            <button className={`chip toggle ${!service ? 'on' : ''}`} aria-pressed={!service} onClick={() => setChoice({ service: null })}>All</button>
-            {services.map((c) => (
-              <button key={c.slug} className={`chip toggle ${service === c.slug ? 'on' : ''}`} aria-pressed={service === c.slug} onClick={() => setChoice({ service: service === c.slug ? null : c.slug })}>
-                {c.name}
-              </button>
-            ))}
-          </>
-        )}
-        {occasions.length > 0 && (
-          <>
-            <span className="dc-chip-divider" aria-hidden="true" />
-            {occasions.map((o) => (
-              <button key={o.slug} className={`chip toggle dc-ochip ${occasion === o.slug ? 'on' : ''}`} style={{ '--tint': o.tint }} aria-pressed={occasion === o.slug} onClick={() => setChoice({ occasion: occasion === o.slug ? null : o.slug })}>
-                <CatalogIcon name={o.icon} size={13} /> {o.name}
-              </button>
-            ))}
-          </>
-        )}
       </div>
 
       <div className="deck mt-sm">
@@ -452,23 +404,10 @@ export default function SwipeDeck({ tabs }) {
           <ErrorState error={feed.error} onRetry={() => setFeed((f) => ({ ...f, error: null }))} />
         ) : !feed.done ? (
           <Loading label={words.finding} />
-        ) : emptyVertical && !history.some((h) => h.card?.vertical === vertical) ? (
-          <div className="dc-empty-vertical">
-            <TintIcon item={meta} size={64} />
-            <h2 className="h3 mt">No {lowerPlural(meta)} here yet</h2>
-            <p className="muted small">
-              Be the first {meta.noun} on photomatch, or invite one you love. You’ll be able to swipe through their work here.
-            </p>
-            <div className="row gap-xs wrap discover-empty-actions mt">
-              <Link className="btn" to={`/new-listing?v=${vertical}`}><Store size={16} aria-hidden="true" /> List your services</Link>
-              <button className="btn ghost" onClick={() => invite(meta)}><Send size={16} aria-hidden="true" /> Invite {withArticle(meta.noun)}</button>
-              <button className="btn ghost" onClick={() => pickVertical(EVERYTHING)}>Swipe everything</button>
-            </div>
-          </div>
         ) : (
           <EmptyState
             icon={Compass}
-            title={`You've seen everything${scopeName ? ` in ${scopeName}` : all ? '' : ` in ${meta.name}`}`}
+            title={`You've seen everything${serviceName ? ` in ${serviceName}` : ''}`}
             text={
               uid
                 ? `${words.empty} Check your shortlist, or try something else.`
@@ -477,8 +416,7 @@ export default function SwipeDeck({ tabs }) {
             action={
               <div className="row gap-xs wrap discover-empty-actions">
                 {shortlist.size > 0 && <button className="btn" onClick={() => setSheet('shortlist')}>See shortlist ({shortlist.size})</button>}
-                {(service || occasion) && <button className="btn ghost" onClick={() => setChoice({ service: null, occasion: null })}>All {all ? 'of it' : meta.name}</button>}
-                {!all && !service && !occasion && <button className="btn ghost" onClick={() => pickVertical(EVERYTHING)}>Swipe everything</button>}
+                {service && <button className="btn ghost" onClick={() => setChoice({ service: null })}>All shoots</button>}
                 <button className="btn ghost" onClick={startOver}>{uid ? 'Check again' : 'Start over'}</button>
               </div>
             }
@@ -690,15 +628,6 @@ export default function SwipeDeck({ tabs }) {
         )}
       </Sheet>
 
-      <VerticalPickerSheet
-        open={sheet === 'vertical'}
-        onClose={() => setSheet(null)}
-        choices={choices}
-        loading={verticalCounts.loading && !verticalCounts.data}
-        value={vertical}
-        onPick={pickVertical}
-      />
-
       <Sheet open={sheet === 'correct'} onClose={() => setSheet(null)} title="Not into this">
         {!uid ? (
           <>
@@ -772,9 +701,6 @@ export default function SwipeDeck({ tabs }) {
   )
 }
 
-const lowerPlural = (v) => nounFor(v.slug, 2)
-const withArticle = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`
-
 // Which of the next 14 days the vendor is free (working hours, time off and bookings).
 function NextTwoWeeks({ providerId }) {
   const days = Array.from({ length: 14 }, (_, i) => addDays(today(), i))
@@ -812,7 +738,7 @@ function TasteSheet({ open, uid, corrections, removeCorrection, onShowVendor }) 
     return (
       <>
         <p className="muted small">
-          As you swipe, we learn what you like (styles, vendors, services) and use it to rank pros for you. Sign in so your swipes are saved.
+          As you swipe, we learn what you like (styles, photographers, kinds of shoot) and use it to rank photographers for you. Sign in so your swipes are saved.
         </p>
         <Link className="btn block mt" to={signInLink}>Sign in</Link>
       </>
@@ -826,23 +752,13 @@ function TasteSheet({ open, uid, corrections, removeCorrection, onShowVendor }) 
   return (
     <>
       <p className="muted small">
-        Learned from {t.swipes} swipe{t.swipes === 1 ? '' : 's'} ({t.likes} like{t.likes === 1 ? '' : 's'}). We use it to rank pros for you.
+        Learned from {t.swipes} swipe{t.swipes === 1 ? '' : 's'} ({t.likes} like{t.likes === 1 ? '' : 's'}). We use it to rank photographers for you.
       </p>
-      {t.verticals?.length > 0 && (
-        <>
-          <h2 className="section-title h4">What you like</h2>
-          <div className="chips">
-            {t.verticals.map((v) => (
-              <span key={v.slug} className="chip">{v.name} · {v.likes}</span>
-            ))}
-          </div>
-        </>
-      )}
       <h2 className="section-title h4">Styles</h2>
       {t.styles.length === 0 ? <div className="muted small">Like a few photos and the styles you like will show up here.</div> : <TasteBars items={t.styles} />}
       {t.traits?.length > 0 && (
         <>
-          <h2 className="section-title h4">In vendors</h2>
+          <h2 className="section-title h4">In photographers</h2>
           <TasteBars items={t.traits} />
         </>
       )}
@@ -869,7 +785,7 @@ function TasteSheet({ open, uid, corrections, removeCorrection, onShowVendor }) 
         ))}
       </div>
       <div className="note mt">
-        <Compass size={14} aria-hidden="true" /> About 1 in 7 cards is something outside your usual taste, so you can find new styles and vendors.
+        <Compass size={14} aria-hidden="true" /> About 1 in 7 cards is something outside your usual taste, so you can find new styles and photographers.
       </div>
     </>
   )
@@ -882,7 +798,7 @@ function ShortlistSheet({ open, uid, shortlist, likedCardsFrom, matchOf, onMessa
       <EmptyState
         icon={Bookmark}
         title="Keep a shortlist"
-        text="Sign in to save pros you like. Swipe up or tap the bookmark to add them."
+        text="Sign in to save photographers you like. Swipe up or tap the bookmark to add them."
         action={<Link className="btn" to={signInLink}>Sign in</Link>}
       />
     )
@@ -896,7 +812,7 @@ function ShortlistSheet({ open, uid, shortlist, likedCardsFrom, matchOf, onMessa
       <EmptyState
         icon={Bookmark}
         title="No one shortlisted yet"
-        text="Swipe up or tap the bookmark to shortlist pros you like."
+        text="Swipe up or tap the bookmark to shortlist photographers you like."
       />
     )
   }
@@ -1002,7 +918,7 @@ function MatchOverlay({ provider, cards, tasteMatch, signedIn, shortlisted, onSh
         ) : (
           <div className="note mt-sm small">
             <span>
-              Your swipes aren't saved while you're signed out. <Link to={signInLink} className="underline-link">Sign in</Link> to shortlist {first} and get matched to pros like this.
+              Your swipes aren't saved while you're signed out. <Link to={signInLink} className="underline-link">Sign in</Link> to shortlist {first} and get matched to photographers like this.
             </span>
           </div>
         )}

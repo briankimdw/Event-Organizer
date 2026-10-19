@@ -48,7 +48,7 @@ export default function Settings() {
             <div className="grow">
               <div>Identity verification</div>
               <div className={`tiny ${verified ? 'ok' : 'muted'}`}>
-                {verified ? 'Verified' : myProvider ? 'Not verified' : 'Only needed to take paid bookings as a vendor'}
+                {verified ? 'Verified' : myProvider ? 'Not verified' : 'Only needed to take paid bookings as a photographer'}
               </div>
             </div>
             <ChevronRight size={16} className="muted" />

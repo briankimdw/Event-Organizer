@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Event Organizer",
+    "name": "photomatch",
     "slug": "event-organizer",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,7 +12,7 @@
       "icon": "./assets/expo.icon",
       "supportsTablet": false,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Find vendors who work near you and travel to your event.",
+        "NSLocationWhenInUseUsageDescription": "Find photographers and videographers who work near you or travel to you.",
         "NSPhotoLibraryUsageDescription": "Choose photos to post to your portfolio."
       }
     },
@@ -42,7 +42,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Find vendors who work near you and travel to your event."
+          "locationWhenInUsePermission": "Find photographers and videographers who work near you or travel to you."
         }
       ],
       [

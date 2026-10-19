@@ -1,5 +1,5 @@
 // A synchronous `localStorage` / `sessionStorage` for native, because shared web
-// code (api/events.js, api/locations.js, api/planner.js) uses them directly.
+// code (api/locations.js, api/discover.js deck choice) uses them directly.
 //
 // localStorage: an in-memory Map, hydrated from AsyncStorage at startup and
 // written through to it, so values survive app restarts. Reads made before

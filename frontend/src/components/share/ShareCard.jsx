@@ -1,23 +1,24 @@
 import { Link } from 'react-router-dom'
-import { CalendarDays, ChevronRight, ImageOff, MapPin, Star } from 'lucide-react'
+import { CalendarDays, ChevronRight, ImageOff, Star } from 'lucide-react'
 import { shareLink } from '../../api/messages.js'
 import './share.css'
 
 // A card for something shared in chat (message.shared from api/messages.js):
-// a post, a vendor or an event. Tapping it opens the thing.
+// a post or a photographer. Tapping it opens the thing. Events shared before events
+// were archived show as a stub.
 export default function ShareCard({ shared, mine = false }) {
   if (!shared) return null
-  if (!shared.available && shared.kind !== 'event') {
+  if (shared.kind === 'event') return <EventStub s={shared} mine={mine} />
+  if (!shared.available) {
     return (
       <div className={`share-card gone ${mine ? 'mine' : ''}`}>
-        <ImageOff size={16} />
-        <span className="small">{shared.kind === 'post' ? 'This post is no longer available' : 'This vendor is no longer available'}</span>
+        <ImageOff size={16} aria-hidden="true" />
+        <span className="small">{shared.kind === 'post' ? 'This post is no longer available' : 'This profile is no longer available'}</span>
       </div>
     )
   }
   if (shared.kind === 'post') return <PostCard s={shared} />
   if (shared.kind === 'provider') return <VendorCard s={shared} />
-  if (shared.kind === 'event') return <EventCard s={shared} />
   return null
 }
 
@@ -37,7 +38,7 @@ function PostCard({ s }) {
 function VendorCard({ s }) {
   const meta = [s.noun && s.noun.replace(/^\w/, (c) => c.toUpperCase()), s.city?.split(',')[0]].filter(Boolean).join(' · ')
   return (
-    <Link to={shareLink(s)} className="share-card vendor" aria-label={`Vendor: ${s.name}`}>
+    <Link to={shareLink(s)} className="share-card vendor" aria-label={`Photographer: ${s.name}`}>
       <div className={`sc-cover ${s.cover ? '' : 'ph'}`}>{s.cover && <img src={s.cover} alt="" loading="lazy" />}</div>
       <div className="sc-vendor">
         <img className="sc-avatar" src={s.avatar} alt="" />
@@ -59,37 +60,12 @@ function VendorCard({ s }) {
   )
 }
 
-function EventCard({ s }) {
-  const d = s.startsAt ? new Date(s.startsAt) : null
-  const body = (
-    <>
-      {s.cover && <img className="sc-event-cover" src={s.cover} alt="" loading="lazy" />}
-      <div className="sc-event-top">
-        <div className="sc-cal" aria-hidden="true">
-          {d ? (
-            <>
-              <span>{d.toLocaleDateString('en-US', { month: 'short' })}</span>
-              <b>{d.getDate()}</b>
-            </>
-          ) : (
-            <CalendarDays size={20} />
-          )}
-        </div>
-        <div className="grow ellipsis">
-          <div className="sc-kicker tiny">Event</div>
-          <b className="sc-event-title">{s.title}</b>
-        </div>
-      </div>
-      <div className="sc-event-lines tiny">
-        <div><CalendarDays size={12} /> {s.date || 'Date to be decided'}</div>
-        {s.location && <div className="ellipsis"><MapPin size={12} /> {s.location}</div>}
-      </div>
-      {s.available ? <div className="sc-cta tiny">View event <ChevronRight size={14} /></div> : <div className="sc-cta tiny muted">This event was deleted</div>}
-    </>
-  )
-  return s.available ? (
-    <Link to={shareLink(s)} className="share-card event" aria-label={`Event: ${s.title}`}>{body}</Link>
-  ) : (
-    <div className="share-card event">{body}</div>
+// An event shared before events were archived: just say what it was (no page to open).
+function EventStub({ s, mine }) {
+  return (
+    <div className={`share-card gone ${mine ? 'mine' : ''}`}>
+      <CalendarDays size={16} aria-hidden="true" />
+      <span className="small">Shared an event{s.title ? `: ${s.title}` : ''}</span>
+    </div>
   )
 }

@@ -9,7 +9,7 @@ import { installStorage } from './storage'
 
 const g = globalThis as any
 
-installStorage() // localStorage / sessionStorage (api/events.js, api/locations.js, api/planner.js)
+installStorage() // localStorage / sessionStorage (api/locations.js, the Discover deck choice)
 installGeolocation() // navigator.geolocation (api/locations.js getMyLocation)
 
 // crypto.randomUUID / getRandomValues (api/portfolio.js postAlbum)

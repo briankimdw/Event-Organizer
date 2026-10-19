@@ -18,6 +18,7 @@ export type ChatConversation = {
   title: string
   customTitle: string | null
   isGroup: boolean
+  fromEvent?: boolean // an old event chat: shown as a group, but the database only lets plain groups add/rename/leave
   members: Member[]
 }
 
@@ -104,7 +105,7 @@ export default function ChatInfo({ open, onClose, conversation: c, onChanged, on
                 key={m.profileId}
                 left={<Avatar uri={m.avatar} name={m.name} />}
                 title={m.name}
-                sub={m.username ? `@${m.username}${m.isPhotographer ? ' · Vendor' : ''}` : null}
+                sub={m.username ? `@${m.username}${m.isPhotographer ? ' · Pro' : ''}` : null}
                 onPress={() => {
                   onClose()
                   router.push({ pathname: '/u/[id]', params: { id: m.id } })
@@ -114,9 +115,9 @@ export default function ChatInfo({ open, onClose, conversation: c, onChanged, on
             {c.isGroup ? <ListRow title="+ You" /> : null}
           </Group>
           <Group style={s.mt}>
-            {c.isGroup ? <ListRow icon={UserPlus} title="Add people" onPress={() => setMode('add')} /> : null}
-            {c.isGroup ? <ListRow icon={Pencil} title="Rename group" onPress={() => { setTitle(c.customTitle || ''); setMode('rename') }} /> : null}
-            {c.isGroup ? <ListRow icon={LogOut} title="Leave group" danger chevron={false} onPress={() => setMode('leave')} /> : null}
+            {c.isGroup && !c.fromEvent ? <ListRow icon={UserPlus} title="Add people" onPress={() => setMode('add')} /> : null}
+            {c.isGroup && !c.fromEvent ? <ListRow icon={Pencil} title="Rename group" onPress={() => { setTitle(c.customTitle || ''); setMode('rename') }} /> : null}
+            {c.isGroup && !c.fromEvent ? <ListRow icon={LogOut} title="Leave group" danger chevron={false} onPress={() => setMode('leave')} /> : null}
             {!c.isGroup ? <ListRow icon={Flag} title="Report or block" danger chevron={false} onPress={onReport} /> : null}
           </Group>
         </>

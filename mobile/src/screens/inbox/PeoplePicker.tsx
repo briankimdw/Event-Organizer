@@ -95,7 +95,7 @@ export default function PeoplePicker({ selected, onChange, exclude = [], autoFoc
         <Loading inline />
       ) : !list.length ? (
         <Text variant="small" muted style={s.empty}>
-          {q.trim() ? `No one found for “${q.trim()}”.` : 'Search for anyone: vendors or clients.'}
+          {q.trim() ? `No one found for “${q.trim()}”.` : 'Search for anyone: photographers or clients.'}
         </Text>
       ) : (
         list.map((p) => {
@@ -115,7 +115,7 @@ export default function PeoplePicker({ selected, onChange, exclude = [], autoFoc
                 <View style={s.nameRow}>
                   <Text weight="600" numberOfLines={1} style={s.shrink}>{p.name}</Text>
                   {p.isPhotographer && (
-                    <View style={s.badge} accessibilityLabel="Vendor">
+                    <View style={s.badge} accessibilityLabel="Pro">
                       <Briefcase size={10} color={c.muted} />
                     </View>
                   )}

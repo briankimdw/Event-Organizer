@@ -10,34 +10,17 @@
 .dc-tabs button.on::after {
   content: ''; position: absolute; left: 2px; right: 2px; bottom: 6px; height: 3px; border-radius: 999px; background: var(--ink);
 }
-.dc-tabs button:focus-visible, .dc-vchip:focus-visible, .dc-vrow:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 8px; }
+.dc-tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 8px; }
 .discover .home-header, .explore .home-header { padding-top: 6px; padding-bottom: 4px; }
 .dc-icon-pill { width: 40px; height: 40px; padding: 0; justify-content: center; }
 .discover .pill-btn, .explore .pill-btn { min-height: 40px; }
 
-/* Vertical picker chip at the start of the deck's chip row */
-.dc-vchip {
-  flex-shrink: 0; gap: 5px; font-weight: 600; border: 1px solid color-mix(in srgb, var(--tint) 30%, #fff);
-  background: color-mix(in srgb, var(--tint) 10%, #fff); color: color-mix(in srgb, var(--tint) 55%, #111);
-}
-.dc-chip-divider { flex-shrink: 0; width: 1px; align-self: stretch; margin: 4px 2px; background: var(--line); }
+/* Service chips */
 .discover .chips.scroll-x .chip, .explore .chips.scroll-x .chip { min-height: 34px; }
-
-/* Vertical picker sheet */
-.dc-vlist { display: flex; flex-direction: column; gap: 4px; }
-.dc-vrow { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 14px; min-height: 56px; }
-.dc-vrow:hover { background: var(--soft); }
-.dc-vrow.on { background: var(--soft); }
-.dc-soon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; margin-top: 6px; }
-.dc-soon-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); min-width: 0; }
-.dc-soon-item .tint-icon { opacity: .7; }
 
 /* Explore: masonry */
 .explore { min-height: 100%; }
 .dc-filter-row { padding-top: 2px; padding-bottom: 10px; }
-.dc-vfilter { gap: 5px; }
-.dc-vfilter svg { color: var(--tint); }
-.dc-vfilter.on svg { color: #fff; }
 .dc-masonry { display: flex; gap: 8px; padding: 0 12px; align-items: flex-start; }
 .dc-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .dc-tile { margin: 0; }
@@ -52,18 +35,7 @@
 .dc-sentinel { height: 1px; }
 .dc-end { padding: 20px 0 8px; }
 
-/* Vertical picker: "everything" + groups */
-.dc-vgroup { display: flex; flex-direction: column; gap: 4px; }
-.dc-vgroup-label { margin: 10px 8px 2px; }
-.dc-vrow-text { min-width: 0; }
-.dc-vrow.empty .tint-icon { opacity: .75; }
-
-/* Occasion chips in the deck */
-.dc-ochip { gap: 5px; }
-.dc-ochip svg { color: var(--tint); }
-.dc-ochip.on svg { color: #fff; }
-
-/* Vendor cards: vendors without posts and non-visual verticals */
+/* Vendor cards: photographers without posts */
 .swipe-card.vendor { background: #111; }
 .dc-vendor {
   position: absolute; inset: 0; display: flex; flex-direction: column; color: #fff; overflow: hidden;
@@ -89,9 +61,6 @@
 .swipe-card.behind.vendor .dc-vendor-body { visibility: hidden; }
 .dc-bio { white-space: pre-line; }
 
-/* A vertical nobody is in yet */
-.dc-empty-vertical { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; gap: 4px; }
-.dc-empty-vertical p { max-width: 300px; }
 .dc-shortlist-facts { align-items: center; }
 
 /* Match moment for a vendor without photos */
@@ -101,8 +70,7 @@
   background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 70%, #0b0b10), color-mix(in srgb, var(--tint) 40%, #0b0b10));
 }
 
-/* Explore: vendor tiles (vendors without posts) and "be the first" */
-.dc-subfilters { padding-top: 0; }
+/* Explore: tiles for photographers without posts */
 .dc-vtile {
   position: relative; display: block; color: #fff;
   background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 58%, #0b0b10), color-mix(in srgb, var(--tint) 32%, #0b0b10));
@@ -113,7 +81,4 @@
 .dc-vtile-name { font-size: 15px; line-height: 1.15; overflow-wrap: anywhere; }
 .dc-vtile-fact { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dc-vtile-meta { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 600; margin-top: 2px; }
-.dc-be-first {
-  display: flex; gap: 12px; align-items: flex-start; margin: 0 16px 14px; padding: 14px; border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--tint) 25%, var(--line)); background: color-mix(in srgb, var(--tint) 6%, var(--bg, #fff));
-}
+

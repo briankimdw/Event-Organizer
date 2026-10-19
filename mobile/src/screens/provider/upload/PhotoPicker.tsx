@@ -71,7 +71,7 @@ export default function PhotoPicker({ mode, photos, copy }: { mode: PickMode; ph
           <View style={s.dropIcon}>{mode === 'before_after' ? <ArrowLeftRight size={26} color={c.accent} /> : <ImagePlus size={26} color={c.accent} />}</View>
           <Text variant="h3" center>{mode === 'before_after' ? 'Add a before & after' : copy?.headline || 'Add photos'}</Text>
           <Text variant="small" muted center>
-            {mode === 'before_after' ? 'Pick 2 photos: the before, then the after. You can swap them next.' : `One photo, or up to ${MAX_PHOTOS} from the same event.`}
+            {mode === 'before_after' ? 'Pick 2 photos: the before, then the after. You can swap them next.' : `One photo, or up to ${MAX_PHOTOS} from the same shoot.`}
           </Text>
           <Button title={mode === 'before_after' ? 'Choose 2 photos' : 'Choose photos'} variant="accent" onPress={() => open()} style={s.center} />
           <Text variant="tiny" muted center>JPEG, PNG, WebP or HEIC · up to {formatBytes(MAX_FILE_BYTES)} each</Text>

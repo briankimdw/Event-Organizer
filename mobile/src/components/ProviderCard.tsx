@@ -15,7 +15,6 @@ import { IdVerified, InA11yGroup, ProBadge, RatingInline, ratingLabel } from './
 import { Photo } from './Photo'
 import { PriceLabel, fromPriceText } from './PriceLabel'
 import { Text } from './Text'
-import { AddToEventButton } from '@/screens/events/AddToEvent'
 
 type Props = {
   provider: Provider
@@ -26,7 +25,7 @@ type Props = {
 }
 
 /** What a screen reader says for a provider card, in one go:
- *  "Golden Spoon Catering, caterer, identity verified, Verified Pro, rated 4.5 out of 5, 12 reviews, from $45 / person, Los Angeles". */
+ *  "Golden Hour Studio, photographer, identity verified, Verified Pro, rated 4.5 out of 5, 12 reviews, from $450, Los Angeles". */
 export function providerA11yLabel(p: Provider, extra: (string | null | undefined | false)[] = []) {
   const noun = (p as any).verticalInfo?.noun as string | undefined
   return [
@@ -62,7 +61,6 @@ export function ProviderCard({ provider: p, variant = 'row', onPress, footer, me
   if (variant === 'tile') {
     return (
       <InA11yGroup value>
-      <View>
         <Pressable onPress={open} style={({ pressed }) => [s.tile, pressed && s.pressed]} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint}>
           <View>
             <Photo uri={p.cover} vertical={p.vertical} style={s.tileImg} />
@@ -77,8 +75,6 @@ export function ProviderCard({ provider: p, variant = 'row', onPress, footer, me
             </View>
           </View>
         </Pressable>
-        <AddToEventButton provider={p} />
-      </View>
       </InA11yGroup>
     )
   }
@@ -89,7 +85,7 @@ export function ProviderCard({ provider: p, variant = 'row', onPress, footer, me
       <InA11yGroup value>
       <View style={s.result}>
         <Pressable onPress={open} style={({ pressed }) => pressed && s.pressed} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint}>
-          {/* Like the web: no work yet (DJs, planners...) = no empty grey strip, just the details. */}
+          {/* Like the web: no work yet = no empty grey strip, just the details. */}
           {thumbs.length > 0 && (
             <View style={s.strip}>
               <Photo uri={thumbs[0]} style={s.stripBig} />

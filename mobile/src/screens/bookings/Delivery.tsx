@@ -1,5 +1,5 @@
 // A booking's delivery: native version of frontend/src/screens/Delivery.jsx.
-// There's no in-app gallery storage for deliveries yet (vendors share a gallery link in
+// There's no in-app gallery storage for deliveries yet (pros share a gallery link in
 // the booking chat), so this shows the real delivery status and lets the client accept it.
 import { callName } from '@shared/lib/format.js'
 import { acceptDelivery, bookingError, getBooking } from '@shared/api/bookings.js'
@@ -47,7 +47,7 @@ function DeliveryView({ b, reload }: { b: Booking; reload: () => void }) {
   const [busy, setBusy] = useState(false)
   const isClient = b.role === 'client'
   const other = isClient ? b.provider : b.client
-  const first = (other as any).shortName || callName(other.name || '') || (isClient ? 'Your vendor' : 'The client')
+  const first = (other as any).shortName || callName(other.name || '') || (isClient ? 'Your photographer' : 'The client')
   const days = b.deliveryExpiresDays
   const media = b.vertical === 'videography' ? 'video' : 'photos'
   const autoText = days != null ? ` It’s accepted automatically in ${days} day${days === 1 ? '' : 's'}.` : ''

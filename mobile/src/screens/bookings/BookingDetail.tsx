@@ -1,8 +1,8 @@
 // One booking: native version of frontend/src/screens/BookingDetail.jsx.
-// Who / when / where, the status-specific call to action (client or vendor side:
+// Who / when / where, the status-specific call to action (client or pro side:
 // respond to a request, counter offer, accept an offer, pay-deposit placeholder, mark
 // delivered / done, accept delivery), the status timeline, price and cancellation.
-// Wording follows the vertical: photo / video vendors "deliver", everyone else "marks it done".
+// Photo & video bookings end with a delivery ("deliver"); old non-photo bookings "mark it done".
 import {
   acceptDelivery, bookingError, cancelBooking, getBooking, markDelivered, respondToBooking, respondToOffer,
 } from '@shared/api/bookings.js'

@@ -25,7 +25,7 @@ export function HomeHeader() {
     <View style={s.header}>
       <View style={s.grow}>
         <Text variant="small" muted>{firstName ? `${greeting()}, ${firstName}` : greeting()}</Text>
-        <Text variant="h3" style={s.title}>What are you planning?</Text>
+        <Text variant="h3" style={s.title}>Find your photographer</Text>
       </View>
       {isProvider && (
         <Pressable onPress={() => router.push('/upload')} style={s.post} accessibilityRole="button" accessibilityLabel="Post photos">
@@ -37,7 +37,7 @@ export function HomeHeader() {
   )
 }
 
-export function SearchLauncher({ placeholder = 'Search vendors, styles, cities' }: { placeholder?: string }) {
+export function SearchLauncher({ placeholder = 'Search photographers, styles, cities' }: { placeholder?: string }) {
   const s = useStyles()
   const { c } = useTheme()
   const router = useRouter()
