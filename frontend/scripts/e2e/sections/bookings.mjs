@@ -1,11 +1,12 @@
-// Bookings: totals for every price type, the vendor side (see the request, counter,
-// accept, decline), payment-gated steps (deliver, complete, reviews, ratings) and
-// capacity (several events at once for caterers; never two for a photographer).
-import { assert, eq, errorText, expectError, skip, waitFor } from '../lib/harness.mjs'
+// Bookings: totals for the photo & video price types (fixed, hourly, quote), the
+// vendor side (see the request, counter, accept, decline), payment-gated steps
+// (deliver, complete, reviews, ratings) and no double-booking a photographer.
+// (Per-person / per-item / daily prices and capacity > 1 belonged to the archived
+// verticals; those checks are in archive/event-platform/scripts/e2e/sections/bookings.mjs.)
+import { assert, eq, expectError, skip, waitFor } from '../lib/harness.mjs'
 import { amountsOf, diffAmounts, expectedBooking, pickQuantity } from '../lib/pricing.mjs'
 
-const ACTIVE = ['requested', 'countered', 'accepted', 'confirmed', 'in_progress']
-const roleVendorIds = (ctx) => ['photographer', 'unverified', 'caterer'].map((k) => ctx.state[`${k}Listing`]?.id).filter(Boolean)
+const roleVendorIds = (ctx) => ['photographer', 'unverified'].map((k) => ctx.state[`${k}Listing`]?.id).filter(Boolean)
 
 // ---------------------------------------------------------------------------
 // Pricing
@@ -59,26 +60,9 @@ export const pricing = {
   roles: ['clientA'],
   steps: [
     priceStep('fixed'),
+    priceStep('fixed', { dateCount: 2 }),
     priceStep('hourly'),
-    priceStep('per_person'),
-    priceStep('per_item'),
-    priceStep('daily', { dateCount: 2 }),
     priceStep('quote'),
-    {
-      name: 'per_person below the minimum is refused',
-      soft: true,
-      run: async (ctx) => {
-        const hit = await ctx.findPackage('per_person', { exclude: roleVendorIds(ctx) })
-        if (!hit || !(hit.pkg.minQuantity > 1)) skip('no per-person package with a minimum above 1')
-        await ctx.as('clientA')
-        const msg = await expectError(
-          ctx.app.bookings.requestBooking({ packageId: hit.pkg.id, dates: [ctx.dates.next()], startTime: '10:00', quantity: hit.pkg.minQuantity - 1, notes: ctx.tag('too few guests') }),
-          /at least/i,
-          'request below minimum',
-        )
-        return `"${ctx.app.bookings.bookingError({ message: msg })}"`
-      },
-    },
   ],
 }
 
@@ -275,70 +259,14 @@ export const lifecycle = {
 }
 
 // ---------------------------------------------------------------------------
-// Capacity
+// Capacity: a photographer works one shoot at a time
 // ---------------------------------------------------------------------------
 
 export const capacity = {
   id: 'capacity',
-  title: 'Capacity: overlapping bookings',
+  title: 'No double-booking (capacity 1)',
   roles: ['clientA', 'clientB'],
   steps: [
-    {
-      name: 'caterer takes several overlapping events, then is full',
-      run: async (ctx) => {
-        const { app, state } = ctx
-        const p = state.catererListing
-        const cap = state.catererCapacity
-        const pkg = p.packages.find((k) => k.priceType === 'per_person' && k.price != null)
-        const quantity = pickQuantity(pkg)
-        // Find a day where the first booking fits, then pile more onto the same slot.
-        const { rows, dates } = await ctx.book('clientA', { packageId: pkg.id, quantity }, { label: 'capacity 1' })
-        const day = dates[0]
-        const ids = [rows[0].id]
-        let refused = null
-        for (let i = 2; i <= cap + 1; i++) {
-          await ctx.as(i % 2 ? 'clientA' : 'clientB')
-          try {
-            const more = await app.bookings.requestBooking({ packageId: pkg.id, dates: [day], startTime: '10:00', quantity, notes: ctx.tag(`capacity ${i}`) })
-            ctx.trackBooking(i % 2 ? 'clientA' : 'clientB', more[0].id, `capacity ${i}`)
-            ids.push(more[0].id)
-          } catch (e) {
-            refused = errorText(e)
-            break
-          }
-        }
-        assert(ids.length >= 2, `only ${ids.length} overlapping booking(s) fit (capacity ${cap}); refused with: ${refused}`)
-        assert(ids.length <= cap, `${ids.length} overlapping bookings exceed capacity ${cap}`)
-        assert(refused && /fully booked/i.test(refused), `booking #${ids.length + 1} should be refused as fully booked, got: ${refused ?? 'accepted'}`)
-        state.capacity = { ids, day, pkg, quantity }
-        const { data } = await (await ctx.as('clientA')).client.from('bookings').select('slot').in('id', ids)
-        return `${ids.length}/${cap} at once on ${day} (slots ${data.map((r) => r.slot).sort().join(',')}); next refused: "${app.bookings.bookingError({ message: refused })}"`
-      },
-    },
-    {
-      name: 'cancelling frees the slot',
-      soft: true,
-      run: async (ctx) => {
-        const { app, state } = ctx
-        const { ids, day, pkg, quantity } = state.capacity
-        await ctx.as('clientA')
-        const first = await app.bookings.getBooking(ids[0])
-        await app.bookings.cancelBooking(ids[0])
-        await ctx.as('clientB')
-        const again = await app.bookings.requestBooking({ packageId: pkg.id, dates: [day], startTime: '10:00', quantity, notes: ctx.tag('capacity refill') })
-        ctx.trackBooking('clientB', again[0].id, 'capacity refill')
-        eq(again[0].status, 'requested', 'refill status')
-        // Tidy: cancel everything now (the cleanup would too).
-        for (const id of [...ids.slice(1), again[0].id]) {
-          for (const key of ['clientA', 'clientB']) {
-            await ctx.as(key)
-            const b = await app.bookings.getBooking(id)
-            if (b && b.role === 'client' && ACTIVE.includes(b.status)) await app.bookings.cancelBooking(id)
-          }
-        }
-        return `slot ${first ? 'freed' : '?'} and re-booked by another client; all cancelled`
-      },
-    },
     {
       name: 'photographer can\'t be double-booked',
       run: async (ctx) => {

@@ -237,12 +237,13 @@ test('dates are far in the future, distinct, and stable per run id', () => {
 })
 
 test('parseArgs + selectSections', () => {
-  assert.deepEqual(parseArgs(['--dry-run', '--only', 'events,rls', '--keep', '--realtime-timeout=5']), {
-    dryRun: true, keep: true, verbose: false, pauseForPayment: false, only: ['events', 'rls'], realtimeTimeoutMs: 5000, help: false,
+  assert.deepEqual(parseArgs(['--dry-run', '--only', 'messaging,rls', '--keep', '--realtime-timeout=5']), {
+    dryRun: true, keep: true, verbose: false, pauseForPayment: false, only: ['messaging', 'rls'], realtimeTimeoutMs: 5000, help: false,
   })
   assert.throws(() => parseArgs(['--nope']), /Unknown option/)
   assert.throws(() => parseArgs(['--only']), /needs a value/)
-  assert.deepEqual(selectSections(['rls', 'events']).map((s) => s.id), ['preflight', 'events', 'rls'])
+  assert.deepEqual(selectSections(['rls', 'messaging']).map((s) => s.id), ['preflight', 'messaging', 'rls'])
+  assert.throws(() => selectSections(['events']), /Unknown area/) // archived with the event platform
   assert.deepEqual(selectSections(['anon']).map((s) => s.id), ['anon'])
   assert.throws(() => selectSections(['nope']), /Unknown area/)
   assert.equal(selectSections(null).length, SECTIONS.length)
@@ -267,7 +268,7 @@ test('sections only use roles they declare (for the dry-run plan)', () => {
     for (const step of s.steps) for (const m of step.run.toString().matchAll(/(?:as|book|trackBooking)\('(\w+)'/g)) used.add(m[1])
     for (const r of used) assert.ok(s.roles.includes(r), `${s.id} signs in as ${r} but doesn't list it in roles`)
   }
-  assert.ok(readdirSync(dir).length >= 8)
+  assert.ok(readdirSync(dir).length >= 7)
 })
 
 test('hooks: env rewrite and client redirect', () => {

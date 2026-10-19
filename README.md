@@ -1,21 +1,26 @@
 # photographer-match
 
-A marketplace to **find, compare, book and pay service providers**. Photographers come first. Later it expands to every vendor for an event (musicians, caterers, makeup artists, florists, venues), with an AI event planner that drafts bookings and the user approves and pays each one.
+A marketplace to **find, compare, book and pay photographers and videographers**. Since 2026-10-18 it is **photography only**: one vertical, **"Photo & video"**, where a creator can sell photo and/or video work.
 
-The main rule across all the docs: **the booking core is category-agnostic from day one.** Providers, packages, availability, bookings and reviews never reference "photographer" directly. Each category adds its own schema-validated fields.
+For a while it grew into a multi-vendor event-services platform (caterers, venues, DJs..., events with friends, an AI event planner). That work is archived in [`archive/event-platform/`](archive/event-platform/README.md) (git tag `multi-vendor-snapshot`) so it can come back later.
+
+The main rule across all the docs still holds: **the booking core is category-agnostic.** Providers, packages, availability, bookings and reviews never reference "photographer" directly; a vertical is rows in `service_categories` with schema-validated fields, so another one can return without a schema change.
 
 ## Status
 
 | Part | State |
 |---|---|
-| `frontend/` | Clickable mobile prototype on mock data (not yet connected to the database) |
-| Database + auth | Supabase set up and tested (`supabase/`, design in [`docs/DATABASE.md`](docs/DATABASE.md)) |
+| `frontend/` | React web app, every screen reads from Supabase ([`docs/FRONTEND_DATA.md`](docs/FRONTEND_DATA.md)) |
+| `mobile/` | Expo app sharing the web app's data layer ([`mobile/README.md`](mobile/README.md)) |
+| Database + auth | Supabase set up and tested (`supabase/`, design in [`docs/DATABASE.md`](docs/DATABASE.md)). Switching the hosted project to photography only: [`docs/PHOTOGRAPHY_ONLY_RUNBOOK.md`](docs/PHOTOGRAPHY_ONLY_RUNBOOK.md) |
+| `services/ml/` | SigLIP embeddings + auto-tags for the Discover feed ([`services/ml/README.md`](services/ml/README.md)) |
 | Docs | Two design docs, not yet reconciled (see below). Session-by-session status: [`docs/PROGRESS.md`](docs/PROGRESS.md) |
 
 ## Docs
 
 - [`architecture.md`](architecture.md): service-based backend design. Covers services and their boundaries, the event bus, the booking state machine, payments and escrow, the media pipeline, recommendations, the AI planner, chat contact masking, trust and safety, and build phases.
-- [`docs/PLAN.md`](docs/PLAN.md): product and feature spec for the photographer vertical. Covers posting, swipe Discover, profiles, booking flow, delivery galleries, payments, monetization, extra features, and the multi-service event expansion.
+- [`docs/PLAN.md`](docs/PLAN.md): product and feature spec for the photographer vertical. Covers posting, swipe Discover, profiles, booking flow, delivery galleries, payments, monetization, extra features, and the multi-service event expansion (now archived).
+- [`archive/event-platform/README.md`](archive/event-platform/README.md): what the archived event platform contained and how to restore a piece.
 - [`orchestrator/README.md`](orchestrator/README.md): plan-driven Claude Code orchestrator. You write and approve a plan in `plans/`, it implements and verifies it locally, then opens a PR for review.
 
 ### Open decisions: where the docs disagree

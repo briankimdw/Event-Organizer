@@ -7,6 +7,20 @@
 
 ---
 
+## 0. Photography only (2026-10-18)
+
+The product went back to **photography only**: one vertical, **"Photo & video"** (slug `photography`), for creators who sell photo and/or video work. The multi-vendor features are archived in `archive/event-platform/` (git tag `multi-vendor-snapshot`).
+
+Migration `20261018000000_photography_only.sql` (paste-ready: `supabase/demo/photography_only_setup.sql`; order of steps: `docs/PHOTOGRAPHY_ONLY_RUNBOOK.md`):
+- **Merges videography into photography.** The photography JSON Schemas also accept the video fields (provider: `styles`, `gear.cameras`, `gear.drones`, `drone_licensed`; package: `film_minutes`, `highlight_minutes`, `raw_footage`). The 5 video services (wedding-film, event-recap, social-reels, music-video, drone) move under photography (14 services in all). Video listings become photography listings; if the owner already had one, the video listing is folded into it.
+- **Drops** what only archived features used: `album_credits`, `event_candidates`, `event_candidate_votes`, the events-with-friends functions and triggers (event chats, invites, hiring board, `event_bookings`...), and `discover_vendors()` with `vendor_traits`, `discover_jaccard`, `discover_norm`.
+- **Deletes** the other verticals' data (listings and everything hanging off them), every event, and the other verticals, their services and the occasion tags. Refuses to run on a database with such data unless the backup (`frontend/scripts/backup-nonphoto.mjs`) is confirmed.
+- **Keeps the core schema multi-vertical** so a vertical can come back as rows: `service_categories` + JSON Schemas, `providers.vertical_id`, `max_concurrent` + the capacity (slot) rule, every price type, `packages.min/max_quantity`, `bookings.quantity`, share cards, the Discover feed functions. **`events` and `event_members` stay too** (phase-2 core tables, now empty), as do `bookings.event_id`, conversation kind `'event'` and `messages.shared_event_id`: removing them would mean rewriting `request_booking()`, the share-card trigger and the messaging policies for no gain.
+
+The sections below are the original design; where they mention other verticals or events, read them as "supported by the schema, not used by the app".
+
+---
+
 ## 1. Key decisions
 
 1. **One Supabase project (one Postgres database) for everything.** `architecture.md` proposes a database per service. At our size that adds cost and complexity without a payoff. We keep clear *table ownership* instead, so we can split later if we ever need to.
@@ -77,7 +91,7 @@ erDiagram
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `service_categories` | `id`, `slug`, `name`, `parent_id`, `kind` (`vertical` / `service`), `package_schema` (jsonb), `provider_schema` (jsonb), `is_active`, `sort_order` | Example tree: **Photography** → Wedding, Graduation, Portrait, Event, Headshots, Real estate, Product, Coaching, Meetups. Later: **Music** → DJ, Band…; **Catering**; **Venues**. |
+| `service_categories` | `id`, `slug`, `name`, `parent_id`, `kind` (`vertical` / `service`), `package_schema` (jsonb), `provider_schema` (jsonb), `is_active`, `sort_order` | Today one vertical: **Photo & video** (`photography`) → Wedding, Graduation, Portrait, Event, Headshots, Real estate, Product, Coaching, Meetups, Wedding film, Event recap, Social reels, Music video, Drone. The 17 other verticals of the event platform are archived (`archive/event-platform/supabase/seed_all_verticals.sql`). |
 
 `package_schema` and `provider_schema` are JSON Schemas. `pg_jsonschema` checks `packages.attributes` and `providers.attributes` against them.
 
@@ -89,7 +103,7 @@ erDiagram
 | `provider_private` | `provider_id`, `stripe_account_id`, `payouts_enabled` | Owner + server only. Kept out of the public table. |
 | `provider_services` | `provider_id`, `category_id` | Which sub-services they offer (Wedding, Graduation…). |
 | `cancellation_policies` | `id`, `name` (Flexible/Moderate/Strict/Custom), `rules` (jsonb tiers: days before → refund %), `provider_id` (null = shared template) | The policy is **snapshotted** onto each booking. |
-| `packages` | `id`, `provider_id`, `category_id`, `name`, `description`, `price_type` (`fixed` / `hourly` / `quote`), `price_cents`, `currency`, `duration_minutes`, `deposit_pct`, `attributes` (jsonb, validated by the category's `package_schema`), `is_active`, `sort_order` | Photography `attributes`: `edited_photos`, `editing_level`, `turnaround_days`, `deliverables[]`. |
+| `packages` | `id`, `provider_id`, `category_id`, `name`, `description`, `price_type` (`fixed` / `hourly` / `per_person` / `per_item` / `daily` / `quote`), `price_cents`, `currency`, `duration_minutes`, `deposit_pct`, `min_quantity`, `max_quantity`, `attributes` (jsonb, validated by the category's `package_schema`), `is_active`, `sort_order` | Photo & video `attributes`: `edited_photos`, `editing_level`, `film_minutes`, `highlight_minutes`, `raw_footage`, `turnaround_days`, `deliverables[]`, `second_shooter_included`. |
 | `package_addons` | `id`, `provider_id`, `name`, `price_cents`, `is_active` | Extra hour, second shooter, rush delivery, prints. |
 
 ### 3.5 Availability
@@ -101,7 +115,7 @@ erDiagram
 
 "Who is free on these dates?" (the date search) is answered by an RPC, `search_providers(dates[], category, filters)`. It combines working hours, blackouts and active bookings, so the frontend never computes availability itself.
 
-### 3.6 Events (multi-vendor; `events` + `event_members` exist now, the rest comes later)
+### 3.6 Events (multi-vendor; `events` + `event_members` exist but are unused and empty since 2026-10-18)
 
 | Table | Key columns | Notes |
 |---|---|---|
@@ -178,9 +192,9 @@ This matches the album viewer in the prototype. The tables are generic, so flori
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `conversations` | `id`, `kind` (`inquiry` / `booking` / `group` / `event`), `booking_id`, `event_id`, `created_at` | |
+| `conversations` | `id`, `kind` (`inquiry` / `booking` / `group` / `direct` / `event`), `provider_id`, `booking_id`, `event_id`, `title`, `created_at`, `last_message_at` | `event` chats belonged to events with friends (archived); none exist now. |
 | `conversation_members` | `conversation_id`, `profile_id`, `last_read_at` | RLS: only members read or write. |
-| `messages` | `id`, `conversation_id`, `sender_id`, `body`, `shared_album_id`, `created_at` | Realtime enabled. A `visible_body` column will be added later for contact masking. |
+| `messages` | `id`, `conversation_id`, `sender_id`, `body`, `shared_album_id`, `shared_provider_id`, `shared_event_id`, `share_preview`, `created_at` | Realtime enabled. Share cards: a post, a vendor (or an event) with a server-filled `share_preview`. A `visible_body` column will be added later for contact masking. |
 | `notifications` | `user_id`, `type`, `payload` (jsonb), `read_at` | |
 | `reports`, `blocks` | `reporter_id`, `target_type`, `target_id`, `reason`, `status`; `blocker_id`, `blocked_id` | |
 
@@ -232,11 +246,17 @@ Each step is one migration file in `supabase/migrations/`, reviewed in a pull re
 | **2** | `20261008172715_messaging_reviews_discovery` | Conversations (+ auto booking threads), messages (Realtime), reviews + reveal, swipes, corrections, shortlist, collections, follows, notifications, reports, blocks | Applied |
 | **2** | `20261008173740_hardening` | Trigger functions removed from the API, 21 foreign-key indexes | Applied |
 | **2** | `supabase/pending/split_owner_policies.sql` | Optional performance tidy-up (split owner policies). Declined for now | Not applied |
+| **2** | `20261008213950` … `20261009120100` | Photo embeddings + Discover feed, soft diversity, revoked sessions, `provider_matches`, swipe undo, direct + group messages, owner portfolio reads | Applied |
+| **2** | `20261010000000_all_verticals` | Price types `per_person` / `per_item` / `daily`, package quantities, `bookings.quantity`, `providers.max_concurrent` + slot-based capacity | Applied (core; the verticals themselves are now archived) |
+| **2** | `20261011000000_share_cards` | Post / vendor / event cards in chat | Applied |
+| **2** | `20261011000100_event_groups`, `20261011000200_post_credits`, `20261013000000_discover_all_verticals` | Events with friends, post credits, vendor-card Discover | Archived features: their tables and functions are dropped by `photography_only` (copies in `archive/event-platform/supabase/migrations/`) |
+| **2** | `20261012000100_feed_v2` | Discover feed v2 (centred taste, several tastes) | Written |
+| **2** | `20261018000000_photography_only` | Merge videography into "Photo & video", drop the archived features, delete the other verticals' data | **To paste**: `supabase/demo/photography_only_setup.sql` after the backup (`docs/PHOTOGRAPHY_ONLY_RUNBOOK.md`) |
 | **3** | *(next)* `payments_deliveries` | Payments, payouts, stripe_events, disputes, deliveries + `deliveries` / `dispute-evidence` buckets, cleanup cron | When Stripe work starts |
 | **Later** | | `event_needs` + `event_plan_drafts`, `photo_embeddings` (pgvector), `ai_review_cases`, Pro subscriptions, contact masking | |
 
 **Seed data** (`supabase/seed.sql`):
-- the Photography category tree with its JSON schemas
+- the Photo & video category tree (14 services) with its JSON schemas
 - the Flexible / Moderate / Strict policy templates
 - (not yet) demo photographers, packages and albums from `frontend/src/data/mock.js`. These need real accounts, so they are best created by signing up test users once the app has sign-in.
 

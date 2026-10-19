@@ -6,7 +6,7 @@
 //   cd frontend
 //   node scripts/e2e/run.mjs                  # everything
 //   node scripts/e2e/run.mjs --dry-run        # anon checks for real + the plan (no sign-in)
-//   node scripts/e2e/run.mjs --only messaging,events
+//   node scripts/e2e/run.mjs --only messaging,rls
 //   node scripts/e2e/run.mjs --keep           # leave the [e2e] data in place
 //   node scripts/e2e/run.mjs --pause-for-payment   # also test deliver / complete / reviews
 import { writeFileSync } from 'node:fs'
@@ -21,12 +21,10 @@ import preflight from './sections/preflight.mjs'
 import { discover, social } from './sections/social.mjs'
 import { capacity, lifecycle, pricing } from './sections/bookings.mjs'
 import { messaging, sharing } from './sections/messaging.mjs'
-import events from './sections/events.mjs'
-import { listing, posting } from './sections/posting.mjs'
-import planner from './sections/planner.mjs'
+import { posting } from './sections/posting.mjs'
 import rls from './sections/rls.mjs'
 
-export const SECTIONS = [anon, preflight, social, discover, pricing, lifecycle, capacity, messaging, sharing, events, posting, listing, planner, rls]
+export const SECTIONS = [anon, preflight, social, discover, pricing, lifecycle, capacity, messaging, sharing, posting, rls]
 const REPORT_PATH = resolve(E2E_DIR, 'last-report.json')
 const SQL_PATH = resolve(E2E_DIR, 'last-cleanup.sql')
 
@@ -188,7 +186,7 @@ async function main() {
     else log.info(`Cleanup: ${cleanupResults.length - cleanupFailed.length}/${cleanupResults.length} tasks ok.`)
     if (cleanup.hasLeftovers()) {
       const n = Object.values(cleanup.leftovers).reduce((s, v) => s + v.size, 0)
-      log.info(`${n} [e2e] row(s) the API can't delete (cancelled bookings, chat messages, the hidden 2nd listing) are listed in`)
+      log.info(`${n} [e2e] row(s) the API can't delete (cancelled bookings, chat messages) are listed in`)
       log.info('frontend/scripts/e2e/last-cleanup.sql: paste it into the Supabase SQL editor to remove them (optional).')
     }
   }

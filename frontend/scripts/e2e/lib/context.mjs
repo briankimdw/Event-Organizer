@@ -6,12 +6,11 @@ import { findUser, maskEmail } from './env.mjs'
 
 // Which test user plays which part. All are throwaway logins from docs/test-users.json.
 export const ROLES = {
-  clientA: { username: 'jordanlee', why: 'client: books, follows, swipes, owns the [e2e] event and chats' },
-  clientB: { username: 'taylorb', why: 'second client: DMs, co-planner, competing booking' },
+  clientA: { username: 'jordanlee', why: 'client: books, follows, swipes, chats' },
+  clientB: { username: 'taylorb', why: 'second client: DMs, groups, competing booking' },
   outsider: { username: 'kai.film', why: 'client who must NOT see anyone else\'s data (RLS)' },
-  photographer: { username: 'mayachen', why: 'identity-verified photographer (capacity 1): answers requests' },
+  photographer: { username: 'mayachen', why: 'identity-verified photographer (capacity 1): answers requests, posts' },
   unverified: { username: 'sofia.wild', why: 'photographer without identity verification: can\'t accept' },
-  caterer: { username: 'goldenspoon', why: 'caterer (capacity > 1): posts, second listing, capacity test' },
 }
 
 /** A short id for this run, used in every [e2e] tag: base36 time + 2 random chars. */

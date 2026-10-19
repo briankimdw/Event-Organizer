@@ -1,55 +1,33 @@
 // Create the fake test users from docs/test-users.json in your Supabase project.
 //
 //   cd frontend
-//   node scripts/seed-test-users.mjs                 # accounts + profiles + photographer and vendor listings
+//   node scripts/seed-test-users.mjs                 # accounts + profiles + Photo & video listings
 //   node scripts/seed-test-users.mjs --with-photos   # ...plus sample albums for each photographer
 //
-// Vendors (caterers, venues, DJs...) get a listing in their `vertical` (a slug from
-// src/verticals/catalog.js). Their packages, location, capacity and reviews come
-// from supabase/demo/demo_data.sql, which you run afterwards.
+// Photographers (including the two photo & video creators, Ana Torres Films and
+// Northbound Media) get a listing in the Photo & video vertical (slug `photography`);
+// clients get an account only. Packages, locations and reviews come from
+// supabase/demo/demo_data.sql, which you run afterwards. (A "vendors" list with a
+// `vertical` per person still works, for when other verticals come back; see
+// archive/event-platform/README.md.)
 //
 // Needs the SERVER-ONLY service role key, read from SUPABASE_SERVICE_ROLE_KEY in the
 // environment or from services/ml/.env. It is never printed. Safe to run more than
 // once: anything that already exists is skipped.
 import { readFileSync, existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
-import { createClient } from '@supabase/supabase-js'
+import { resolve } from 'node:path'
+import { ROOT as root, adminClient, must } from './lib/admin.mjs'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const withPhotos = process.argv.includes('--with-photos')
 
-// ---- config -----------------------------------------------------------------
-const fileEnv = (path) =>
-  existsSync(path)
-    ? Object.fromEntries(
-        readFileSync(path, 'utf8')
-          .split(/\r?\n/)
-          .filter((l) => /^[A-Z_]+=/.test(l))
-          .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]),
-      )
-    : {}
-const mlEnv = fileEnv(resolve(root, 'services/ml/.env'))
-const frontEnv = fileEnv(resolve(root, 'frontend/.env.local'))
-const url = process.env.SUPABASE_URL || mlEnv.SUPABASE_URL || frontEnv.VITE_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || mlEnv.SUPABASE_SERVICE_ROLE_KEY
-if (!url || !serviceKey) {
-  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY (put them in services/ml/.env; see .env.example).')
-  process.exit(1)
-}
 const dataPath = resolve(root, 'docs/test-users.json')
 if (!existsSync(dataPath)) {
   console.error('Missing docs/test-users.json')
   process.exit(1)
 }
 const data = JSON.parse(readFileSync(dataPath, 'utf8'))
-const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
-
-const must = ({ data: d, error }) => {
-  if (error) throw error
-  return d
-}
+const db = adminClient()
 
 // ---- users ------------------------------------------------------------------
 async function findUserByEmail(email) {
@@ -86,7 +64,7 @@ async function ensureUser(person) {
   return { user, isNew }
 }
 
-// ---- provider listings (photographers + vendors) ----------------------------
+// ---- provider listings -------------------------------------------------------
 let refs
 async function loadRefs() {
   const cats = must(await db.from('service_categories').select('id, slug, kind'))
@@ -101,7 +79,7 @@ async function loadRefs() {
 async function ensureProvider(person, userId) {
   const vertical = person.vertical || 'photography'
   if (!refs.verticals.has(vertical)) {
-    throw new Error(`Unknown vertical "${vertical}" for ${person.username}: run supabase/seed.sql (or demo/all_verticals_setup.sql) first.`)
+    throw new Error(`Unknown vertical "${vertical}" for ${person.username}: run supabase/seed.sql first.`)
   }
   const existing = must(await db.from('providers').select('id')
     .eq('profile_id', userId).eq('vertical_id', refs.cat[vertical]).maybeSingle())
@@ -177,7 +155,7 @@ for (const person of data.photographers) {
   stats[isNew ? 'created' : 'existing']++
   const provider = await ensureProvider(person, user.id)
   if (provider.isNew) stats.providers++
-  let line = `${isNew ? '+' : '='} ${person.name.padEnd(14)} photographer${provider.isNew ? ' (listing created)' : ''}`
+  let line = `${isNew ? '+' : '='} ${person.name.padEnd(14)} ${person.business ? `photo & video: ${person.business}` : 'photographer'}${provider.isNew ? ' (listing created)' : ''}`
   if (withPhotos) {
     for (const plan of person.albums || []) {
       const added = await ensureAlbum(person, user.id, provider.id, plan)

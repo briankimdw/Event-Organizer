@@ -47,8 +47,8 @@ def test_black_and_white_detection():
     assert siglip.to_pgvector([0.5, -0.25]) == "[0.500000,-0.250000]"
 
 
-def test_event_vertical_tags():
-    """Content tags for the event verticals live in their own group with a neutral option."""
+def test_event_scene_tags():
+    """Event scenes and details (food, florals, dance floor...) live in their own group with a neutral option."""
     limit, minimum, tags = TAG_GROUPS["event"]
     assert limit == 1 and "_other" in tags
     for tag in ("plated dish", "buffet", "cake", "cocktails", "floral arrangement", "table setting",

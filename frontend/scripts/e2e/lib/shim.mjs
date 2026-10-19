@@ -1,7 +1,7 @@
 // Make the browser-flavoured app modules importable from Node:
 //   - module hooks (hooks.mjs): import.meta.env + the per-user Supabase client
 //   - tiny stand-ins for browser globals the API files touch: localStorage /
-//     sessionStorage (events.js remembers planner briefs), location (planner.js),
+//     sessionStorage, location,
 //     XMLHttpRequest (portfolio.js uploads with XHR for progress; here it's fetch).
 import module from 'node:module'
 import { loadHook, resolveHook } from './hooks.mjs'
@@ -75,19 +75,16 @@ export function installShim(env) {
 
 /** Import the app's data layer (after installShim). */
 export async function loadApp() {
-  const [shim, catalog, bookings, discover, social, messages, events, portfolio, provider, planner, format] = await Promise.all([
+  const [shim, catalog, bookings, discover, social, messages, portfolio, provider, format] = await Promise.all([
     import('./supabase-shim.mjs'),
     import('../../../src/api/catalog.js'),
     import('../../../src/api/bookings.js'),
     import('../../../src/api/discover.js'),
     import('../../../src/api/social.js'),
     import('../../../src/api/messages.js'),
-    import('../../../src/api/events.js'),
     import('../../../src/api/portfolio.js'),
     import('../../../src/api/provider.js'),
-    import('../../../src/api/planner.js'),
     import('../../../src/lib/format.js'),
   ])
-  const verticals = await import('../../../src/verticals/index.js')
-  return { shim, catalog, bookings, discover, social, messages, events, portfolio, provider, planner, format, verticals }
+  return { shim, catalog, bookings, discover, social, messages, portfolio, provider, format }
 }

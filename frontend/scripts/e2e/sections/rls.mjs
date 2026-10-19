@@ -1,7 +1,8 @@
 // Row-Level Security, from a signed-in client who has no business seeing the
-// others' data. Builds its own small fixtures (a booking, a DM, an event) as client A.
+// others' data. Builds its own small fixtures (a booking and a DM) as client A.
+// The events table stays in the schema (empty since the photography-only pivot), so
+// the outsider still must not be able to read or create rows in it.
 import { assert, eq, expectError } from '../lib/harness.mjs'
-import { pickQuantity } from '../lib/pricing.mjs'
 
 const rows = async (q) => {
   const { data, error } = await q
@@ -15,23 +16,19 @@ export default {
   roles: ['clientA', 'clientB', 'outsider', 'photographer'],
   steps: [
     {
-      name: 'fixtures: a booking, a DM and an event (client A)',
+      name: 'fixtures: a booking and a DM (client A)',
       run: async (ctx) => {
         const { app, state } = ctx
-        const pkg = state.catererListing.packages.find((k) => k.priceType === 'per_person' && k.price != null)
-        const { rows: booked } = await ctx.book('clientA', { packageId: pkg.id, quantity: pickQuantity(pkg) }, { label: 'rls fixture' })
+        const hit = await ctx.findPackage('fixed', { exclude: [state.photographerListing.id, state.unverifiedListing.id] })
+        assert(hit, 'no fixed-price package on another test photographer')
+        const { rows: booked } = await ctx.book('clientA', { packageId: hit.pkg.id }, { label: 'rls fixture' })
         const b = await ctx.as('clientB')
         const a = await ctx.as('clientA')
         const dm = await app.messages.startDirectMessage(b.uid)
         const m = await app.messages.sendMessage(dm, { text: ctx.tag('private note') })
         ctx.cleanup.leave('messages', m.id)
-        const ev = await app.events.createEventFromForm({ title: ctx.tag('private event'), type: 'wedding', date: ctx.dates.next(), budget: 20000, guestCount: 120 })
-        ctx.cleanup.add('events', `delete event ${ev.id.slice(0, 8)}`, async () => {
-          await ctx.as('clientA')
-          await app.events.deleteEvent(ev.id)
-        })
-        state.rls = { booking: booked[0].id, dm, message: m.id, event: ev.id, eventChat: ev.conversationId, a: a.uid }
-        return `booking ${booked[0].id.slice(0, 8)}, DM ${dm.slice(0, 8)}, event ${ev.id.slice(0, 8)}`
+        state.rls = { booking: booked[0].id, provider: hit.provider.id, dm, message: m.id, a: a.uid }
+        return `booking ${booked[0].id.slice(0, 8)} with ${hit.provider.slug}, DM ${dm.slice(0, 8)}`
       },
     },
     {
@@ -79,21 +76,16 @@ export default {
       },
     },
     {
-      name: 'outsider can\'t read or edit the event',
+      name: 'outsider can\'t read or create events',
       soft: true,
       run: async (ctx) => {
-        const { app, state } = ctx
         const o = await ctx.as('outsider')
-        eq((await rows(o.client.from('events').select('id').eq('id', state.rls.event))).n, 0, 'events rows')
-        eq((await rows(o.client.from('event_members').select('profile_id').eq('event_id', state.rls.event))).n, 0, 'event_members rows')
-        eq((await rows(o.client.from('messages').select('id').eq('conversation_id', state.rls.eventChat))).n, 0, 'event chat rows')
-        const { data } = await o.client.from('events').update({ title: 'hacked' }).eq('id', state.rls.event).select('id')
-        eq(data?.length ?? 0, 0, 'events the outsider could update')
-        const { error } = await o.client.from('event_members').insert({ event_id: state.rls.event, profile_id: o.uid, role: 'co_planner' })
-        assert(error, 'outsider added themselves as a co-planner')
-        await ctx.as('clientA')
-        eq((await app.events.getEvent(state.rls.event)).title, ctx.tag('private event'), 'title after the outsider\'s update')
-        return 'read, update and self-invite refused'
+        const { data, error } = await o.client.from('events').select('id').eq('owner_id', ctx.state.rls.a).limit(5)
+        if (error && !/does not exist|could not find/i.test(error.message)) throw error
+        eq(data?.length ?? 0, 0, "client A's events visible to the outsider")
+        const ins = await o.client.from('events').insert({ owner_id: ctx.state.rls.a, title: ctx.tag('forged event') }).select('id')
+        assert(ins.error, 'outsider created an event for someone else')
+        return 'nothing visible; creating one for someone else refused'
       },
     },
     {
@@ -130,7 +122,7 @@ export default {
           for (const r of ins.data || []) undoAsA('remove stray swipe', (a) => a.client.from('swipes').delete().eq('id', r.id))
         }
         // The fixture booking isn't completed, so even a successful insert would be an [e2e] row that the leftover SQL removes.
-        const rv = await o.client.from('reviews').insert({ booking_id: state.rls.booking, provider_id: state.catererListing.id, author_id: o.uid, subject_profile_id: state.rls.a, direction: 'client_to_provider', rating: 1, body: ctx.tag('forged review') })
+        const rv = await o.client.from('reviews').insert({ booking_id: state.rls.booking, provider_id: state.rls.provider, author_id: o.uid, subject_profile_id: state.rls.a, direction: 'client_to_provider', rating: 1, body: ctx.tag('forged review') })
         if (!rv.error) problems.push('inserted a review directly')
         const following = await rows(anon.from('follows').select('provider_id').eq('follower_id', state.rls.a).eq('provider_id', ph.id))
         if (!following.n) {
@@ -153,7 +145,7 @@ export default {
       },
     },
     {
-      name: 'tidy: cancel the fixture booking, delete the event',
+      name: 'tidy: cancel the fixture booking',
       always: true,
       run: async (ctx) => {
         const { app, state } = ctx
@@ -161,7 +153,6 @@ export default {
         await ctx.as('clientA')
         const b = await app.bookings.getBooking(state.rls.booking)
         if (b?.isActive) await app.bookings.cancelBooking(state.rls.booking)
-        await app.events.deleteEvent(state.rls.event)
         return 'done'
       },
     },

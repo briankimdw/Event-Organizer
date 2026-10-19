@@ -2,7 +2,7 @@
 
 Where the project stands, what was decided, and what's next. Update this file at the end of each work session.
 
-**Last updated:** 2026-10-11
+**Last updated:** 2026-10-18
 
 ---
 
@@ -16,7 +16,28 @@ Where the project stands, what was decided, and what's next. Update this file at
 | Discover ML (SigLIP) | All 70 test photos analysed. Discover uses `discover_feed()`; "% match" uses `provider_matches()`. |
 | Payments (Stripe) | Not started |
 | Mobile app (Expo / React Native) | **`mobile/`**: Expo SDK 57 + expo-router, every screen ported. It imports `frontend/src/{api,lib,verticals}` directly through Metro (see `mobile/README.md`). Type-checks and bundles; not yet tried on a real phone. |
-| Service verticals | **18 verticals and 10 occasions** in `frontend/src/verticals/catalog.js` (the shared source of truth). Plan: `docs/EVENT_PLATFORM_PLAN.md`; how to add one: `docs/VERTICALS.md`. The DB changes are written but **not applied yet** (see below). |
+| Verticals | **Photography only** since 2026-10-18: one vertical, "Photo & video" (photographers and videographers). The 17 other verticals, events with friends, the AI planner, occasions and post credits are archived in `archive/event-platform/` (git tag `multi-vendor-snapshot`). The hosted DB still needs the cleanup: `docs/PHOTOGRAPHY_ONLY_RUNBOOK.md`. |
+
+---
+
+## 2026-10-18: back to photography only ("Photo & video")
+
+**Decision (Brian):** the product is a photography marketplace again. Photographers and videographers are one vertical, **"Photo & video"** (slug `photography`): a creator can sell photo and/or video work. The rest of the event platform is archived, not deleted: `archive/event-platform/README.md` lists what's there and how to restore a piece; the tag `multi-vendor-snapshot` (commit c7028db) has the whole previous state.
+
+- **Archived:** 17 other verticals, events with friends (event chats, hiring board, votes), the AI event planner (`services/ml/app/planner/`, `POST /plan`), occasions + service browse pages, post credits, vendor cards in Discover. Web and mobile code went to `archive/event-platform/{frontend,mobile}/` (photo-web / photo-mobile).
+- **Database:** migration `20261018000000_photography_only.sql` (paste-ready `supabase/demo/photography_only_setup.sql`):
+  - merges videography into photography (merged JSON Schemas with the video fields, the 5 video services under photography, the 2 video listings moved);
+  - drops `album_credits`, `event_candidates`, `event_candidate_votes`, the events-with-friends functions and triggers, and `discover_vendors()` with its helpers;
+  - deletes the other verticals' data, every event and the occasion tags;
+  - keeps the core schema multi-vertical (categories + schemas, price types, capacity, quantities, share cards, the Discover feed) and the now-empty `events` / `event_members` tables. Details: `docs/DATABASE.md` section 0.
+  - It refuses to delete anything until the backup is confirmed in the setup file's first line.
+- **Scripts (user runs them, service role key from `services/ml/.env`):** `frontend/scripts/backup-nonphoto.mjs` (every row the cleanup deletes + their Storage files → `archive/event-platform/data-backup/<timestamp>/`, git-ignored; `--dry-run`, `--no-files`) and `frontend/scripts/delete-nonphoto-users.mjs` (the 32 vendor test accounts + their files; `--dry-run`). Shared helper: `frontend/scripts/lib/admin.mjs`.
+- **Seeds:** `supabase/seed.sql` is Photo & video only (14 services); `demo_data.sql` / `remove_demo_data.sql` cover the 7 photographers + the 2 photo & video creators (Ana Torres Films, Northbound Media). `docs/test-users.json` lists 9 photographers + 5 clients; the 32 vendors are in `archive/event-platform/docs/test-users-vendors.json` without passwords.
+- **ML service:** SigLIP embedding, tagging, worker, eval and the feed stay; the planner, its tests, the `/plan` routes, CORS, the `PLANNER_*` settings and the `anthropic` dependency moved to `archive/event-platform/services/ml-planner/`. `pytest`: 16 passed.
+- **E2E:** events, planner, the caterer (capacity, per-person pricing), posting with occasions/credits and the second listing were archived; posting now runs as the photographer. `node --test scripts/e2e/test/helpers.test.mjs` 29/29; `node scripts/e2e/run.mjs --dry-run` 18/18 against the live DB (works before and after the cleanup).
+- **Tested offline (PGlite):** the full migration chain + old seed + old 46 users + old demo data + fixtures for every archived feature. The migration refuses without the backup flag, runs, and re-runs with no change. Photography data is intact (9 listings, 20 packages, 24 bookings, 28 reviews, posts and ratings) and every non-photo row is gone. The backup script's output contains every deleted or changed row. Deleting the 32 accounts afterwards cascades cleanly. Smoke, messaging, feed, matches and share-card tests pass, also on a fresh database.
+- **To do (Brian), in order:** `docs/PHOTOGRAPHY_ONLY_RUNBOOK.md`: backup → paste the setup file → delete the vendor accounts → (optional) re-seed → e2e.
+- `docs/EVENT_PLATFORM_PLAN.md` and `docs/VERTICALS.md` moved to `archive/event-platform/docs/`. The entries below are history: files they mention may now be in the archive.
 
 ---
 

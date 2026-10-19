@@ -74,8 +74,9 @@ TAG_GROUPS: dict[str, tuple[int, float, dict[str, str]]] = {
         "animals": "a photo of an animal",
         "flowers": "a photo of flowers",
     }),
-    # What the event verticals post (catering, bakery, bar, florist, decor, venues,
-    # DJs, musicians, kids' entertainment). "_other" soaks up everything else.
+    # Event scenes and details that wedding and event photographers shoot (food and
+    # cake, drinks, florals, table settings, the venue, the dance floor, the band,
+    # kids' parties, the ceremony). "_other" soaks up everything else.
     "event": (1, 0.7, {
         "plated dish": "a photo of a plated restaurant dish",
         "buffet": "a photo of a catering buffet table",

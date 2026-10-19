@@ -1,5 +1,7 @@
 # UI sweep: overflow, clipping, overlap and wrapping
 
+> **Note (2026-10-18):** this is a record of a run before the photography-only pivot. Checks for the archived features (other verticals, events with friends, the AI planner, occasions, post credits) no longer apply; see `archive/event-platform/README.md`.
+
 Run: 2026-10-11 (ui-sweep). This is the last layout check before release. It looks for anything that runs off the page, gets clipped, overlaps something else, or wraps badly, on every route and every sheet, menu and dialog. It builds on the earlier audits in `docs/QA_CHECKLIST.md` and `mobile/QA_CHECKLIST.md`.
 
 ## How it was tested

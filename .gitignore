@@ -9,3 +9,6 @@ specs/
 # e2e test output (frontend/scripts/e2e)
 frontend/scripts/e2e/last-report.json
 frontend/scripts/e2e/last-cleanup.sql
+
+# Backups of the archived event-platform data (frontend/scripts/backup-nonphoto.mjs): real user data, never commit
+archive/event-platform/data-backup/

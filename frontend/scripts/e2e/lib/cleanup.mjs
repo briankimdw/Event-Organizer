@@ -4,6 +4,9 @@
 //   bookings (cancel)  ->  events (delete; chats + board cascade)  ->  chats (leave groups)
 //   ->  content (posts + storage, packages)  ->  social (follows, shortlist, swipes)  ->  listing (hide)
 //
+// (No section uses the events and listing phases since the photography-only pivot; they
+// stay for the archived sections in archive/event-platform/scripts/e2e/.)
+//
 // Within a phase, the newest task runs first (like unwinding a stack).
 //
 // Some rows can't be deleted through the API at all (Row-Level Security has no

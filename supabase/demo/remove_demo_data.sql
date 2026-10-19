@@ -1,25 +1,17 @@
 -- Undo supabase/demo/demo_data.sql: removes the demo bookings (with their
 -- reviews, chats, history), packages, add-ons, working hours, blocked days,
--- follows and shortlist entries of the test users (photographers, vendors and
--- clients) + Brian's demo bookings.
+-- follows and shortlist entries of the test users (photographers, the two photo &
+-- video creators and the clients) + Brian's demo bookings.
 -- Run this before deleting the test users (bookings block deleting a user).
 -- Albums, photos, the accounts and their listings themselves are left alone.
--- The vendors' demo posts (Creative Commons photos) come from
--- frontend/scripts/seed-vendor-photos.mjs; remove those with
--- `node scripts/seed-vendor-photos.mjs --remove`, which also deletes their Storage
--- files (SQL can't), before deleting the vendor accounts.
+-- (The other verticals' version is archived in
+-- archive/event-platform/supabase/demo/remove_demo_data_all_verticals.sql.)
 
 with people as (
   select id from public.profiles
   where username::text in ('mayachen', 'jonahshoots', 'priya.frames', 'leo.spaces', 'sofia.wild', 'diego.alvarez',
-                           'hanakim.studio', 'jordanlee', 'sampatel', 'rosa.d', 'kai.film', 'taylorb',
-                           -- vendors (every other vertical)
-                           'ana.films', 'northbound.media', 'glasshouse.dtla', 'rancholasflores', 'goldenspoon',
-                           'seoulfood.truck', 'chef.julien', 'chef.priyanka', 'sugarbloom', 'crumbclub', 'shakenstirred',
-                           'beanthere.cart', 'djnova', 'velvetstrings', 'snaphappy.booth', 'marvelous.max', 'wildflower.co',
-                           'stemstudio', 'popparty', 'lumen.design', 'glowbymina', 'studio.rizos', 'socalrentals',
-                           'amplify.av', 'everly.events', 'agenda.collective', 'rev.sam', 'lena.celebrant', 'starline.limo',
-                           'coastclassics', 'servicepros', 'parkright.valet', 'kneadedbliss', 'sunriseflow')
+                           'hanakim.studio', 'ana.films', 'northbound.media',
+                           'jordanlee', 'sampatel', 'rosa.d', 'kai.film', 'taylorb')
 ),
 listings as (
   select id from public.providers where profile_id in (select id from people)

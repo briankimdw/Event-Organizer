@@ -1,8 +1,12 @@
 // Signed-out browsing, through the app's own data layer. Read-only: runs in --dry-run too.
-import { assert, eq, errorText, expectError, skip } from '../lib/harness.mjs'
+// Works before and after the photography-only cleanup (archived verticals still in the
+// database are reported, not failed).
+import { assert, eq, expectError, skip } from '../lib/harness.mjs'
 import { projectRef } from '../lib/env.mjs'
 import { addDays, toKey, today } from '../../../src/lib/dates.js'
 
+// Before the cleanup, the video listings still sit in 'videography'; the app treats both as Photo & video.
+const isPhoto = (slug) => slug === 'photography' || slug === 'videography'
 const soon = (n) => Array.from({ length: n }, (_, i) => toKey(addDays(today(), 40 + i)))
 
 export default {
@@ -16,39 +20,38 @@ export default {
       run: (ctx) => `project ${projectRef(ctx.env.VITE_SUPABASE_URL)}, ${ctx.users.length} test users, run tag "${ctx.tag('').trim()}"`,
     },
     {
-      name: 'getCategories: every catalog vertical is live',
+      name: 'getCategories: Photo & video is live',
       soft: true,
-      run: async ({ app, anon }) => {
-        anon()
-        const cats = await app.catalog.getCategories()
-        const fromCatalog = cats.filter((c) => app.verticals.VERTICALS.some((v) => v.slug === c.slug))
-        const notLive = fromCatalog.filter((c) => !c.live).map((c) => c.slug)
-        assert(!notLive.length, `not in the database yet: ${notLive.join(', ')}`)
-        const services = fromCatalog.reduce((n, c) => n + c.services.filter((s) => s.live).length, 0)
-        return `${fromCatalog.length} verticals, ${services} live services`
+      run: async (ctx) => {
+        ctx.anon()
+        const cats = await ctx.app.catalog.getCategories()
+        const photo = cats.find((c) => c.slug === 'photography')
+        assert(photo && photo.live !== false, 'the photography vertical is not in the database (run supabase/seed.sql)')
+        const live = (photo.services || []).filter((s) => s.live !== false).map((s) => s.slug)
+        assert(live.includes('wedding'), `photography services: ${live.join(', ') || 'none'}`)
+        // (Until photography_only_setup.sql runs, the video services still sit under 'videography'
+        // in the database; the app matches them by slug, so they count here either way.)
+        const video = ['wedding-film', 'event-recap', 'social-reels', 'music-video', 'drone'].filter((x) => live.includes(x))
+        return `"${photo.name}": ${live.length} live services${video.length ? ` (video: ${video.join(', ')})` : ' (no video services yet)'}`
       },
     },
     {
-      name: 'listProviders per vertical',
+      name: 'listProviders: photo & video listings',
       run: async (ctx) => {
         ctx.anon()
-        const { catalog, verticals } = ctx.app
+        const { catalog } = ctx.app
         const all = await catalog.listProviders()
         assert(all.length > 0, 'no active providers (run the seed + demo data)')
-        const counts = {}
-        for (const v of verticals.VERTICALS) {
-          const list = await catalog.listProviders({ vertical: v.slug })
-          assert(list.every((p) => p.vertical === v.slug), `listProviders({vertical:'${v.slug}'}) returned another vertical`)
-          counts[v.slug] = list.length
-        }
-        const empty = Object.entries(counts).filter(([, n]) => !n).map(([s]) => s)
-        assert(!empty.length, `no providers in: ${empty.join(', ')}`)
+        const photo = await catalog.listProviders({ vertical: 'photography' })
+        assert(photo.length > 0, 'no photography listings')
+        assert(photo.every((p) => isPhoto(p.vertical)), "listProviders({vertical:'photography'}) returned another vertical")
         for (const p of all) {
-          assert(p.id && p.name && p.verticalInfo?.name, `provider ${p.id} is missing basics`)
+          assert(p.id && p.name, `provider ${p.id} is missing basics`)
           assert(Array.isArray(p.packages), `provider ${p.slug} has no packages array`)
         }
         ctx.state.anonProviders = all
-        return `${all.length} providers: ${Object.entries(counts).map(([s, n]) => `${s} ${n}`).join(', ')}`
+        const others = all.filter((p) => !isPhoto(p.vertical)).length
+        return `${photo.length} photo & video listings${others ? `, ${others} in archived verticals (cleanup not run yet)` : ''}`
       },
     },
     {
@@ -58,9 +61,9 @@ export default {
         anon()
         const counts = await app.catalog.countProvidersByVertical()
         const expected = {}
-        for (const p of state.anonProviders) expected[p.vertical] = (expected[p.vertical] || 0) + 1
-        for (const [slug, n] of Object.entries(expected)) eq(counts[slug], n, `count for ${slug}`)
-        return `${Object.keys(counts).length} verticals counted`
+        for (const p of state.anonProviders) if (isPhoto(p.vertical)) expected.photography = (expected.photography || 0) + 1
+        eq(counts.photography, expected.photography, 'count for photography')
+        return `${counts.photography} photo & video listings`
       },
     },
     {
@@ -72,7 +75,7 @@ export default {
         const found = await app.catalog.searchProviders({ dates, vertical: 'photography' })
         assert(found.length > 0, 'nobody free on any of 3 days, 40+ days out')
         for (const p of found) {
-          eq(p.vertical, 'photography', `${p.slug} vertical`)
+          assert(isPhoto(p.vertical), `${p.slug} vertical ${p.vertical}`)
           assert(p.freeDates.length > 0 && p.freeDates.every((d) => dates.includes(d)), `${p.slug} freeDates ${p.freeDates} not within ${dates}`)
         }
         return `${found.length} free on ${dates[0]}..${dates[2]}`
@@ -90,19 +93,19 @@ export default {
       },
     },
     {
-      name: 'search_providers: catering + dates + max price',
+      name: 'search_providers: photography + dates + max price',
       soft: true,
       run: async ({ app, anon }) => {
         anon()
-        const maxPrice = 100
-        const found = await app.catalog.searchProviders({ vertical: 'catering', dates: soon(2), maxPrice })
+        const maxPrice = 500
+        const found = await app.catalog.searchProviders({ vertical: 'photography', dates: soon(2), maxPrice })
         for (const p of found) {
-          eq(p.vertical, 'catering', `${p.slug} vertical`)
+          assert(isPhoto(p.vertical), `${p.slug} vertical ${p.vertical}`)
           assert(p.startingPrice != null && p.startingPrice <= maxPrice, `${p.slug} starts at ${p.startingPrice} > ${maxPrice}`)
         }
-        const unfiltered = await app.catalog.searchProviders({ vertical: 'catering' })
+        const unfiltered = await app.catalog.searchProviders({ vertical: 'photography' })
         assert(unfiltered.length >= found.length, 'price filter returned more than no filter')
-        return `${found.length} of ${unfiltered.length} caterers free and from <= $${maxPrice}`
+        return `${found.length} of ${unfiltered.length} free and from <= $${maxPrice}`
       },
     },
     {
@@ -134,7 +137,7 @@ export default {
       },
     },
     {
-      name: 'albums + credits readable (listAlbums)',
+      name: 'albums readable (listAlbums)',
       soft: true,
       run: async ({ app, state, anon }) => {
         anon()
@@ -142,7 +145,6 @@ export default {
         if (!p) skip('no provider has albums (seed with --with-photos)')
         const rows = await app.portfolio.listAlbums(p.id)
         assert(rows.length > 0, 'listAlbums returned nothing')
-        assert(rows.every((r) => Array.isArray(r.credits)), 'albums without a credits array')
         const viewer = app.portfolio.toViewerAlbum(rows[0])
         assert(viewer.photos.length > 0 && /^https?:/.test(viewer.photos[0].src), 'viewer album has no photo URL')
         return `${p.name}: ${rows.length} albums`
@@ -189,15 +191,6 @@ export default {
         const mine = await app.bookings.listMyBookings()
         eq(mine.length, 0, 'listMyBookings while signed out')
         return `${tables.length} private tables empty; booking RPC refused`
-      },
-    },
-    {
-      name: 'planner service reachable (no sign-in)',
-      soft: true,
-      run: async ({ app }) => {
-        const health = await app.planner.plannerHealth().catch((e) => ({ error: errorText(e) }))
-        if (!health) skip(`not running at ${app.planner.ML_URL} (the planner section will be skipped)`)
-        return `${app.planner.ML_URL}/plan/health: ${JSON.stringify(health)}`
       },
     },
   ],
