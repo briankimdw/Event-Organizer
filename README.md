@@ -13,7 +13,7 @@ The main rule across all the docs still holds: **the booking core is category-ag
 | `frontend/` | React web app, every screen reads from Supabase ([`docs/FRONTEND_DATA.md`](docs/FRONTEND_DATA.md)) |
 | `mobile/` | Expo app sharing the web app's data layer ([`mobile/README.md`](mobile/README.md)) |
 | Database + auth | Supabase set up and tested (`supabase/`, design in [`docs/DATABASE.md`](docs/DATABASE.md)). Switching the hosted project to photography only: [`docs/PHOTOGRAPHY_ONLY_RUNBOOK.md`](docs/PHOTOGRAPHY_ONLY_RUNBOOK.md) |
-| `services/ml/` | SigLIP embeddings + auto-tags for the Discover feed ([`services/ml/README.md`](services/ml/README.md)) |
+| `services/ml/` | SigLIP embeddings + auto-tags for the Discover feed, and the AI photo tools for the editor ([`services/ml/README.md`](services/ml/README.md), API: [`docs/AI_TOOLS.md`](docs/AI_TOOLS.md)) |
 | Docs | Two design docs, not yet reconciled (see below). Session-by-session status: [`docs/PROGRESS.md`](docs/PROGRESS.md) |
 
 ## Docs
@@ -37,15 +37,15 @@ The main rule across all the docs still holds: **the booking core is category-ag
 
 Both docs agree on Stripe Connect with funds held until delivery, ID verification through Stripe Identity (separate from the paid Pro tier), reviews only after a completed booking, AI-image flagging with RAW-file review, a swappable recommender with exploration and corrections, and an AI planner that can never pay or book on its own.
 
-## Frontend prototype
+## Web app
 
-`frontend/` is a Vite + React (JavaScript) app for visualizing the product. Everything runs on mock data in `src/data/mock.js`. It shows a phone frame on desktop and fills the screen on a phone.
+`frontend/` is a Vite + React (JavaScript) app. Every screen reads from and writes to Supabase (data layer: [`docs/FRONTEND_DATA.md`](docs/FRONTEND_DATA.md)). It shows a phone frame on desktop and fills the screen on a phone.
 
 ```bash
 cd frontend
-npm install
-npm run dev            # http://localhost:5173
-npm run dev -- --host  # also reachable from a phone on the same Wi-Fi
+cp .env.example .env.local   # then fill in the Supabase URL and publishable key
+bash ./start                 # npm install when needed, then http://localhost:5173
+bash ./start --host          # also reachable from a phone on the same Wi-Fi
 ```
 
 What it covers:
@@ -55,24 +55,15 @@ What it covers:
 - **Search:** filters (date, price, rating, Verified Pro), sorted by taste match, with list and map views.
 - **Provider profile:** badges, availability, packages, gear, reviews, cancellation policy, "Ask a question".
 - **Booking:** request flow (package, date, add-ons, travel fee, deposit), status timeline, deposit payment, counter offers, cancellation refunds, disputes.
-- **After the shoot:** delivery gallery (favorites, zip download, cloud export) and double-blind reviews.
+- **After the shoot:** delivery screen (for now the full gallery is shared through a link in the booking chat) and double-blind reviews.
 - **Inbox:** booking threads, inquiries and group chats.
 - **Me:** client view (rating, saved items, settings) and provider view (identity verification, payouts, incoming requests, calendar, packages, portfolio upload with EXIF and AI-review flow).
 
-Booking detail pages have a dashed **"Prototype · simulate the other side"** box, so one person can walk through both sides of a booking. It's a demo aid, not a product feature.
+Test accounts and demo data: [`docs/test-users.md`](docs/test-users.md). End-to-end checks against the real database: [`frontend/scripts/e2e/README.md`](frontend/scripts/e2e/README.md).
 
-The prototype follows `docs/PLAN.md`'s booking states. It isn't wired to any API and isn't meant to be the production frontend as-is.
+## Backend
 
-## Backend (planned)
-
-Nothing is built yet, and the shape depends on the open decisions above. If it starts as a single FastAPI app before splitting into services, the local setup would look like:
-
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
-uvicorn app.main:app --reload --port 8000
-```
+`backend/` is a FastAPI app (port 8001; the ML service uses 8000) used for booking gallery uploads, with its own sign-in checks ([`backend/AUTH.md`](backend/AUTH.md)). Start it with `bash backend/start` (it needs `backend/.env` with `SUPABASE_URL` and `SUPABASE_KEY`). The wider service split in `architecture.md` is still an open decision (see above).
 
 ## Working in this repo
 

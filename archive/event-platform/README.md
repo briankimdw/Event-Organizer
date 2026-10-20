@@ -32,7 +32,7 @@ to see or run the old app; use this folder to find pieces quickly.
 | `supabase/demo/` | `all_verticals_setup.sql`, `sharing_events_credits_setup.sql` (paste-ready setup files), `demo_data_all_verticals.sql`, `remove_demo_data_all_verticals.sql` | `supabase/demo/` |
 | `supabase/tests/` | `verticals_test.sql`, `event_groups_test.sql`, `discover_vendors_test.sql` | `supabase/tests/` |
 | `scripts/` | `seed-vendor-photos.mjs` + `vendor-photos.json` (77 CC-licensed demo posts for the vendors); `e2e/` the e2e sections for events, the planner, the caterer (capacity, per-person pricing, posting with occasions and credits, a second listing) and the old README / roles | `frontend/scripts/` |
-| `docs/` | `EVENT_PLATFORM_PLAN.md`, `VERTICALS.md` (how to add a vertical), `test-users-vendors.json` (the 32 test vendors, **without passwords**: their accounts are deleted) | `docs/` |
+| `docs/` | `EVENT_PLATFORM_PLAN.md`, `VERTICALS.md` (how to add a vertical), `test-users-vendors.json` (the 32 test vendors, **without passwords**: their accounts are deleted); `QA_CHECKLIST.md` and `UI_SWEEP.md`, the web QA and UI overflow sweep records of the multi-vendor app (2026-10-10/11, moved 2026-10-20) | `docs/` |
 | `data-backup/` | **Not in git** (`.gitignore`). Created by `frontend/scripts/backup-nonphoto.mjs`: the deleted rows as JSON and their Storage files, one folder per run | the hosted database |
 
 ## What stayed (on purpose)

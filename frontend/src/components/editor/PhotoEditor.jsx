@@ -11,7 +11,7 @@ import Sheet from '../Sheet.jsx'
 import CropOverlay from './CropOverlay.jsx'
 import useRecipeHistory from './useRecipeHistory.js'
 import {
-  ADJUSTMENTS, ASPECTS, PRESETS, aspectRatio, bakeFilter, defaultRecipe, describe, effectiveAdjust, formatAdjust,
+  ADJUSTMENTS, ASPECTS, PRESETS, aspectRatio, bakeFilter, defaultRecipe, describe, formatAdjust,
   getPreset, isIdentity, normalize, sameRecipe, toStorable,
 } from '../../lib/editor/recipe.js'
 import { cropForAspect, fitCrop, flipRecipe, orientedSize, outputSize, rotateRecipe, swappedAspect } from '../../lib/editor/geometry.js'

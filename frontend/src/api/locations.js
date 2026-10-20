@@ -31,12 +31,6 @@ export function distanceKm(a, b) {
 // 0.4 -> "Under 1 km", 7.6 -> "8 km", 1234 -> "1,234 km"
 export const fmtKm = (km) => (km == null ? '' : km < 1 ? 'Under 1 km' : `${Math.round(km).toLocaleString('en-US')} km`)
 
-// Does this photographer travel to `point`? null when unknown.
-export const travelsTo = (provider, point) => {
-  const d = distanceKm(provider?.location, point)
-  return d == null || provider.radiusKm == null ? null : d <= provider.radiusKm
-}
-
 // ---------------------------------------------------------------------------
 // Map areas ("Search this area"): a box { w, s, e, n } in degrees.
 // e can be past 180 when the box crosses the date line (e - w is the width).
@@ -92,18 +86,6 @@ export function splitByArea(providers, box) {
 // ---------------------------------------------------------------------------
 // Photographers
 // ---------------------------------------------------------------------------
-
-// Map(providerId -> { lat, lng, radiusKm }) for every active photographer with a location.
-export async function providerLocations() {
-  const { data, error } = await supabase.from('providers').select('id, base_location, service_radius_km').eq('status', 'active')
-  if (error) throw error
-  const map = new Map()
-  for (const r of data) {
-    const p = parsePoint(r.base_location)
-    if (p) map.set(r.id, { ...p, radiusKm: r.service_radius_km })
-  }
-  return map
-}
 
 // Save a photographer's base location and service radius (owner only).
 // city: optional label shown on their profile ("Pasadena, CA").

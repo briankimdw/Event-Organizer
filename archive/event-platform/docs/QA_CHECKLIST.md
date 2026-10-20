@@ -1,6 +1,6 @@
 # Web QA checklist
 
-> **Note (2026-10-18):** this is a record of a run before the photography-only pivot. Checks for the archived features (other verticals, events with friends, the AI planner, occasions, post credits) no longer apply; see `archive/event-platform/README.md`.
+> **Note (2026-10-18):** this is a record of a run before the photography-only pivot. Checks for the archived features (other verticals, events with friends, the AI planner, occasions, post credits) no longer apply; see `archive/event-platform/README.md`. Moved here from `docs/` on 2026-10-20; file paths below are as they were in the repo at the time (git tag `multi-vendor-snapshot`).
 
 Run: 2026-10-10, web app (`frontend/`, Vite dev server) against the hosted Supabase project.
 

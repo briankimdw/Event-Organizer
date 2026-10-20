@@ -13,7 +13,7 @@ unreliable at it, and "no color" is trivial to detect directly.
 
 Thresholds and prompts were checked on the labeled evaluation set (632 CC photos in
 19 style/content groups): `python eval/tags_eval.py <workdir>` prints precision and
-recall per tag (results in eval/REPORT.md). Re-run it after changing prompts.
+recall per tag. Re-run it after changing prompts.
 """
 
 # group -> (max tags from this group, min within-group probability, {tag: prompt})

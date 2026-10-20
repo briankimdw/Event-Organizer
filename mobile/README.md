@@ -85,7 +85,7 @@ mobile/
       u/[id].tsx  search.tsx  book/[providerId].tsx  bookings/[id]/...  inbox/[id].tsx ...
     screens/            one file (or folder) per web screen; screen-only parts live next to it
       home/  discover/  profile/  gallery/  bookings/  inbox/  provider/  account/
-      Search.tsx  SignIn.tsx  Me.tsx  ComingSoon.tsx
+      Search.tsx  SignIn.tsx  Me.tsx
     components/         app-wide UI primitives (import from '@/components')
     hooks/              React hooks (useQuery = typed wrapper of the shared one)
     state/              auth.tsx (session + profile), store.tsx (follows, shortlist, toast...)
@@ -110,9 +110,8 @@ Store (`useStore()`), same as the web's: `myProvider` (your photo & video listin
 ## Conventions for porting a web screen
 
 1. Find the web screen in `frontend/src/screens/X.jsx` and its route in `frontend/src/App.jsx`.
-   The native route file already exists (a `ComingSoon` placeholder); see the checklist below.
-2. Create `src/screens/X.tsx` (or `src/screens/x/` with `X.tsx` + its parts) and make the
-   route file `export { default } from '@/screens/X'`.
+2. Create `src/screens/X.tsx` (or `src/screens/x/` with `X.tsx` + its parts) and add the
+   route file under `src/app/` as `export { default } from '@/screens/X'`.
 3. **Data**: call the same shared functions the web screen calls, from `@shared/api/*.js`, through
    `useQuery` from `@/hooks/useQuery` (same behavior as the web hook, typed). No mock data, no
    copied queries. Shaping helpers in `@shared/api/home.js` (buildHomeFeed, serviceCounts,
@@ -162,7 +161,7 @@ route, start the dev server once before `npm run typecheck`.
   | Web file | Native file | Why |
   | --- | --- | --- |
   | `frontend/src/lib/supabase.js` | `src/lib/supabase.ts` | `import.meta.env`, browser session storage. Native client: AsyncStorage, `autoRefreshToken` + AppState start/stop, `persistSession`, `detectSessionInUrl: false` |
-  | `frontend/src/lib/images.js` | `src/shims/images.ts` | canvas / `createImageBitmap` / `exifr`. Same exports via expo-image-manipulator, plus `prepareUpload(asset)` |
+  | `frontend/src/lib/images.js` | `src/shims/images.ts` | canvas / `createImageBitmap` / `exifr`. Same exports via expo-image-manipulator, plus native upload helpers (`fileBlob`, `makeDisplayFile`, `toCompatible`) |
 
 - `@shared/*` alias -> `frontend/src/*` (Metro resolver + `tsconfig.json` `paths`).
 - New files and functions in `frontend/src/api/*` need nothing: import them and go. If a new shared
@@ -182,7 +181,7 @@ web target keeps the real browser APIs.
 | --- | --- | --- | --- |
 | `lib/supabase.js` | `import.meta.env`, URL session detection | redirect to `src/lib/supabase.ts` | inject the client (or keep the redirect) |
 | `api/portfolio.js` | `import.meta.env` (storage URL/key) | Babel env rewrite | build the URL from the client |
-| `api/portfolio.js` | `File`/`Blob` uploads through XHR, `file.name`/`file.size`, `crypto.randomUUID` | pass `prepareUpload(asset)` results (Blob + name); `crypto.randomUUID` shim (expo-crypto) | accept `{ uri, name, type, size }` |
+| `api/portfolio.js` | `File`/`Blob` uploads through XHR, `file.name`/`file.size`, `crypto.randomUUID` | pass `fileBlob(uri, name, type)` results (Blob + name; `screens/provider/upload/uploadQueue.ts`); `crypto.randomUUID` shim (expo-crypto) | accept `{ uri, name, type, size }` |
 | `api/locations.js` | `localStorage` (last location), `navigator.geolocation`, `DOMException` | global `localStorage` shim (in-memory, hydrated from / written to AsyncStorage, `ls:` prefix); `navigator.geolocation.getCurrentPosition` shim on expo-location (permission prompt, `code 1` = denied); `DOMException` shim | location provider param |
 | `api/discover.js` | `localStorage` (the deck's service chip, `read/writeDeckChoice`) | the same `localStorage` shim | storage adapter param |
 | `lib/images.js` | `exifr`, `createImageBitmap`, `<canvas>`, `URL.createObjectURL` | redirect to `src/shims/images.ts` (expo-image-manipulator; EXIF from the picker's `exif: true`). **Untested on device** | split pure helpers from the browser pipeline |

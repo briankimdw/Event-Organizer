@@ -258,7 +258,7 @@ Each step is one migration file in `supabase/migrations/`, reviewed in a pull re
 **Seed data** (`supabase/seed.sql`):
 - the Photo & video category tree (14 services) with its JSON schemas
 - the Flexible / Moderate / Strict policy templates
-- (not yet) demo photographers, packages and albums from `frontend/src/data/mock.js`. These need real accounts, so they are best created by signing up test users once the app has sign-in.
+- not the demo photographers, packages and albums: they need real accounts, so they come from `frontend/scripts/seed-test-users.mjs` (accounts, listings, sample albums) and `supabase/demo/demo_data.sql` (packages, hours, bookings, reviews). See `docs/test-users.md`.
 
 After each migration we regenerate TypeScript types into `frontend/src/lib/database.types.ts`.
 

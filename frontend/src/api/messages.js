@@ -126,7 +126,6 @@ const SHARE_MESSAGE_COLUMNS = `,
   shared_provider_id, shared_event_id, share_preview,
   provider:providers!messages_shared_provider_id_fkey(id, display_name, slug, status, rating_avg, rating_count,
     profile:profiles!providers_profile_id_fkey(avatar_path))`
-export const MESSAGE_COLUMNS = BASE_MESSAGE_COLUMNS // back-compat export
 
 // Does the database have the share-card columns? Probed once per session (a
 // missing column is remembered; network errors are retried next time).
@@ -515,12 +514,6 @@ function releaseTypingChannel(conversationId) {
     typingChannels.delete(conversationId)
     supabase.removeChannel(entry.channel)
   }, 2000)
-}
-
-// Back-compat: new messages in one conversation. Returns an unsubscribe function.
-export function subscribeToMessages(conversationId, onMessage) {
-  const live = openChat(conversationId, { onMessage })
-  return () => live.close()
 }
 
 // Anything new for me anywhere (a message in any of my conversations, or a

@@ -1,7 +1,8 @@
 .env
 .env.*
 !.env.example
-.idea/*
+# IDE folders at any depth (".idea/*" only matched the repo root, so frontend/.idea got tracked)
+.idea/
 .orchestrator/
 __pycache__/
 specs/

@@ -73,12 +73,3 @@ export function rgbaOf(img: SkImage, edge: number): { data: Uint8ClampedArray; w
   if (!px || !(px instanceof Uint8Array)) throw new Error('Couldn’t read the photo’s colours.')
   return { data: new Uint8ClampedArray(px.buffer, px.byteOffset, px.byteLength), width, height }
 }
-
-/** Does this image have any transparent pixels? (checked on a small copy) */
-export function hasAlpha(img: SkImage): boolean {
-  try {
-    const { data } = rgbaOf(img, 96)
-    for (let i = 3; i < data.length; i += 4) if (data[i] < 250) return true
-  } catch {}
-  return false
-}

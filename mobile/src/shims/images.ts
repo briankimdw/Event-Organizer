@@ -5,12 +5,9 @@
 //
 // A "file" on native is an expo-image-picker asset (or anything with a `uri`):
 //   { uri, fileName?, mimeType?, fileSize?, width?, height?, exif? }
-// To post an album with the shared api/portfolio.js postAlbum(), pass each photo
-// through prepareUpload(asset) first: it returns { file, display, settings } where
-// file/display.blob are Blobs that the shared XHR upload code can send.
-//
 // Native extras (not in the web file): isHeic / toCompatible (HEIC -> JPEG before upload),
-// makeDisplayFile (the public copy as a file, for the persisted upload queue), blobOfUri.
+// makeDisplayFile (the public copy as a file, for the persisted upload queue), blobOfUri,
+// fileBlob (a local file as a named Blob the shared XHR upload code can send).
 //
 // STATUS: written for the Upload screen port; not exercised yet. Verify on a device.
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
@@ -152,16 +149,4 @@ export async function fileBlob(uri: string, name: string, type: string) {
   named('name', name)
   if (!b.type && type) named('type', type)
   return b as Blob & { name: string }
-}
-
-// Everything postAlbum() needs for one picked photo: { file, display, settings }.
-// file is the original as a Blob (with .name/.type, like a browser File).
-export async function prepareUpload(asset: PickedPhoto) {
-  const original: any = await blobOf(asset.uri)
-  original.name = nameOf(asset)
-  // RN's Blob.type is a getter with no setter: plain assignment throws in strict mode,
-  // so shadow it with an own property (what portfolio.js reads as the upload's content type).
-  if (!original.type && typeOf(asset)) Object.defineProperty(original, 'type', { value: typeOf(asset), configurable: true, enumerable: true })
-  const [display, settings] = await Promise.all([makeDisplayCopy(asset), readCameraSettings(asset)])
-  return { file: original as Blob & { name: string }, display, settings }
 }

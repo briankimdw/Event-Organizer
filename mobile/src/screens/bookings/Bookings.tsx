@@ -12,11 +12,10 @@ import { CalendarX, ChevronRight, Clock, History, MapPin, Search, Star, X } from
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 
-import { Avatar, Button, Chip, EmptyState, ErrorState, Loading, Screen, Segmented, SignInPrompt, Text } from '@/components'
+import { Avatar, Button, Chip, DatePicker, EmptyState, ErrorState, Loading, Screen, Segmented, SignInPrompt, Text } from '@/components'
 import useQuery from '@/hooks/useQuery'
 import { useAuth } from '@/state/auth'
-import { makeStyles, useTheme } from '@/theme'
-import DatePicker from './DatePicker'
+import { makeStyles, useTheme, type Theme } from '@/theme'
 import type { Booking } from './NeedsAction'
 import { StatusPill, statusLabel, useRefocus } from './parts'
 
@@ -36,6 +35,14 @@ function attentionFor(b: Booking): { title: string; cta: string; to?: string } |
   if (b.status === 'completed' && b.reviewWindowOpen && !b.myReview) return { title: 'How did it go?', cta: 'Leave a review', to: `/bookings/${b.id}/review` }
   return null
 }
+
+// Calendar dot per booking: the web's .cal-dot.s-<status> colors.
+const dotColor = (status: string, c: Theme['c']) =>
+  ({
+    requested: '#f59e0b', countered: '#f59e0b', accepted: c.accent, confirmed: '#3b82f6', in_progress: '#3b82f6',
+    delivered: '#8b5cf6', completed: '#22c55e', disputed: c.danger, declined: c.danger,
+    cancelled_by_client: c.danger, cancelled_by_provider: c.danger,
+  })[status] ?? c.muted
 
 const monthLabel = (d: Date) => d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
@@ -65,7 +72,7 @@ export default function Bookings() {
     ;(acc[b.dateKey] ??= []).push(b)
     return acc
   }, {})
-  const dots = Object.fromEntries(Object.entries(byDay).map(([k, list]) => [k, list.map((b) => b.status)]))
+  const dots = Object.fromEntries(Object.entries(byDay).map(([k, list]) => [k, list.map((b) => dotColor(b.status, c))]))
 
   const attention = bookings.filter(attentionFor).sort((a, b) => +a.day - +b.day)
   const needs = new Set(attention.map((b) => b.id))

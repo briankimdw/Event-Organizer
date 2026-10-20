@@ -20,7 +20,7 @@ user swipes in Discover ─► swipes table
 Discover asks for cards ─► discover_feed()  (SQL in Postgres, no Python involved)
                            taste = up to 3 groups of recent likes (centred SigLIP space),
                            pushed away from passes; ranks unseen photos by best match
-                           + ~15% "something new" (details: Tuning, eval/REPORT.md)
+                           + ~15% "something new" (details: Tuning)
 ```
 
 **This service is only needed when new photos arrive.** The feed itself runs inside the
@@ -77,7 +77,8 @@ Supabase **Database Webhook** (Database → Webhooks → on insert into `photos`
 
 Everything here is measured with the offline evaluation in `eval/`: 632 hand-checked Creative
 Commons photos in 19 style/content groups, and simulated users swiping through the feed.
-Results and what each change is worth: `eval/REPORT.md`. The photos are downloaded outside the
+The scripts print their results (`eval/report_tables.py` turns `simulate.py --out` JSON into
+Markdown tables); no results report is committed. The photos are downloaded outside the
 repo; only `eval/manifest.csv` is committed.
 
 ```bash

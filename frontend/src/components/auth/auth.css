@@ -121,7 +121,7 @@
 /* ---------- Fields ---------- */
 .au-field { display: flex; flex-direction: column; gap: 8px; }
 .au-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; }
-.au-label-row label, .au-label { font-size: 14px; font-weight: 600; color: var(--ink); }
+.au-label-row label { font-size: 14px; font-weight: 600; color: var(--ink); }
 .au-input-wrap {
   display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 4px 0 14px; border-radius: 14px;
   background: var(--au-field); border: 1px solid var(--au-border); transition: border-color .15s, box-shadow .15s, background-color .15s;

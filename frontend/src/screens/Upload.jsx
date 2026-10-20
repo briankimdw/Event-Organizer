@@ -227,7 +227,6 @@ function Composer({ providers, initialId, userId }) {
   const used = mode === 'before_after' ? items.slice(0, 2) : items
   const ready = used.length > 0 && used.every((i) => i.status === 'ready')
   const canContinue = ready && (mode === 'before_after' ? used.length === 2 : true)
-  const kindLabel = mode === 'before_after' ? 'before & after' : 'post'
   const editedCount = used.filter((i) => i.edited).length
 
   // Event date from the photos (earliest), unless you've set it yourself.

@@ -13,7 +13,6 @@
 //   attributeLines(fields, attrs, keys?)  ['300 edited', '14-day turnaround'] (compact)
 //   attributeEntries(fields, attrs)       [{ key, label, value, type }] for detail lists
 //   cleanAttributes(fields, attrs)        attrs without empty values, numbers coerced (schemas reject nulls)
-//   matchesFilters(provider, values, slug) Search filters that run on the client (none for photography)
 //   nounFor(slug, n) / countLabel(n, slug) 'photographer' / '3 photographers'
 //   lowerFirst(text)            'Photographers' -> 'photographers' (mid-sentence names)
 //   sessionNoun(slug)           'shoot'
@@ -24,9 +23,8 @@
 // Removed in the photography pivot (2026-10-18; the old file is in
 // archive/event-platform/frontend/src/verticals/index.js):
 //   - the 17 other per-vertical configs (verticals/<slug>/config.js) and fields.js
-//   - occasionsFor() now always returns [] (occasions were archived); kept for old imports
 //   - GENERIC now uses photography's wording ('photographer'), not 'vendor'
-import { VERTICALS, PHOTO_VERTICAL, getVertical, normalizeVertical, verticalOfService } from './catalog.js'
+import { PHOTO_VERTICAL, getVertical } from './catalog.js'
 import photography from './photography/config.js'
 
 export * from './catalog.js'
@@ -54,10 +52,6 @@ export function verticalMeta(slug = null, row = null) {
   return { ...GENERIC, slug, name, noun: name.toLowerCase(), plural: name, pluralLong: name, known: false }
 }
 
-/** The vertical a provider belongs to: always 'photography' for photo & video listings. */
-export const verticalSlugOf = (provider) =>
-  normalizeVertical(provider?.vertical) || (provider?.categorySlugs || []).map((s) => verticalOfService(s)?.slug).find(Boolean) || PHOTO_VERTICAL
-
 // "Photographers" -> "photographers"; acronyms stay as they are.
 export const lowerFirst = (s = '') => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s)
 
@@ -76,12 +70,6 @@ export const sessionNoun = (slug) => (!slug || getVertical(slug) ? 'shoot' : 'ev
 /** Does this vertical hand over photos / video at the end (a delivery gallery)? True for photo & video. */
 export const deliversMedia = (slug) => !slug || !!getVertical(slug)
 
-/** Capitalized noun, e.g. for badges: 'Photographer'. */
-export const nounTitle = (slug) => {
-  const n = verticalMeta(slug).noun
-  return n ? n[0].toUpperCase() + n.slice(1) : ''
-}
-
 // ---------------------------------------------------------------------------
 // Pricing
 // ---------------------------------------------------------------------------
@@ -97,9 +85,6 @@ export const PRICE_TYPES = {
 }
 // catalog.js priceUnit -> the price type it implies.
 const UNIT_TO_TYPE = { session: 'fixed', hour: 'hourly', person: 'per_person', item: 'per_item', day: 'daily' }
-// The price types photo & video packages use (the package editor offers only these; the
-// others above stay so old packages from the multi-vendor database still display).
-export const LEGACY_PRICE_TYPES = ['fixed', 'hourly', 'quote']
 
 /** '/hr', ' / person', ' each' (or ' / centerpiece' when the package names its unit), ' / day', ''. */
 export function priceSuffix(type, pkg = null) {
@@ -160,9 +145,6 @@ export const postConfig = (slug) => verticalConfig(slug).post
 
 /** The title of a post saved without one: 'Wedding', else 'New post'. (`occasion` and `slug` are ignored now; kept for old callers.) */
 export const autoPostTitle = ({ service = null } = {}) => service || 'New post'
-
-/** @deprecated Occasions were archived: always []. */
-export const occasionsFor = () => []
 
 // Generic quantity labels when a vertical's config doesn't name them.
 // (daily packages are charged once per booked day: the dates picked are the days.)
@@ -256,22 +238,3 @@ export function cleanAttributes(fields = [], attrs = {}) {
   }
   return out
 }
-
-// ---------------------------------------------------------------------------
-// Search filters (client side)
-// ---------------------------------------------------------------------------
-
-/** values: { [filter key]: value }. Unknown / empty values pass. (Photography has no attribute filters today.) */
-export function matchesFilters(provider, values = {}, slug = null) {
-  const filters = verticalConfig(slug || verticalSlugOf(provider)).filters
-  return filters.every((f) => {
-    const v = values[f.key]
-    if (isEmpty(v)) return true
-    const attr = provider.attributes?.[f.attr || f.key]
-    if (f.type === 'tags') return [].concat(v).every((t) => [].concat(attr || []).includes(t))
-    return attr === v
-  })
-}
-
-/** Verticals in catalog order, each with its config: handy for pickers. */
-export const allVerticals = () => VERTICALS.map((v) => ({ ...v, config: verticalConfig(v.slug) }))

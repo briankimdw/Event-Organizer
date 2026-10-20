@@ -5,9 +5,7 @@ import { cardWords } from '@shared/api/discover.js'
 import { providerA11yLabel } from '@/components'
 import { fromPriceText } from '@/components/PriceLabel'
 import type { Package, Provider } from '@/types'
-import type { DeckCard, VendorDeckCard } from './types'
-
-export const isVendor = (c: DeckCard | null | undefined): c is VendorDeckCard => c?.kind === 'vendor'
+import type { DeckCard } from './types'
 
 /** Up to 2 packages for a vendor card (cheapest priced first, quotes last) and how many more. */
 export function packagePreview(p: Provider) {

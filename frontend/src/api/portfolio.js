@@ -72,14 +72,6 @@ export async function getServicesOf(_vertical = PHOTO_VERTICAL) {
   const bySlug = new Map(rows.map((r) => [r.slug, r]))
   return catalog.map((s, i) => bySlug.get(s.slug) && { ...bySlug.get(s.slug), name: s.name, sort_order: i + 1 }).filter(Boolean)
 }
-// Older name, kept for existing callers.
-export const getPhotographyServices = () => getServicesOf('photography')
-
-// Is this vertical in the database yet? (New verticals arrive with a migration.)
-export async function verticalIsLive(vertical) {
-  const { data } = await supabase.from('service_categories').select('id').eq('slug', vertical).eq('is_active', true).maybeSingle()
-  return !!data
-}
 
 // Category ids a photographer offers (provider_services), e.g. to pre-pick a post's category.
 export async function getProviderServiceIds(providerId) {

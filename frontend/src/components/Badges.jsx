@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ShieldCheck, BadgeCheck, Camera } from 'lucide-react'
+import { ShieldCheck, BadgeCheck } from 'lucide-react'
 import Sheet from './Sheet.jsx'
 import { callName } from '../lib/format.js'
 
@@ -26,12 +26,6 @@ export const ProBadge = ({ explain = false, name }) => {
 export const VerifiedClient = () => (
   <span className="badge badge-id">
     <ShieldCheck size={13} aria-hidden="true" /> Verified client
-  </span>
-)
-
-export const RealPhoto = ({ overlay }) => (
-  <span className={`badge badge-real ${overlay ? 'overlay' : ''}`} title="Verified with RAW file">
-    <Camera size={12} aria-hidden="true" /> Real Photo
   </span>
 )
 

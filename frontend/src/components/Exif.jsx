@@ -1,7 +1,5 @@
 import { Aperture, Camera, CircleDot, Calendar, Gauge, Timer, Zap, Ruler } from 'lucide-react'
 
-export const exifLine = (e) => [e.body, e.focal, e.aperture, e.shutter, `ISO ${e.iso}`].join(' · ')
-
 export default function ExifPanel({ exif = {} }) {
   const rows = [
     { Icon: Camera, label: 'Body', value: exif.body },

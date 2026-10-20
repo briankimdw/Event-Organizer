@@ -9,8 +9,8 @@
 // Removed in the photography pivot (2026-10-18). The multi-vendor catalog (18
 // verticals, GROUPS and OCCASIONS) lives in archive/event-platform/frontend/src/verticals/
 // and in the git tag `multi-vendor-snapshot`:
-//   - VERTICALS now has one entry. OCCASIONS is [] and GROUPS has one group; both,
-//     getOccasion() and verticalsInGroup() are kept only so old imports don't break.
+//   - VERTICALS now has one entry. GROUPS, OCCASIONS, getOccasion() and verticalsInGroup()
+//     were removed once nothing imported them (2026-10-20).
 //   - 'videography' is no longer a vertical. Its services (wedding-film, event-recap,
 //     social-reels, music-video, drone) belong to photography, and a provider or
 //     post still tagged 'videography' in the database counts as photography
@@ -62,12 +62,6 @@ export const VERTICALS = [
 // Coaching and meetups aren't shoots, so they stay out of the chips (still bookable).
 export const SERVICE_CHIPS = SERVICES.filter((s) => s.slug !== 'coaching' && s.slug !== 'meetups')
 
-/** @deprecated One group now (kept so old imports don't break). */
-export const GROUPS = [{ slug: 'capture', name: 'Photo & video' }]
-
-/** @deprecated Occasions were archived with the event platform: always []. */
-export const OCCASIONS = []
-
 /** 'videography' -> 'photography'; other slugs unchanged (null stays null). */
 export const normalizeVertical = (slug) => (slug && LEGACY_VERTICALS[slug]) || slug || null
 
@@ -85,12 +79,3 @@ export const verticalOfService = (serviceSlug) => bySlug.get(serviceIndex.get(se
 
 /** { slug, name, kind, icon, vertical } for a service slug, or undefined. */
 export const getService = (serviceSlug) => serviceIndex.get(serviceSlug)
-
-/** @deprecated Occasions were archived: always undefined. */
-export const getOccasion = () => undefined
-
-/** @deprecated Verticals in a browsing group (just photography now). */
-export const verticalsInGroup = (group) => VERTICALS.filter((v) => v.group === group)
-
-/** "per hour" for a price unit ('' for a flat session price). */
-export const unitLabel = (unit) => ({ hour: 'per hour', person: 'per person', item: 'each', day: 'per day' })[unit] || ''

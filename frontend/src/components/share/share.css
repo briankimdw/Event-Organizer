@@ -59,19 +59,6 @@ a.share-card:active { transform: scale(.98); }
 .share-card .sc-cta { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-top: 1px solid var(--line); font-weight: 600; margin-top: 8px; }
 
 .share-card.event { background: linear-gradient(180deg, var(--accent-soft), var(--bg) 70%); }
-.share-card .sc-event-cover { display: block; width: 100%; height: 110px; object-fit: cover; }
-.share-card .sc-event-top { display: flex; gap: 10px; align-items: center; padding: 12px 12px 4px; min-width: 0; }
-.share-card .sc-cal { width: 46px; height: 50px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent-ink); }
-.share-card .sc-cal span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-.share-card .sc-cal b { font-size: 20px; line-height: 1; color: var(--ink); }
-.share-card .sc-kicker { color: var(--accent-ink); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
-.share-card .sc-event-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; font-size: 15px; line-height: 1.25; }
-.share-card .sc-event-lines { display: flex; flex-direction: column; gap: 3px; padding: 4px 12px 0; color: var(--muted); }
-.share-card .sc-event-lines > div { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.share-card .sc-event-lines svg { flex-shrink: 0; }
-
-/* Share buttons placed on other screens */
-.share-btn { display: inline-flex; align-items: center; gap: 6px; }
 
 /* Round share button on photo cards (Home vendor cards). */
 .card-share-btn { position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .92); color: #111; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); }

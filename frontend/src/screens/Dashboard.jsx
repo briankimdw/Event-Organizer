@@ -30,7 +30,6 @@ const HELD = ['requested', 'countered', 'accepted']
 // Provider work tabs, shown inside the profile page in business mode.
 // provider: getProvider() result (may still be loading); bookings: useQuery result of listProviderBookings.
 export default function Dashboard({ tab, onTabChange, provider, bookings, onProviderChanged }) {
-  const { myProvider } = useStore()
   const pending = (bookings?.data || []).filter((r) => r.status === 'requested').length
   const showPortfolio = true // every photographer has a portfolio
 

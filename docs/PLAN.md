@@ -216,6 +216,8 @@ photographer-match/                 pnpm + Turborepo monorepo
 
 ## 5. Expansion: Multi-Service Event Platform
 
+> **Archived (2026-10-18).** This expansion was built (other verticals, events with friends, the AI planner) and then archived when the product went back to photography only. What was built and how to restore it: [`archive/event-platform/README.md`](../archive/event-platform/README.md); its plan: [`archive/event-platform/docs/EVENT_PLATFORM_PLAN.md`](../archive/event-platform/docs/EVENT_PLATFORM_PLAN.md). The section below is the original idea, kept for reference.
+
 - **The "Event" object:**
   - A user creates an event: type (wedding, birthday, graduation, corporate…), date, location, guest count and **total budget**.
   - The event holds `event_needs` (photographer, musician, caterer, MUA, florist, venue…). Each need has a budget allocation and links to a booking.

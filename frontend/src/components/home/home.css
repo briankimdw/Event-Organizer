@@ -5,7 +5,6 @@
   display: inline-grid; place-items: center; flex-shrink: 0; border-radius: 50%;
   color: var(--tint, var(--ink)); background: color-mix(in srgb, var(--tint, #888) 13%, #fff);
 }
-.tint-icon.on-card { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .06); }
 .block { display: block; }
 
 .see-all { min-height: 32px; padding-left: 8px; }

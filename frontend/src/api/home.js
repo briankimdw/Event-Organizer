@@ -177,10 +177,6 @@ export function subtitleOf(provider) {
   return specialties || v?.name || ''
 }
 
-// "photographers" style words for copy (lower-cases words, keeps acronyms).
-export const pluralLower = (v) => v.plural.replace(/([A-Z])(?=[a-z])/g, (c) => c.toLowerCase())
-export const withArticle = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`
-
 // Text for "Know a great photographer? Invite them" shares. (vertical: optional, kept for old callers.)
 export function inviteMessage(vertical = null) {
   return {

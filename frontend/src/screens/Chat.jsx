@@ -54,7 +54,6 @@ let tempSeq = 0
 export default function Chat() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { toast } = useStore()
   const { user, loading: authLoading } = useAuth()
   const { data, loading, error, reload, setData } = useQuery(user ? () => loadThread(id) : null, [id, user?.id])
   const c = data?.conversation

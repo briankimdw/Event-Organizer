@@ -374,6 +374,3 @@ if (Platform.OS !== 'web') {
     for (const j of jobs) if (j.userId === activeUser && ((j.status === 'failed' && j.offline) || j.status === 'paused')) run(j.id)
   })
 }
-
-// Exposed for the web-target checks only.
-export const __queue = { get jobs() { return jobs } }

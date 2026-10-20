@@ -10,7 +10,7 @@
 //   - makeDisplayCopy / makePreview accept any Blob (an edited render, a converted HEIC).
 //   - New: displayFromRender(blob, width, height) (an editor render as the public copy, only
 //     re-encoded when it is too big or not a JPEG), fingerprint(file) (spot duplicates),
-//     LARGE_FILE_BYTES, previewFromBlob(blob).
+//     previewFromBlob(blob).
 //   - fileExtension() works for Blobs without a name (falls back to the MIME type).
 import exifr from 'exifr'
 
@@ -20,9 +20,6 @@ const THUMB_EDGE = 480 // longest side of the in-app preview thumbnails
 
 export const MAX_PHOTOS = 10                   // per post
 export const MAX_FILE_BYTES = 50 * 1024 * 1024 // portfolio-originals bucket limit
-export const LOW_RES_EDGE = 1200               // below this (longest side), warn that it may look soft
-export const LARGE_FILE_BYTES = 25 * 1024 * 1024 // above this, mention that it takes longer to upload
-export const DISPLAY_EDGE = MAX_EDGE
 
 const EXIF_TAGS = ['Make', 'Model', 'LensModel', 'FocalLength', 'FNumber', 'ExposureTime', 'ISO', 'Flash', 'DateTimeOriginal']
 

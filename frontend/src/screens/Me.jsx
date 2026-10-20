@@ -185,7 +185,7 @@ function ProfileHero({ provider }) {
 
 // One switch for both sides of the account. Each side shows what's waiting for you there.
 function RoleSwitch({ myBookings, providerBookings }) {
-  const { mode, setMode, myProvider, myProviders } = useStore()
+  const { mode, setMode, myProvider } = useStore()
   const activeBookings = (myBookings || []).filter((b) => ACTIVE.includes(b.status)).length
   const pending = (providerBookings || []).filter((r) => r.status === 'requested').length
   const isProvider = mode === 'provider'

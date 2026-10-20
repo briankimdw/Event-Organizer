@@ -47,7 +47,7 @@
 // Taste and corrections
 //   getTasteProfile() -> { swipes, likes, styles: [{ tag, weight }], corrections: [tag],
 //       verticals: [{ slug, name, likes }], traits: [{ tag, weight }], vendorSwipes, hiddenVendors: [{ id, name }] }
-//   addCorrections(tags), removeCorrection(tag), popularTags(limit)
+//   addCorrections(tags), removeCorrection(tag)
 //   getHiddenVendors() -> Set<providerId>;  hideVendor(providerId);  unhideVendor(providerId)
 // "% match"
 //   getDeckMatches() -> Map(providerId -> 60..98): photo-based provider_matches() for vendors with
@@ -632,14 +632,6 @@ export async function removeCorrection(tag) {
   const uid = await viewer()
   if (!uid) return
   must(await supabase.from('taste_corrections').delete().eq('user_id', uid).eq('kind', 'tag').eq('value', tag))
-}
-
-// Every auto-tag in use, most common first (for the "Not into this" picker and filters).
-export async function popularTags(limit = 30) {
-  const rows = must(await supabase.from('photos').select('auto_tags').not('auto_tags', 'is', null).limit(1000))
-  const counts = new Map()
-  for (const r of rows) for (const t of r.auto_tags || []) counts.set(t, (counts.get(t) || 0) + 1)
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([tag]) => tag)
 }
 
 // ---------------------------------------------------------------------------

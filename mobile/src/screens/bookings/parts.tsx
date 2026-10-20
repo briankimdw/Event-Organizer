@@ -132,21 +132,6 @@ export function Row({ label, value, bold, muted, style }: { label: ReactNode; va
   )
 }
 
-export function Section({ title, children, right, style }: { title?: string; children: ReactNode; right?: ReactNode; style?: StyleProp<ViewStyle> }) {
-  const s = useStyles()
-  return (
-    <View style={[s.section, style]}>
-      {(title || right) && (
-        <View style={s.sectionHead}>
-          {!!title && <Text variant="h4">{title}</Text>}
-          {right}
-        </View>
-      )}
-      {children}
-    </View>
-  )
-}
-
 // A person (pro or client) that opens their profile (the web's components/PersonRow.jsx).
 type PersonLike = { id?: string; name?: string | null; avatar?: string | null; idVerified?: boolean; pro?: boolean }
 export function PersonRow({ person, sub, right }: { person: PersonLike; sub?: string; right?: ReactNode }) {
@@ -243,8 +228,6 @@ const useStyles = makeStyles((t) => ({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 3 },
   shrink: { flexShrink: 1 },
   value: { flexShrink: 0, textAlign: 'right' }, // amounts never break; the label wraps instead
-  section: { paddingHorizontal: t.space.lg, paddingTop: t.space.lg },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   // The status pill sits at the end of the row; when the name + badges + pill don't fit (long
   // names, small phones, big text) the pill wraps to its own line instead of squeezing the name to nothing.
   person: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 8, paddingHorizontal: t.space.lg, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: t.c.line },
