@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { dayKey } from '../../src/lib/dates';
 import { currentStreak } from '../../src/lib/streaks';
@@ -7,6 +7,7 @@ import { useTheme } from '../../src/ui/theme';
 
 export default function Today() {
   const t = useTheme();
+  const router = useRouter();
   const { goals, checkIns, toggleCheckIn, ready } = useStore();
   const today = dayKey();
 
@@ -39,11 +40,9 @@ export default function Today() {
           );
         }}
       />
-      <Link href="/new-goal" asChild>
-        <Pressable style={[s.fab, { backgroundColor: t.accent }]} accessibilityLabel="Add goal">
-          <Text style={{ color: '#fff', fontSize: 28, lineHeight: 30 }}>+</Text>
-        </Pressable>
-      </Link>
+      <Pressable onPress={() => router.push('/new-goal')} style={[s.fab, { backgroundColor: t.accent }]} accessibilityLabel="Add goal">
+        <Text style={{ color: '#fff', fontSize: 28, lineHeight: 30 }}>+</Text>
+      </Pressable>
     </View>
   );
 }
