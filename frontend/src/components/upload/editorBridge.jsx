@@ -32,6 +32,24 @@ function EditorLoading() {
   )
 }
 
+// ---- Pixel edits (AI tools, Studio) — the handoff between the editor and the posting code ----
+// PhotoEditor's onDone result: { blob, width, height, recipe, makeBeforeAfter?, pixelEdited?, pixelBase? }.
+//   recipe set            -> a slider/crop edit of the original (stored in photos.edit_recipe)
+//   pixelEdited (recipe null) -> the pixels changed (AI result or Studio): blob is still the public
+//                            copy; pixelBase { blob, recipe } is the pixel-edited working image and the
+//                            recipe on top of it, kept so the editor reopens where you left off
+//   neither               -> nothing changed: back to the original
+// Studio itself (components/studio/StudioLayer.jsx) can also be opened directly; its result is a
+// flattened JPEG { blob, width, height, changed } to save with saveEdit(id, { recipe: null, ... }).
+export const isPixelEdit = (res) => !!res?.pixelEdited
+export const editKind = (res) => (!res?.blob ? 'none' : res.pixelEdited ? 'pixels' : res.recipe ? 'recipe' : 'none')
+
+// What to open the editor with for a composer item (usePhotoItems): its pixel edit if it has one,
+// else the decodable original plus its recipe.
+export const editorPropsFor = (item) => (item?.pixels
+  ? { source: item.pixels.blob, initialRecipe: item.pixels.recipe ?? null, pixelEdited: true }
+  : { source: item?.source || item?.file, initialRecipe: item?.recipe ?? null, pixelEdited: false })
+
 // The photo editor, full screen over the composer. props: as PhotoEditor's.
 export function EditorLayer(props) {
   if (!LazyEditor) return null

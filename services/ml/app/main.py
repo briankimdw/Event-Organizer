@@ -8,20 +8,28 @@ POST /process-pending  analyse waiting photos now (for a database webhook or cro
 POST /embed-text       text -> embedding, for future "search by description"
 These POSTs require the X-ML-Secret header to equal ML_WEBHOOK_SECRET.
 
+AI photo tools (app/ai/, contract in docs/AI_TOOLS.md), for signed-in users
+('Authorization: Bearer <Supabase access token>'):
+GET  /ai/capabilities, POST /ai/remove-background, POST /ai/erase, POST /ai/upscale
+
 (The AI event planner, POST /plan, was archived with the event platform:
 archive/event-platform/services/ml-planner/.)
 """
 from __future__ import annotations
 
 import hmac
+import threading
 from contextlib import asynccontextmanager
 from io import BytesIO
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from pydantic import BaseModel
 
 from . import config
+from .ai.router import EXPOSED_HEADERS, get_services
+from .ai.router import router as ai_router
 from .siglip import SigLIP
 from .store import Store
 from .worker import run_once
@@ -31,11 +39,26 @@ state: dict = {}
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    if config.AI_PRELOAD:  # AI tool models: in the background, the API is usable meanwhile
+        threading.Thread(target=get_services().registry.preload, name="ai-preload", daemon=True).start()
     state["engine"] = SigLIP()  # load once at startup (a few seconds)
     yield
 
 
 app = FastAPI(title="photomatch ML", lifespan=lifespan)
+
+# Browsers call /ai/* from the web app (and from a phone on the same Wi-Fi in dev).
+# Only Authorization/Content-Type may be sent: X-ML-Secret routes stay server-to-server.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.ALLOWED_ORIGINS,
+    allow_origin_regex=config.ALLOWED_ORIGIN_REGEX or None,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+    expose_headers=EXPOSED_HEADERS,
+    max_age=600,
+)
+app.include_router(ai_router)
 
 
 def require_secret(x_ml_secret: str = Header(default="")) -> None:

@@ -11,7 +11,7 @@ import PhotoPicker from '../components/upload/PhotoPicker.jsx'
 import usePhotoItems from '../components/upload/usePhotoItems.js'
 import usePostQueue from '../components/upload/usePostQueue.js'
 import { loadQueue } from '../components/upload/uploadQueue.js'
-import { EditorLayer, editorAvailable } from '../components/upload/editorBridge.jsx'
+import { EditorLayer, editorAvailable, editorPropsFor } from '../components/upload/editorBridge.jsx'
 import EditAllSheet from '../components/upload/EditAllSheet.jsx'
 import CameraSettings, { SETTING_FIELDS, readFields, settingsSummary } from '../components/upload/CameraSettings.jsx'
 import { CaptionField, CategoryField, Disclosure, PlaceDateFields, TitleField, prettyDay, validatePost } from '../components/upload/PostFields.jsx'
@@ -330,8 +330,8 @@ function Composer({ providers, initialId, userId }) {
         await photos.makePair(id, res)
         setMode('before_after')
         announce('Before & after made: the original is the before, your edit the after.')
-      } else if (!res.recipe) {
-        photos.clearEdit(id) // nothing changed (or everything reset): the original
+      } else if (!res.recipe && !res.pixelEdited) {
+        photos.clearEdit(id) // nothing changed (or everything reset): the original. (pixelEdited: an AI / Studio edit, recipe null)
       } else {
         await photos.setEdit(id, res)
         announce('Edit saved.')
@@ -570,8 +570,7 @@ function Composer({ providers, initialId, userId }) {
 
       {editing && editingItem && createPortal(
         <EditorLayer
-          source={editingItem.source || editingItem.file}
-          initialRecipe={editingItem.recipe}
+          {...editorPropsFor(editingItem)}
           mode="post"
           allowBeforeAfter={mode === 'photos' || editing.pair}
           onDone={finishEdit}

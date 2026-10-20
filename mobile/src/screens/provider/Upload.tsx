@@ -257,11 +257,12 @@ function Composer({ provider, userId }: { provider: Listing; userId: string }) {
   const onBack = () => (step === 2 ? goStep(1) : leave())
 
   // ---- the editor ----
-  const onEdited = ({ uri, recipe, width, height, makeBeforeAfter }: PhotoEditorResult) => {
+  const onEdited = ({ uri, recipe, width, height, makeBeforeAfter, aiEdits, pixelEdited, pixelBase }: PhotoEditorResult) => {
     const ed = editing
     setEditing(null)
     if (!ed) return
-    const edit = isIdentity(recipe) ? null : { uri, width, height, recipe: toStorable(recipe) }
+    // An AI edit comes back with recipe null (baked into uri) and its pixelBase to reopen on.
+    const edit = isIdentity(recipe) && !aiEdits?.length && !pixelEdited ? null : { uri, width, height, recipe: recipe ? toStorable(recipe) : null, pixels: pixelBase }
     if (makeBeforeAfter && edit) {
       pair.setPairFrom(ed.item, edit)
       setMode('before_after')
@@ -425,8 +426,11 @@ function Composer({ provider, userId }: { provider: Listing; userId: string }) {
       {!!editing && (
         <PhotoEditorModal
           visible
-          source={{ uri: editing.item.asset.uri, width: editing.item.width || undefined, height: editing.item.height || undefined }}
-          initialRecipe={(editing.item.edit?.recipe as any) ?? null}
+          source={editing.item.edit?.pixels
+            ? { uri: editing.item.edit.pixels.uri, width: editing.item.edit.pixels.width, height: editing.item.edit.pixels.height }
+            : { uri: editing.item.asset.uri, width: editing.item.width || undefined, height: editing.item.height || undefined }}
+          initialRecipe={((editing.item.edit?.pixels ? editing.item.edit.pixels.recipe : editing.item.edit?.recipe) as any) ?? null}
+          pixelEdited={!!editing.item.edit?.pixels}
           mode="post"
           allowBeforeAfter={mode === 'photos' || editing.beforeAfter || pair.items.length === 1}
           initialBeforeAfter={editing.beforeAfter}

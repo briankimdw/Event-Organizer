@@ -1,6 +1,8 @@
 // The editor itself (loaded lazily by PhotoEditor.tsx once Skia is ready).
 // Layout: top bar (Cancel · undo / redo / reset · Done), the photo, a one-line summary +
 // "Before & after" switch, the active tool's panel, the tool tabs.
+// The history holds a Work: the recipe + which photo it applies to (0 = the original, or an AI
+// result, see ai/work.ts), so Undo also steps back over AI steps.
 import { Canvas, FilterMode, Group, ImageShader, MipmapMode, Rect, Shader, type SkImage } from '@shopify/react-native-skia'
 import { Redo2, RotateCcw, Undo2, X } from 'lucide-react-native'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -21,6 +23,10 @@ import { CropOverlay } from './CropOverlay'
 import { renderToImage, saveJpeg } from './exportImage'
 import { downscale, loadFull, loadPreview } from './loadImage'
 import { AdjustPanel, CropPanel, PresetPanel } from './panels'
+import { AiOverlay } from './ai/AiOverlay'
+import { AiPanel } from './ai/AiPanel'
+import { decodeImage } from './ai/files'
+import { useAiEditor, type Work } from './ai/useAiEditor'
 import { getEffect, makeBlur, uniformsFor, type Frame } from './pipeline'
 import { EDITOR_BG, EDITOR_BG_RGB } from './chrome'
 import { ToolTabs, type ToolId } from './ToolTabs'
@@ -32,7 +38,7 @@ const SAMPLING = { filter: FilterMode.Linear, mipmap: MipmapMode.None }
 const PAD = 16
 const CROP_PAD = 28 // room for the crop handles
 
-export default function EditorScreen({ source, initialRecipe, mode = 'post', allowBeforeAfter, initialBeforeAfter, onDone, onCancel }: PhotoEditorProps) {
+export default function EditorScreen({ source, initialRecipe, mode = 'post', allowBeforeAfter, initialBeforeAfter, pixelEdited, onDone, onCancel }: PhotoEditorProps) {
   const s = useStyles()
   const t = useTheme()
   const insets = useSafeAreaInsets()
@@ -40,7 +46,7 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
   const screenReader = useScreenReader()
 
   const initial = useMemo(() => normalize(initialRecipe ?? null), []) // eslint-disable-line react-hooks/exhaustive-deps
-  const hist = useHistory<EditRecipe>(initial)
+  const hist = useHistory<Work>({ recipe: initial, base: 0 })
   // Callbacks read the history through a ref so they keep their identity (no slider re-renders
   // or gesture re-creation on every change).
   const hRef = useRef(hist)
@@ -48,11 +54,14 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
     hRef.current = hist
   })
   const h = useMemo(() => ({
-    get committed() { return hRef.current.committed },
-    preview: (r: EditRecipe) => hRef.current.preview(r),
-    commit: (r: EditRecipe) => hRef.current.commit(r),
+    get committed() { return hRef.current.committed.recipe },
+    preview: (r: EditRecipe) => hRef.current.preview({ recipe: r, base: hRef.current.committed.base }),
+    commit: (r: EditRecipe) => hRef.current.commit({ recipe: r, base: hRef.current.committed.base }),
+    work: () => hRef.current.committed,
+    commitWork: (w: Work) => hRef.current.commit(w),
   }), [])
-  const recipe = hist.value
+  const work = hist.value
+  const recipe = work.recipe
   const [tool, setTool] = useState<ToolId>('presets')
   const [preview, setPreview] = useState<SkImage | null>(null)
   const [thumb, setThumb] = useState<SkImage | null>(null)
@@ -79,9 +88,21 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
     return () => { alive = false }
   }, [source.uri])
 
-  const pw = preview?.width() ?? source.width ?? 1
-  const ph = preview?.height() ?? source.height ?? 1
+  // ---- AI tools (the AI tab) ----------------------------------------------------------
+  const ai = useAiEditor({ source, original: { preview, blur }, committed: h.work, work, commit: h.commitWork })
+  const base = ai.base
+  // The working photo: the original, or the latest AI result. Compare always shows the original.
+  const wPreview = base?.preview ?? preview
+  const wBlur = base?.blur ?? blur
+  const wThumb = base?.thumb ?? thumb
+  const shownImg = comparing ? preview : wPreview
+  const shownBlur = comparing ? blur : wBlur
+
+  const pw = wPreview?.width() ?? source.width ?? 1
+  const ph = wPreview?.height() ?? source.height ?? 1
   const oriented = orientedSize(pw, ph, recipe.rotate)
+  const spw = shownImg?.width() ?? pw
+  const sph = shownImg?.height() ?? ph
 
   // ---- recipe changes --------------------------------------------------------
   const setAdjustLive = useCallback((key: AdjustKey, v: number) => {
@@ -146,7 +167,7 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
     h.commit({ ...h.committed, crop: { ...FULL_CROP }, aspect: 'original', rotate: 0, straighten: 0, flipH: false })
   }, [h])
   const resetAll = useCallback(() => {
-    h.commit(defaultRecipe())
+    h.commitWork({ recipe: defaultRecipe(), base: 0 })
     announce('All edits reset')
   }, [h])
 
@@ -154,41 +175,45 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
   const cropMode = tool === 'crop' && !comparing
   const shown: EditRecipe = comparing ? defaultRecipe() : recipe
   const frame: Frame | null = useMemo(() => {
-    if (!area || !preview) return null
+    if (!area || !shownImg) return null
     const pad = cropMode ? CROP_PAD : PAD
     let w0: number, h0: number
-    if (cropMode) ({ w: w0, h: h0 } = orientedSize(pw, ph, shown.rotate))
-    else ({ width: w0, height: h0 } = outputSize(shown, pw, ph))
+    if (cropMode) ({ w: w0, h: h0 } = orientedSize(spw, sph, shown.rotate))
+    else ({ width: w0, height: h0 } = outputSize(shown, spw, sph))
     const sc = Math.min((area.w - pad * 2) / w0, (area.h - pad * 2) / h0)
     const w = w0 * sc, hh = h0 * sc
     return { x: (area.w - w) / 2, y: (area.h - hh) / 2, w, h: hh }
-  }, [area, preview, cropMode, pw, ph, shown])
+  }, [area, shownImg, cropMode, spw, sph, shown])
 
   const uniforms = useMemo(() => {
-    if (!frame || !preview) return null
+    if (!frame || !shownImg) return null
     const density = PixelRatio.get()
     return uniformsFor({
-      recipe: shown, imgW: pw, imgH: ph, outW: frame.w, outH: frame.h, density,
+      recipe: shown, imgW: spw, imgH: sph, outW: frame.w, outH: frame.h, density,
       crop: cropMode ? FULL_CROP : undefined,
       bypass: comparing,
       bg: cropMode ? EDITOR_BG_RGB[t.scheme] : null,
       // Grain the same size relative to the photo as in the export (1/1200 of the long edge).
       grainCell: Math.max(Math.max(frame.w, frame.h) / 1200, 1 / density),
     })
-  }, [frame, preview, shown, pw, ph, cropMode, comparing, t.scheme])
+  }, [frame, shownImg, shown, spw, sph, cropMode, comparing, t.scheme])
 
   // ---- compare (press and hold the photo) ------------------------------------
+  // Painting the erase mask / previewing a cut-out: the photo isn't press-to-compare then.
+  const aiOverPhoto = tool === 'ai' && ((ai.tool === 'erase' && !!wPreview) || (ai.tool === 'background' && !!ai.background.cut))
   const hold = useMemo(() => Gesture.LongPress()
     .runOnJS(true)
-    .enabled(!cropMode)
+    .enabled(!cropMode && !aiOverPhoto)
     .minDuration(180)
     .maxDistance(10000)
     .onStart(() => setComparing(true))
-    .onFinalize(() => setComparing(false)), [cropMode])
+    .onFinalize(() => setComparing(false)), [cropMode, aiOverPhoto])
 
   // ---- done / cancel -------------------------------------------------------------
-  const changed = !sameRecipe(recipe, initial)
+  const changed = !sameRecipe(recipe, initial) || work.base !== 0
+  const aiBusy = !!ai.job
   const cancel = useCallback(() => {
+    if (aiBusy) return ai.cancel() // first stop the running AI tool
     if (!changed || busy) return onCancel()
     const title = mode === 'reedit' ? 'Discard changes?' : 'Discard edits?'
     if (Platform.OS === 'web') {
@@ -199,27 +224,42 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
       { text: 'Keep editing', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: onCancel },
     ])
-  }, [changed, busy, mode, onCancel])
+  }, [changed, busy, aiBusy, ai, mode, onCancel])
 
   const done = useCallback(async () => {
-    if (busy) return
+    if (busy || aiBusy) return
     setBusy(true)
     announce('Saving the photo')
     try {
-      const final = normalize(hRef.current.committed)
+      const w = hRef.current.committed
+      const final = normalize(w.recipe)
+      const aiBase = ai.baseOf(w.base)
       // Nothing changed and the size is known: hand back the original (no re-encode).
-      if (isIdentity(final) && source.width && source.height) {
-        await onDone({ uri: source.uri, recipe: final, width: source.width, height: source.height, makeBeforeAfter: beforeAfter })
+      if (!aiBase && isIdentity(final) && source.width && source.height) {
+        await onDone({
+          uri: source.uri, recipe: pixelEdited ? null : final, width: source.width, height: source.height, makeBeforeAfter: beforeAfter, aiEdits: [],
+          pixelEdited: !!pixelEdited, pixelBase: pixelEdited ? { uri: source.uri, width: source.width, height: source.height, recipe: final } : null,
+        })
         return
       }
       // Let the spinner paint before the (synchronous) GPU work.
       await new Promise((r) => setTimeout(r, 30))
-      const full = await loadFull(source.uri)
+      // After an AI step the working photo is that result (the original file is never changed).
+      const full = aiBase ? await decodeImage(aiBase.uri) : await loadFull(source.uri)
       const out = renderToImage(full, final)
       const uri = await saveJpeg(out.image)
       full.dispose?.()
       out.image.dispose?.()
-      await onDone({ uri, recipe: final, width: out.width, height: out.height, makeBeforeAfter: beforeAfter })
+      // A recipe describes edits to the original only: with an AI step in, it's baked in (null).
+      // pixelBase: the working photo + the recipe on top, to reopen where the user left off.
+      const pixels = aiBase
+        ? { uri: aiBase.uri, width: aiBase.width, height: aiBase.height, recipe: final }
+        : pixelEdited ? { uri: source.uri, width: full.width(), height: full.height(), recipe: final } : null
+      if (aiBase) ai.keepBase(aiBase.id)
+      await onDone({
+        uri, recipe: pixels ? null : final, width: out.width, height: out.height, makeBeforeAfter: beforeAfter,
+        aiEdits: aiBase?.steps ?? [], pixelEdited: !!pixels, pixelBase: pixels,
+      })
     } catch (e: any) {
       const msg = e?.message || 'Couldn’t save the edited photo.'
       if (Platform.OS === 'web') console.error(msg)
@@ -228,7 +268,7 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
     } finally {
       setBusy(false)
     }
-  }, [busy, source, onDone, beforeAfter])
+  }, [busy, aiBusy, ai, source, pixelEdited, onDone, beforeAfter])
 
   const onArea = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout
@@ -241,20 +281,22 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
     color: ['temperature', 'tint', 'vibrance', 'saturation'].some((k) => recipe.adjust[k as AdjustKey] !== 0),
     effects: ['clarity', 'sharpen', 'vignette', 'grain', 'fade'].some((k) => recipe.adjust[k as AdjustKey] !== 0),
     crop: hasCrop(recipe) || recipe.rotate !== 0 || recipe.straighten !== 0 || recipe.flipH,
+    ai: !!base || ai.auto.applied,
   }
-  const summary = describe(recipe)
+  const recipeSummary = describe(recipe)
+  const summary = base ? [...base.steps, ...(recipeSummary === 'Original' ? [] : [recipeSummary])].join(' · ') : recipeSummary
   const ratio = aspectRatio(recipe.aspect, oriented.w, oriented.h)
   const bg = EDITOR_BG[t.scheme]
   const fx = getEffect()
 
   // The shader's uv starts at its local origin, so the output is drawn in a translated group.
-  const photo = preview && blur && frame && uniforms ? (
+  const photo = shownImg && shownBlur && frame && uniforms ? (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
       <Group transform={[{ translateX: frame.x }, { translateY: frame.y }]}>
         <Rect x={0} y={0} width={frame.w} height={frame.h}>
           <Shader source={fx} uniforms={uniforms}>
-            <ImageShader image={preview} fit="none" x={0} y={0} width={pw} height={ph} sampling={SAMPLING} />
-            <ImageShader image={blur} fit="fill" x={0} y={0} width={pw} height={ph} sampling={SAMPLING} />
+            <ImageShader image={shownImg} fit="none" x={0} y={0} width={spw} height={sph} sampling={SAMPLING} />
+            <ImageShader image={shownBlur} fit="fill" x={0} y={0} width={spw} height={sph} sampling={SAMPLING} />
           </Shader>
         </Rect>
       </Group>
@@ -269,17 +311,17 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
           <X size={24} color={t.c.ink} />
         </Pressable>
         <View style={s.topMid}>
-          <IconButton icon={Undo2} label="Undo" onPress={hist.undo} disabled={!hist.canUndo || busy} color={hist.canUndo ? t.c.ink : t.c.faint} />
-          <IconButton icon={Redo2} label="Redo" onPress={hist.redo} disabled={!hist.canRedo || busy} color={hist.canRedo ? t.c.ink : t.c.faint} />
-          <IconButton icon={RotateCcw} label="Reset all edits" onPress={resetAll} disabled={isIdentity(recipe) || busy} color={isIdentity(recipe) ? t.c.faint : t.c.ink} />
+          <IconButton icon={Undo2} label="Undo" onPress={hist.undo} disabled={!hist.canUndo || busy || aiBusy} color={hist.canUndo && !aiBusy ? t.c.ink : t.c.faint} />
+          <IconButton icon={Redo2} label="Redo" onPress={hist.redo} disabled={!hist.canRedo || busy || aiBusy} color={hist.canRedo && !aiBusy ? t.c.ink : t.c.faint} />
+          <IconButton icon={RotateCcw} label="Reset all edits" onPress={resetAll} disabled={(isIdentity(recipe) && !base) || busy || aiBusy} color={(isIdentity(recipe) && !base) || aiBusy ? t.c.faint : t.c.ink} />
         </View>
         <Pressable
           onPress={done}
-          disabled={busy || !preview}
-          style={({ pressed }) => [s.done, { backgroundColor: t.c.ink }, (pressed || busy) && { opacity: 0.7 }]}
+          disabled={busy || aiBusy || !preview}
+          style={({ pressed }) => [s.done, { backgroundColor: t.c.ink }, (pressed || busy) && { opacity: 0.7 }, aiBusy && { opacity: 0.4 }]}
           accessibilityRole="button"
           accessibilityLabel={mode === 'reedit' ? 'Save edits' : 'Done editing'}
-          accessibilityState={{ busy, disabled: busy || !preview }}
+          accessibilityState={{ busy, disabled: busy || aiBusy || !preview }}
         >
           {busy ? <ActivityIndicator size="small" color={t.c.onInk} /> : <Text weight="700" style={{ color: t.c.onInk }}>{mode === 'reedit' ? 'Save' : 'Next'}</Text>}
         </Pressable>
@@ -290,7 +332,7 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
         <View
           style={s.area}
           onLayout={onArea}
-          accessible={!cropMode}
+          accessible={!cropMode && !aiOverPhoto}
           accessibilityRole="image"
           accessibilityLabel={`Photo. ${comparing ? 'Showing the original.' : summary === 'Original' ? 'No edits yet.' : `Edits: ${summary}.`}`}
           accessibilityHint={cropMode ? undefined : 'Touch and hold to compare with the original.'}
@@ -310,6 +352,7 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
               {photo}
             </CropOverlay>
           ) : photo}
+          {tool === 'ai' && !comparing ? <AiOverlay ai={ai} frame={frame} area={area} bg={bg} /> : null}
           {!preview && !loadError ? <ActivityIndicator style={StyleSheet.absoluteFill} color={t.c.muted} /> : null}
           {loadError ? (
             <View style={[StyleSheet.absoluteFill, s.center]}>
@@ -353,7 +396,7 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
       {/* Tool panel */}
       <View style={[s.panel, { backgroundColor: t.c.bg }]}>
         {tool === 'presets' ? (
-          <PresetPanel thumb={thumb} blur={blur} recipe={recipe} onPick={pickPreset} onStrengthLive={strengthLive} onStrengthCommit={strengthCommit} />
+          <PresetPanel thumb={wThumb} blur={wBlur} recipe={recipe} onPick={pickPreset} onStrengthLive={strengthLive} onStrengthCommit={strengthCommit} />
         ) : tool === 'crop' ? (
           <CropPanel
             recipe={recipe}
@@ -366,6 +409,8 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
             onReset={resetCrop}
             canReset={!!edited.crop || recipe.aspect !== 'original'}
           />
+        ) : tool === 'ai' ? (
+          <AiPanel ai={ai} />
         ) : (
           <AdjustPanel group={tool} adjust={recipe.adjust} onLive={setAdjustLive} onCommit={setAdjustCommit} />
         )}

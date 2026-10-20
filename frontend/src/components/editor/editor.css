@@ -138,7 +138,7 @@
 .pe-error { color: #ffb4a6; font-size: 12.5px; font-weight: 600; }
 
 /* Tabs */
-.pe-tabs { display: grid; grid-template-columns: repeat(5, 1fr); background: var(--pe-bg); border-top: 1px solid var(--pe-line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pe-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--pe-bg); border-top: 1px solid var(--pe-line); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .pe-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 56px; font-size: 11px; font-weight: 600; color: var(--pe-muted) !important; }
 .pe-tab.on { color: var(--pe-ink) !important; }
 .pe-tab.on svg { color: var(--pe-accent); }
@@ -152,3 +152,47 @@
 @media (prefers-reduced-motion: reduce) {
   .pe-spinner { animation-duration: 2.4s; }
 }
+
+/* AI tab (components/editor/ai) */
+.pe-ai-layer { position: absolute; inset: 0; pointer-events: none; }
+.pe-ai-layer > * { pointer-events: auto; }
+.pe-orig { position: absolute; inset: 0; }
+.pe-ai { display: flex; flex-direction: column; gap: 2px; }
+.pe-ai-tools { padding: 4px 16px 4px; }
+.pe-ai-tool { display: inline-flex; align-items: center; gap: 5px; }
+.pe-ai-tool.off:not(.on) { color: var(--pe-muted) !important; }
+.pe-ai-body { padding: 0 16px 6px; display: flex; flex-direction: column; gap: 6px; }
+.pe-ai-body .pe-note { margin: 0; }
+.pe-ai-tool-body { display: flex; flex-direction: column; gap: 6px; }
+.pe-ai-tool-body .pe-strip { padding: 2px 0; }
+.pe-btn.wide { width: 100%; }
+.pe-btn.primary { background: #fff; color: #111 !important; }
+.pe-ai-row { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.pe-ai-row .pe-strip { flex: 1; min-width: 0; }
+.pe-ai-label { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.pe-ai-range { flex: 1; min-width: 0; height: 40px; accent-color: var(--pe-accent); }
+.pe-ai-hint { flex: 1; }
+.pe-ai-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pe-ai-job { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 4px 4px 12px; border-radius: 12px; background: var(--pe-raise); }
+.pe-ai-job-text { flex: 1; font-weight: 600; font-size: 13px; }
+.pe-ai-time { color: var(--pe-muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+.pe-ai-done { color: var(--pe-ink) !important; }
+.pe-ai-steps { border-top: 1px solid var(--pe-line); padding-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.pe-ai-swatches { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pe-swatch { position: relative; width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--pe-line); cursor: pointer; }
+.pe-swatch[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
+.pe-swatch-pick { background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); overflow: hidden; }
+.pe-swatch-pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.pe-swatch-pick:focus-within { outline: 2px solid var(--pe-focus); outline-offset: 2px; }
+.pe-auto-row { display: flex; align-items: center; gap: 10px; padding: 2px 0 4px; }
+.pe-auto-row .pe-note { margin: 0; }
+
+/* Mask painting and the cut-out preview, over the photo */
+.pe-mask { position: absolute; inset: 0; touch-action: none; cursor: crosshair; }
+.pe-mask.brush { cursor: none; }
+.pe-mask-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.pe-mask-rect { position: absolute; outline: 2px dashed #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); background: rgba(255, 64, 64, .18); }
+.pe-mask-rect:focus-visible { outline: 2px solid var(--pe-focus) !important; outline-offset: 0; }
+.pe-cut { position: absolute; inset: 0; }
+.pe-cut canvas { display: block; width: 100%; height: 100%; }
+.pe-cut.checker { background-color: #fff; background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%); background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0; }

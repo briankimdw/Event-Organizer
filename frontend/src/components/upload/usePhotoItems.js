@@ -15,6 +15,8 @@ import { photoHints } from '../../api/portfolio.js'
 //   thumbUrl / processed { url, width, height, size }: what clients will see (the edit, if any),
 //   base { thumbUrl, processed }: the unedited version,
 //   recipe (edit recipe) | null, edited (bool),
+//   pixels { blob, recipe } | null: a pixel edit (AI / Studio): the pixel-edited base and the recipe on
+//     top of it, for reopening the editor; the post then stores recipe null (the original stays private),
 //   pairOf: id | null  (the "before" made from another photo's original, for a before & after)
 // }
 //
@@ -187,8 +189,10 @@ export default function usePhotoItems() {
     if (list.length >= 2) commit([list[1], list[0], ...list.slice(2)])
   }
 
-  // Keep an edit: { blob, recipe, width, height } from the editor. The render becomes the public copy.
-  const setEdit = async (id, { blob, recipe, width, height }) => {
+  // Keep an edit: { blob, recipe, width, height, pixelEdited?, pixelBase? } from the editor. The
+  // render becomes the public copy. A pixel edit (AI / Studio: recipe null) keeps its pixelBase as
+  // item.pixels, so the editor reopens on it (editorBridge.jsx editorPropsFor).
+  const setEdit = async (id, { blob, recipe, width, height, pixelEdited = false, pixelBase = null }) => {
     const display = await displayFromRender(blob, width, height)
     const preview = await previewFromBlob(display.blob)
     if (!alive.current || !exists(id)) return URL.revokeObjectURL(preview.thumbUrl)
@@ -196,7 +200,8 @@ export default function usePhotoItems() {
     edits.current.set(id, display)
     const old = itemsRef.current.find((i) => i.id === id)
     update(id, () => ({
-      edited: true, recipe: recipe ?? null, thumbUrl: preview.thumbUrl,
+      edited: true, recipe: pixelEdited ? null : recipe ?? null, thumbUrl: preview.thumbUrl,
+      pixels: pixelEdited ? { blob: pixelBase?.blob || blob, recipe: pixelBase ? pixelBase.recipe ?? null : null } : null,
       processed: { url: track(URL.createObjectURL(display.blob)), width: display.width, height: display.height, size: display.blob.size },
     }))
     if (old?.edited) {
@@ -210,7 +215,7 @@ export default function usePhotoItems() {
     const old = itemsRef.current.find((i) => i.id === id)
     if (!old?.edited) return
     edits.current.delete(id)
-    update(id, (i) => ({ edited: false, recipe: null, thumbUrl: i.base.thumbUrl, processed: i.base.processed }))
+    update(id, (i) => ({ edited: false, recipe: null, pixels: null, thumbUrl: i.base.thumbUrl, processed: i.base.processed }))
     release(old.thumbUrl)
     release(old.processed?.url)
   }
@@ -223,7 +228,7 @@ export default function usePhotoItems() {
     if (!after) return null
     const others = itemsRef.current.filter((i) => i.id !== id && i.pairOf !== id)
     const before = {
-      ...after, id: crypto.randomUUID(), pairOf: id, edited: false, recipe: null,
+      ...after, id: crypto.randomUUID(), pairOf: id, edited: false, recipe: null, pixels: null,
       thumbUrl: after.base.thumbUrl, processed: after.base.processed,
     }
     commit([before, after, ...others])

@@ -1,0 +1,80 @@
+[
+  {
+    "name": "blueimp-canvas-to-blob",
+    "version": "3.29.0",
+    "license": "MIT",
+    "repository": "git://github.com/blueimp/JavaScript-Canvas-to-Blob.git"
+  },
+  {
+    "name": "css-loader",
+    "version": "5.2.7",
+    "license": "MIT",
+    "repository": "webpack-contrib/css-loader"
+  },
+  {
+    "name": "exif-js",
+    "version": "2.3.0",
+    "license": "MIT",
+    "repository": "https://github.com/exif-js/exif-js"
+  },
+  {
+    "name": "file-saver",
+    "version": "2.0.5",
+    "license": "MIT",
+    "repository": "https://github.com/eligrey/FileSaver.js"
+  },
+  {
+    "name": "fuzzysort",
+    "version": "1.9.0",
+    "license": "MIT",
+    "repository": "https://github.com/farzher/fuzzysort.git"
+  },
+  {
+    "name": "gif.js.optimized",
+    "version": "1.0.1",
+    "license": "MIT",
+    "repository": "https://github.com/terikon/gif.js.optimized.git"
+  },
+  {
+    "name": "hermite-resize",
+    "version": "2.2.10",
+    "license": "MIT",
+    "repository": "https://github.com/viliusle/Hermite-resize"
+  },
+  {
+    "name": "jquery",
+    "version": "3.7.1",
+    "license": "MIT",
+    "repository": "https://github.com/jquery/jquery.git"
+  },
+  {
+    "name": "pica",
+    "version": "7.1.1",
+    "license": "MIT",
+    "repository": "nodeca/pica"
+  },
+  {
+    "name": "semver-compare",
+    "version": "1.0.0",
+    "license": "MIT",
+    "repository": "git://github.com/substack/semver-compare.git"
+  },
+  {
+    "name": "style-loader",
+    "version": "2.0.0",
+    "license": "MIT",
+    "repository": "webpack-contrib/style-loader"
+  },
+  {
+    "name": "uuid",
+    "version": "8.3.2",
+    "license": "MIT",
+    "repository": "https://github.com/uuidjs/uuid.git"
+  },
+  {
+    "name": "webfontloader",
+    "version": "1.6.28",
+    "license": "Apache-2.0",
+    "repository": "git://github.com/typekit/webfontloader.git"
+  }
+]

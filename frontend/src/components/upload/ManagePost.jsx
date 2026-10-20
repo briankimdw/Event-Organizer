@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeftRight, ChevronDown, ChevronUp, Images, Pencil, Plus, RefreshCw, Star, Trash2, Undo2, Wand2 } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, ChevronUp, Images, Layers, Pencil, Plus, RefreshCw, Star, Trash2, Undo2, Wand2 } from 'lucide-react'
 import Sheet from '../Sheet.jsx'
 import { useAuth } from '../../auth.jsx'
 import { useStore } from '../../store.jsx'
@@ -13,6 +13,7 @@ import { isHeic, makeDisplayCopy, quickCheck, toDecodable } from '../../lib/imag
 import { autoPostTitle, postConfig } from '../../verticals/index.js'
 import { CaptionField, CategoryField, PlaceDateFields, TitleField, validatePost } from './PostFields.jsx'
 import { EditorLayer, editorAvailable, loadEditsApi } from './editorBridge.jsx'
+import { STUDIO_RECIPE_NOTE, StudioLayer } from '../studio/StudioLayer.jsx'
 
 // Owner-only sheets for a post in the viewer: a small menu, the details form, the photos
 // manager (re-edit, back to original, replace, reorder, cover, before & after) and the delete
@@ -134,6 +135,7 @@ function PhotosManager({ album, onClose, onUpdated }) {
   const [error, setError] = useState('')
   const [said, setSaid] = useState('')
   const [editing, setEditing] = useState(null) // { photo, source, recipe, allowPair }
+  const [studioFor, setStudioFor] = useState(null) // { photo, blob }: Studio open on a posted photo
   const [tick, setTick] = useState(0)
   const replaceInput = useRef()
   const beforeInput = useRef()
@@ -208,6 +210,32 @@ function PhotosManager({ album, onClose, onUpdated }) {
     return change(photo.id, 'saving', () => edits.saveEdit(photo.id, { recipe: res.recipe, blob: res.blob, width: res.width, height: res.height }), 'Edit saved')
   }
 
+  // "Edit in Studio": the public copy (what clients see, with any slider edits in it) opens in
+  // Studio. Saving is a pixel edit: saveEdit with recipe null replaces the slider recipe; the
+  // original stays private and "Original" (revert) still restores it.
+  const openStudio = async (photo) => {
+    setBusy({ id: photo.id, what: 'opening' })
+    setError('')
+    try {
+      const res = await fetch(photo.src)
+      if (!res.ok) throw new Error('Couldn’t load the photo. Check your connection and try again.')
+      setStudioFor({ photo, blob: await res.blob() })
+    } catch (err) {
+      setError(err.message || 'Couldn’t open Studio.')
+    } finally {
+      setBusy(null)
+    }
+  }
+  const finishStudio = async ({ blob, width, height, changed }) => {
+    const { photo } = studioFor
+    if (!changed) return setStudioFor(null)
+    const edits = await loadEditsApi()
+    if (!edits) throw new Error('Editing isn’t available right now.')
+    await edits.saveEdit(photo.id, { recipe: null, blob, width, height }) // throws: Studio stays open and shows it
+    setStudioFor(null)
+    return change(photo.id, 'saving', async () => {}, 'Studio edit saved')
+  }
+
   const revert = (photo) => change(photo.id, 'reverting', async () => {
     const edits = await loadEditsApi()
     if (!edits) throw new Error('Editing isn’t available right now.')
@@ -258,7 +286,12 @@ function PhotosManager({ album, onClose, onUpdated }) {
   }
 
   return (
-    <Sheet open onClose={busy ? () => {} : onClose} title="Edit photos">
+    <>
+    {studioFor && (
+      <StudioLayer source={studioFor.blob} name={label(studioFor.photo, Math.max(0, ids.indexOf(studioFor.photo.id)))}
+        onDone={finishStudio} onCancel={() => setStudioFor(null)} doneLabel="Save" note={STUDIO_RECIPE_NOTE} />
+    )}
+    <Sheet open onClose={busy || studioFor ? () => {} : onClose} title="Edit photos">
       <input ref={replaceInput} type="file" accept="image/*,.heic,.heif" hidden onChange={(e) => { onReplaceFile(e.target.files[0]); e.target.value = '' }} />
       <input ref={beforeInput} type="file" accept="image/*,.heic,.heif" hidden onChange={(e) => { onBeforeFile(e.target.files[0]); e.target.value = '' }} />
       <div className="sr-only" role="status" aria-live="polite">{said}</div>
@@ -305,7 +338,13 @@ function PhotosManager({ album, onClose, onUpdated }) {
                           <Wand2 size={14} aria-hidden="true" /> Edit
                         </button>
                       )}
-                      {p.original_path && (edited || !recipes) && (
+                      {editorAvailable && (
+                        <button type="button" className="mpp-btn" disabled={disabled} onClick={() => openStudio(p)} aria-label={`Edit ${label(p, i).toLowerCase()} in Studio`}>
+                          <Layers size={14} aria-hidden="true" /> Studio
+                        </button>
+                      )}
+                      {/* Always offered when there's an original: a Studio / AI edit has no recipe to show it's edited. */}
+                      {p.original_path && (
                         <button type="button" className="mpp-btn" disabled={disabled} onClick={() => revert(p)} aria-label={`Restore the original of ${label(p, i).toLowerCase()}`}>
                           <Undo2 size={14} aria-hidden="true" /> Original
                         </button>
@@ -345,6 +384,7 @@ function PhotosManager({ album, onClose, onUpdated }) {
               </div>
             </button>
           )}
+          {editorAvailable && <p className="muted tiny mt-sm">Studio: layers, brushes, text and more. Studio edits are pixel edits, so saving one replaces that photo’s slider edits, and Edit starts again from your original.</p>}
           {!recipes && <p className="muted tiny mt-sm">Edits are applied, but can’t be reopened step by step until the database update for edits is in.</p>}
         </div>
       )}
@@ -352,6 +392,7 @@ function PhotosManager({ album, onClose, onUpdated }) {
         <button className="btn ghost block" onClick={onClose} disabled={disabled}>Done</button>
       </div>
     </Sheet>
+    </>
   )
 }
 

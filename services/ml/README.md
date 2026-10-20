@@ -47,7 +47,8 @@ settings, never in the frontend or in Git.
 | `python -m app.worker --once` | Analyse every waiting photo, then exit |
 | `python -m app.worker` | Keep running; check for new photos every 30 s |
 | `python -m app.worker --retag` | Re-analyse every photo (after changing `app/tags.py`), then exit |
-| `uvicorn app.main:app --port 8000` | HTTP API (`/health`, `/analyze`, `/process-pending`, `/embed-text`) |
+| `uvicorn app.main:app --port 8000` | HTTP API (`/health`, `/analyze`, `/process-pending`, `/embed-text`, AI photo tools `/ai/*`) |
+| `python scripts/fetch_models.py` | Download the AI photo tool models (see "AI photo tools") |
 | `python scripts/try_images.py <folder> --query "moody wedding"` | Try the model on local photos (no database needed) |
 | `python -m pytest tests` | Fast tests (no model download) |
 | `python eval/simulate.py <folder>` | Offline evaluation of the Discover feed (see Tuning) |
@@ -125,6 +126,132 @@ W=<folder outside the repo>
     - Neither is worth switching to yet.
   - After a switch, re-analyse everything (`delete from photo_embeddings;`, then run the
     worker).
+
+## AI photo tools
+
+Firefly-style tools for the photo editor, running locally on CPU with open-source models through
+[ONNX Runtime](https://onnxruntime.ai). API contract for the apps: [`docs/AI_TOOLS.md`](../../docs/AI_TOOLS.md).
+Code: `app/ai/` (`router.py` endpoints, `tools.py` pre/post-processing, `models.py` model loading).
+
+| Endpoint | Tool | Model |
+|---|---|---|
+| `GET /ai/capabilities` | which tools are installed, limits | |
+| `POST /ai/remove-background` | photo → PNG cutout with alpha, or the mask | BiRefNet lite (1024×1024) |
+| `POST /ai/erase` | photo + mask (white = remove) → filled-in JPEG/PNG | LaMa (big-lama, 512×512) |
+| `POST /ai/upscale` | photo (≤ 1024 px) → ×2 / ×4 JPEG/PNG | Real-ESRGAN compact (`realesr-general-x4v3`) |
+
+All need a signed-in user's Supabase access token (`Authorization: Bearer …`), checked with
+Supabase Auth (`GET /auth/v1/user`, cached 60 s); the browser can call them from the web app's
+origins (CORS: `localhost:5173` and `<LAN IP>:5173`).
+
+### Setup
+
+```bash
+cd services/ml
+pip install -r requirements.txt                 # adds onnxruntime (+ onnx, used only by the fetch script)
+.venv/Scripts/python scripts/fetch_models.py    # ~440 MB into services/ml/models/ (git-ignored)
+```
+
+- `fetch_models.py` downloads from pinned URLs (fixed Hugging Face revisions, a GitHub release),
+  checks each file's SHA-256 and deletes it on a mismatch. `--list` shows the models; `--only lama`
+  fetches one.
+- Real-ESRGAN ships only as PyTorch weights: the script loads them with
+  `torch.load(weights_only=True)` (tensors only, no code) and exports `realesr-general-x4v3.onnx`.
+- Restart the service afterwards. Without models the service starts normally and
+  `/ai/capabilities` reports the tools as unavailable (`/ai/*` answer `503 tool_unavailable`).
+- The Docker image fetches the models at build time (`--build-arg FETCH_AI_MODELS=0` to skip).
+
+| File in `models/` | Size | Memory: loaded / peak during a request |
+|---|---|---|
+| `birefnet-lite.onnx` | 224 MB | ~330 MB / **~6 GB** (Swin transformer at 1024×1024) |
+| `lama.onnx` | 208 MB | ~300 MB / ~0.6 GB |
+| `realesr-general-x4v3.onnx` (+ the `.pth` it came from) | 5 MB | ~40 MB / ~0.6 GB (×4 of 1024×768) |
+
+Plan for **8 GB RAM** on a host that runs all three (plus SigLIP, ~1 GB). ONNX Runtime's memory
+arena is turned off so memory goes back down after each request (with it on, BiRefNet kept ~6 GB
+and grew to ~12 GB after two requests). The per-tool lock keeps two background removals from
+overlapping.
+
+Models load in a background thread at startup (`AI_PRELOAD=1`); LaMa takes ~18 s and BiRefNet ~7 s
+to load, so the first request right after a start may wait for that.
+
+### Limits
+
+| | Default | Env |
+|---|---|---|
+| Upload size, per file | 30 MB → `413 file_too_large` | `AI_MAX_UPLOAD_MB` |
+| Decoded size | 50 MP → `413 too_many_pixels` | `AI_MAX_PIXELS` |
+| Remove background / erase input | long edge shrunk to 2048 px (header `X-Input-Downscaled: true`) | `AI_MAX_EDGE` |
+| Upscale input | long edge ≤ 1024 px, else `413 upscale_input_too_large` | `AI_UPSCALE_MAX_EDGE` |
+| Rate limit | 30 requests per user per 10 min (in memory, per process) → `429` + `Retry-After` | `AI_RATE_LIMIT`, `AI_RATE_WINDOW_S` |
+| Concurrency | 1 request per tool per process; others wait up to 60 s, then `503 busy` | `AI_QUEUE_TIMEOUT_S` |
+| ONNX Runtime threads per model | all cores | `AI_ORT_THREADS` |
+
+Requests are handled in a worker thread (decode → model → encode), so the event loop and the
+other endpoints stay responsive.
+
+### Timings
+
+AMD Ryzen 7 7800X3D (8 cores), 32 GB RAM, Windows 11, CPU only, ONNX Runtime 1.31. A 12 MP
+(4000×3000) JPEG through the full HTTP path (upload, decode, downscale, model, encode); median of
+3 warm runs, range over two runs (the machine was also running other work):
+
+| Request | Output | Time |
+|---|---|---|
+| remove-background, `cutout` | 2048×1536 PNG RGBA | 5.5–5.9 s |
+| remove-background, `mask` | 2048×1536 PNG grey | 4.7–5.5 s |
+| erase, small object (200 px) | 2048×1536 JPEG | 1.8–2.0 s |
+| erase, a person (~⅓ of the frame) | 2048×1536 JPEG | 2.0–2.1 s |
+| upscale ×2 (input 1024×768) | 2048×1536 JPEG | 4.8 s |
+| upscale ×4 (input 1024×768) | 4096×3072 JPEG | 4.5–4.7 s |
+
+The first request after a start also pays the model load if preloading hasn't finished (LaMa
+~18 s, BiRefNet ~7 s). With less than ~6 GB free RAM, background removal starts swapping and takes
+10–30 s.
+
+BiRefNet at 1024×1024 is most of the background-removal time (~4.7 s); ×2 costs the same as ×4
+because the model is ×4 and the result is shrunk with Lanczos (as Real-ESRGAN itself does).
+To reproduce, call the endpoints with a 12 MP photo and read the `X-Processing-Ms` header.
+
+### How each tool works
+
+- **Remove background:** resize to 1024×1024, ImageNet normalisation, BiRefNet → sigmoid → soft
+  mask resized back to the photo; the cutout is the photo with that mask as alpha.
+- **Erase:** the mask (white = remove; transparency counts as keep) is resized to the photo. A crop
+  around the painted area (2× its size, at least 512 px, for context) is resized to 512×512, the
+  mask is grown 3 px there, LaMa fills it, and the result is blended back (softened edge; painted
+  pixels always fully replaced). One crop covers all painted areas, so two far-apart areas share a
+  larger, lower-resolution crop; very large areas come out soft.
+- **Upscale:** Real-ESRGAN compact ×4 on the whole image (no tiling needed at ≤ 1024 px).
+
+### Licenses (verified upstream, 2026-10-19)
+
+Only permissive licenses (MIT / Apache-2.0 / BSD-3-Clause) for both code and weights. Full list
+with versions and URLs: [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md).
+
+| Component | Code | Weights |
+|---|---|---|
+| BiRefNet lite, ONNX export by onnx-community | MIT ([ZhengPeng7/BiRefNet](https://github.com/ZhengPeng7/BiRefNet/blob/main/LICENSE)) | MIT (model cards of `ZhengPeng7/BiRefNet_lite` and `onnx-community/BiRefNet_lite-ONNX`) |
+| LaMa big-lama, ONNX port by Carve | Apache-2.0 ([advimman/lama](https://github.com/advimman/lama/blob/main/LICENSE), [Carve-Photos/lama](https://github.com/Carve-Photos/lama)) | Apache-2.0 (model cards of `Carve/LaMa-ONNX` and `smartywu/big-lama`; also redistributed by OpenCV Zoo under Apache-2.0) |
+| Real-ESRGAN `realesr-general-x4v3` | BSD-3-Clause ([xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN/blob/master/LICENSE)) | BSD-3-Clause (released with the repo, v0.2.5.0) |
+| ONNX Runtime | MIT | |
+| onnx (fetch script only) | Apache-2.0 | |
+
+Not used, and why:
+- **BRIA RMBG 1.4 / 2.0** (rembg's current default): weights need a paid agreement for commercial use.
+- **rembg** itself (MIT): not needed; its BiRefNet pre/post-processing is a few lines here, and the
+  package pulls in OpenCV, SciPy, scikit-image and numba.
+- **IS-Net `isnet-general-use`** / **U²-Net**: code Apache-2.0, but the weights have no license of
+  their own (only Google Drive links) and the DIS5K data has separate terms; BiRefNet's weights are
+  explicitly MIT and better at edges.
+- **RealESRGAN_x4plus / x2plus** (BSD-3, fine license): RRDB networks with ~14× the parameters of
+  the compact model, most of them at full resolution, so far slower on CPU (not measured here);
+  Real-ESRGAN describes the compact model as "a tiny small model (consume much fewer GPU memory and time)".
+
+Note: the models were trained by their authors on public research datasets (Places365 for LaMa,
+DIS5K/HRSOD etc. for BiRefNet, DF2K/OST for Real-ESRGAN). The weights' licenses above are what the
+authors released them under; the datasets' own terms are not passed on to the weights by those
+licenses.
 
 ## AI planner (archived)
 

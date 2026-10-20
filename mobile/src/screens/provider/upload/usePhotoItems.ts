@@ -19,7 +19,11 @@ import {
 import type { NewPhoto } from './uploadQueue'
 
 export type PickedAsset = PickedPhoto & { assetId?: string | null }
-export type PhotoEdit = { uri: string; width: number; height: number; recipe: unknown }
+export type PhotoEdit = {
+  uri: string; width: number; height: number; recipe: unknown
+  /** A pixel edit (AI): the working photo + recipe on top, to reopen the editor on it. */
+  pixels?: { uri: string; width: number; height: number; recipe: unknown } | null
+}
 type DisplayFile = { uri: string; width: number; height: number; size: number; from: string }
 export type PhotoItem = {
   id: string

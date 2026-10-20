@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeftRight, Check, Crop, FlipHorizontal2, Palette, Redo2, RotateCcw, RotateCw, Sparkles, SplitSquareHorizontal, Sun, Undo2, Wand2, X,
+  ArrowLeftRight, Check, Crop, FlipHorizontal2, Layers, Palette, Redo2, RotateCcw, RotateCw, Sparkles, SplitSquareHorizontal, Sun, Undo2, Wand2, WandSparkles, X,
 } from 'lucide-react'
+import AiPanel from './ai/AiPanel.jsx'
+import { StudioLayer } from '../studio/StudioLayer.jsx'
+import { autoPixels, cropRegion } from './ai/aiImage.js'
+import { applyAuto, autoEnhance, describeAuto } from '../../lib/editor/auto.js'
 import useDialog from '../useDialog.js'
 import Sheet from '../Sheet.jsx'
 import CropOverlay from './CropOverlay.jsx'
@@ -20,7 +24,13 @@ const TABS = [
   { id: 'color', label: 'Color', icon: Palette },
   { id: 'effects', label: 'Effects', icon: Wand2 },
   { id: 'crop', label: 'Crop', icon: Crop },
+  { id: 'ai', label: 'AI', icon: WandSparkles },
 ]
+// AI edits (components/editor/ai) are pixel edits: each result becomes the new working base and
+// the recipe keeps applying on top (AI tools work on the upright, uncropped photo, so crop and
+// sliders stay meaningful). onDone then returns recipe: null, pixelEdited: true (a recipe can't
+// describe the result alone); the private original is never touched, so Revert still works.
+const flatRecipe = (r) => ({ ...r, crop: { x: 0, y: 0, w: 1, h: 1 }, aspect: 'original', rotate: 0, straighten: 0, flipH: false })
 const PREVIEW_EDGE = 2048 // working copy for the live preview
 const THUMB_EDGE = 200
 
@@ -35,13 +45,21 @@ const isTyping = (el) => el && (el.tagName === 'TEXTAREA' || (el.tagName === 'IN
  *   onDone={({ blob, recipe, width, height, makeBeforeAfter? }) => …}
  *       blob: JPEG display copy (≤ 2048px long edge, metadata stripped); recipe: compact form for
  *       photos.edit_recipe (null when nothing is changed); makeBeforeAfter only with allowBeforeAfter.
+ *       pixelEdited: true when an AI tool or Studio changed the pixels: then recipe is null although the
+ *       photo changed, and pixelBase { blob, recipe } is the pixel-edited image plus the (compact)
+ *       recipe on top of it: reopen with source={pixelBase.blob} initialRecipe={pixelBase.recipe}
+ *       pixelEdited to carry on where you left off (components/upload/editorBridge.jsx editorPropsFor).
  *   onCancel={() => …}
  *   mode="post" | "new" | "reedit"      only changes the wording ("Done" / "Save")
  *   allowBeforeAfter                     shows "Post as before & after"
+ *   pixelEdited                          source is already a pixel edit (not the original): Done
+ *                                        always returns recipe null + pixelEdited.
  * />
  * Render it inside the phone frame (#phone); it fills its positioned container.
+ * "Studio" (components/studio, docs/STUDIO.md) opens the current render in a layers editor; its
+ * result becomes the new working base (like an AI result) and the sliders start again from zero.
  */
-export default function PhotoEditor({ source, initialRecipe = null, onDone, onCancel, mode = 'post', allowBeforeAfter = false }) {
+export default function PhotoEditor({ source, initialRecipe = null, onDone, onCancel, mode = 'post', allowBeforeAfter = false, pixelEdited: pixelSource = false }) {
   const root = useRef(null)
   const titleId = useId()
   const hintId = useId()
@@ -60,7 +78,15 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
   const [message, setMessage] = useState('') // live region
   const say = useCallback((m) => setMessage((prev) => (prev === m ? `${m} ` : m)), [])
 
-  const dirty = !sameRecipe(recipe, startRecipe)
+  // ---- AI base (see TABS): a stack of { blob, work, label }; empty = the original ----
+  const [aiStack, setAiStack] = useState([])
+  const origWork = useRef(null)
+  const [aiLayer, setAiLayer] = useState(null) // overlay element over the preview (mask brush, cut-out)
+  const [flat, setFlat] = useState(false) // AI tab shows the whole, uncropped photo
+  const [aiBusy, setAiBusy] = useState(false)
+  const [autoText, setAutoText] = useState('')
+
+  const dirty = !sameRecipe(recipe, startRecipe) || aiStack.length > 0
   const cancel = () => (dirty && !busy ? setConfirmCancel(true) : onCancel?.())
   useDialog(root, true, confirmCancel ? null : cancel)
 
@@ -68,12 +94,46 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
   useEffect(() => {
     let live = true
     setWork(null)
+    setAiStack([])
     setLoadError('')
     loadWorkingImage(source, { maxEdge: PREVIEW_EDGE })
-      .then((w) => live && setWork(w))
+      .then((w) => { if (live) { origWork.current = w; setWork(w) } })
       .catch((e) => live && setLoadError(e.message || 'Couldn’t open this photo.'))
     return () => { live = false }
   }, [source])
+
+  // extra: { kind: 'studio', restore: recipe } for Studio results (the recipe they replaced).
+  const applyBase = useCallback(async (blob, label, extra = null) => {
+    const w = await loadWorkingImage(blob, { maxEdge: PREVIEW_EDGE })
+    setAiStack((s) => [...s, { blob, work: w, label, ...extra }])
+    setWork(w)
+    say(extra?.kind === 'studio' ? 'Studio edits applied' : `AI result: ${label}`)
+  }, [say])
+  const undoBase = () => {
+    const next = aiStack.slice(0, -1)
+    const last = aiStack[aiStack.length - 1]
+    if (last?.restore) change(() => last.restore, { commit: true }) // Studio baked the sliders in: bring them back
+    setAiStack(next)
+    setWork(next.length ? next[next.length - 1].work : origWork.current)
+    say(next.length ? 'AI edit undone' : 'Back to the original photo')
+  }
+  const clearBase = () => {
+    const first = aiStack.find((s) => s.restore)
+    if (first) change(() => first.restore, { commit: true })
+    setAiStack([])
+    setWork(origWork.current)
+    say('AI edits removed')
+  }
+  // Auto-enhance: judge the part of the (current) photo the crop shows; only its sliders change.
+  const runAuto = () => {
+    if (!work) return null
+    const { adjust } = autoEnhance(autoPixels(work.canvas), { region: cropRegion(recipe, work.width, work.height) })
+    change((r) => applyAuto(r, adjust), { commit: true })
+    const text = describeAuto(adjust)
+    setAutoText(text)
+    say(`Auto-enhance: ${text}`)
+    return adjust
+  }
 
   // ---- preview ----
   const stageRef = useRef(null)
@@ -87,42 +147,66 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+  // One renderer per preview canvas, kept while the editor is open: destroy() loses the WebGL
+  // context, and a lost context can't be reused on the same canvas. So a new base image (an AI
+  // result) only swaps the image, and the destroy is deferred a tick so React StrictMode's
+  // unmount/remount in development doesn't kill it.
   useEffect(() => {
-    if (!work || !canvasRef.current) return undefined
-    const r = createRenderer(canvasRef.current)
-    r.setImage(work.canvas)
+    const canvas = canvasRef.current
+    if (!canvas) return undefined
+    let r = canvas.__peRenderer
+    if (r) clearTimeout(r.__destroyTimer)
+    else { r = createRenderer(canvas); canvas.__peRenderer = r }
     setRenderer(r)
-    return () => r.destroy()
-  }, [work])
+    return () => { r.__destroyTimer = setTimeout(() => { r.destroy(); canvas.__peRenderer = null }, 0) }
+  }, [])
+  const [imageOf, setImageOf] = useState(null) // the work whose image the renderer holds
+  useEffect(() => {
+    if (!renderer || !work) return
+    renderer.setImage(work.canvas)
+    setImageOf(work)
+  }, [renderer, work])
 
   const cropping = tab === 'crop'
-  const showOriginal = (holding || comparing) && !cropping
+  const flatView = flat && tab === 'ai'
+  const shown = useMemo(() => (flatView ? flatRecipe(recipe) : recipe), [flatView, recipe]) // what the preview renders
+  const showOriginal = (holding || comparing) && !cropping && !flatView
   const viewMode = showOriginal ? 'original' : cropping ? 'crop' : 'final'
   const frame = work ? orientedSize(work.width, work.height, recipe.rotate) : { w: 1, h: 1 }
 
   const view = useMemo(() => {
     if (!work || !stage.w) return null
-    const aspect = renderAspect(recipe, viewMode, work.width, work.height)
+    const aspect = renderAspect(shown, viewMode, work.width, work.height)
     const pad = cropping ? 28 : 12
     const maxW = Math.max(40, stage.w - pad * 2), maxH = Math.max(40, stage.h - pad * 2)
     const cssW = Math.min(maxW, maxH * aspect)
     const cssH = cssW / aspect
     const src = viewMode === 'original' ? { width: work.width, height: work.height }
-      : viewMode === 'crop' ? { width: frame.w, height: frame.h } : outputSize(recipe, work.width, work.height)
+      : viewMode === 'crop' ? { width: frame.w, height: frame.h } : outputSize(shown, work.width, work.height)
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     const scale = Math.min(dpr, src.width / cssW, PREVIEW_EDGE / Math.max(cssW, cssH))
     return { cssW, cssH, pxW: Math.max(1, Math.round(cssW * Math.max(scale, 0.25))), pxH: Math.max(1, Math.round(cssH * Math.max(scale, 0.25))) }
-  }, [work, stage.w, stage.h, recipe, viewMode, cropping, frame.w, frame.h])
+  }, [work, stage.w, stage.h, shown, viewMode, cropping, frame.w, frame.h])
 
   useEffect(() => {
-    if (!renderer || !view) return undefined
-    const id = requestAnimationFrame(() => renderer.render(recipe, { width: view.pxW, height: view.pxH, mode: viewMode }))
+    if (!renderer || !view || imageOf !== work) return undefined
+    const id = requestAnimationFrame(() => renderer.render(shown, { width: view.pxW, height: view.pxH, mode: viewMode }))
     return () => cancelAnimationFrame(id)
-  }, [renderer, recipe, view, viewMode])
+  }, [renderer, shown, view, viewMode, imageOf, work])
+
+  // Comparing after an AI edit: the renderer only has the AI base, so draw the real original on top.
+  const origRef = useRef(null)
+  const showAiOriginal = showOriginal && aiStack.length > 0 && !!origWork.current
+  useEffect(() => {
+    const c = origRef.current
+    if (!showAiOriginal || !c || !view) return
+    c.width = view.pxW; c.height = view.pxH
+    c.getContext('2d').drawImage(origWork.current.canvas, 0, 0, c.width, c.height)
+  }, [showAiOriginal, view])
 
   // ---- press and hold to see the original ----
   const holdStart = (e) => {
-    if (cropping || (e.button !== undefined && e.button !== 0)) return
+    if (cropping || flatView || (e.button !== undefined && e.button !== 0)) return
     setHolding(true)
   }
   const holdEnd = () => setHolding(false)
@@ -187,14 +271,21 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
 
   // ---- done ----
   const done = async () => {
-    if (busy || !work) return
+    if (busy || aiBusy || !work) return
     commit()
     setBusy(true)
     setError('')
     try {
-      const out = await exportEdit(work.blob, recipe, { maxEdge: DISPLAY_EDGE })
-      const res = { blob: out.blob, width: out.width, height: out.height, recipe: toStorable(recipe) }
-      if (allowBeforeAfter && pair && !isIdentity(recipe)) res.makeBeforeAfter = true
+      const ai = aiStack.length > 0 || pixelSource
+      const baseBlob = aiStack.length ? aiStack[aiStack.length - 1].blob : work.blob
+      const out = await exportEdit(baseBlob, recipe, { maxEdge: DISPLAY_EDGE })
+      // After an AI / Studio edit the recipe alone can't reproduce the photo: recipe null + pixelEdited.
+      const res = { blob: out.blob, width: out.width, height: out.height, recipe: ai ? null : toStorable(recipe) }
+      if (ai) {
+        res.pixelEdited = true
+        res.pixelBase = { blob: baseBlob, recipe: toStorable(recipe) }
+      }
+      if (allowBeforeAfter && pair && (ai || !isIdentity(recipe))) res.makeBeforeAfter = true
       await onDone?.(res)
     } catch (e) {
       setError(e.message || 'Couldn’t save the edit. Try again.')
@@ -202,6 +293,36 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
       setBusy(false)
     }
   }
+
+  // ---- Studio (docs/STUDIO.md): the current render goes in; what comes back is the new base ----
+  const [studio, setStudio] = useState(null) // { blob } while Studio is open
+  const [studioBusy, setStudioBusy] = useState(false)
+  const openStudio = async () => {
+    if (busy || aiBusy || studioBusy || !work) return
+    commit()
+    setStudioBusy(true)
+    setError('')
+    try {
+      const baseBlob = aiStack.length ? aiStack[aiStack.length - 1].blob : work.blob
+      const out = await exportEdit(baseBlob, recipe, { maxEdge: DISPLAY_EDGE, quality: 0.95 })
+      setStudio({ blob: out.blob })
+    } catch (e) {
+      setError(e.message || 'Couldn’t open Studio. Try again.')
+    } finally {
+      setStudioBusy(false)
+    }
+  }
+  const studioDone = async ({ blob, changed }) => {
+    if (changed) {
+      const before = recipe
+      await applyBase(blob, 'Studio', { kind: 'studio', restore: before })
+      change(() => defaultRecipe(), { commit: true }) // the render already has the sliders and crop in it
+    }
+    setStudio(null)
+  }
+  const pixelText = aiStack.length
+    ? aiStack.every((s) => s.kind === 'studio') ? 'Edited in Studio' : aiStack.some((s) => s.kind === 'studio') ? 'AI + Studio edits' : 'AI edited'
+    : ''
 
   const doneLabel = mode === 'reedit' ? 'Save' : 'Done'
   const summary = describe(recipe)
@@ -221,7 +342,7 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
           <button type="button" className="pe-icon" onClick={doRedo} disabled={!hist.canRedo || busy} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
             <Redo2 size={20} aria-hidden="true" />
           </button>
-          <button type="button" className="pe-done" onClick={done} disabled={!work || busy} data-autofocus>
+          <button type="button" className="pe-done" onClick={done} disabled={!work || busy || aiBusy} data-autofocus>
             {busy ? <span className="pe-spinner" aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}
             {busy ? 'Saving…' : doneLabel}
           </button>
@@ -244,7 +365,7 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
         <div className="pe-canvas-wrap" style={view ? { width: view.cssW, height: view.cssH } : { display: 'none' }}>
           <canvas
             ref={canvasRef} className="pe-canvas" role="img"
-            aria-label={showOriginal ? 'Original photo' : cropping ? 'Photo with crop area' : `Edited photo: ${summary}`}
+            aria-label={showOriginal ? 'Original photo' : cropping ? 'Photo with crop area' : `Edited photo${aiStack.length ? ` (${pixelText})` : ''}: ${summary}`}
           />
           {cropping && view && (
             <CropOverlay
@@ -252,6 +373,8 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
               onChange={(c) => { cropBase.current = null; change((r) => ({ ...r, crop: c })) }} onCommit={commit} describedBy={hintId}
             />
           )}
+          {showAiOriginal && <canvas ref={origRef} className="pe-canvas pe-orig" aria-hidden="true" />}
+          <div className="pe-ai-layer" ref={setAiLayer} />
           {showOriginal && <span className="pe-badge" aria-hidden="true">Original</span>}
         </div>
       </div>
@@ -264,17 +387,34 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
           <SplitSquareHorizontal size={16} aria-hidden="true" /> Compare
         </button>
         <span className="pe-summary" id={hintId}>
-          {cropping ? 'Drag the box or its corners. Arrow keys move it, Shift + arrows resize.' : dirty || !isIdentity(recipe) ? summary : 'Hold the photo to see the original'}
+          {cropping ? 'Drag the box or its corners. Arrow keys move it, Shift + arrows resize.'
+            : flatView ? 'Whole photo shown'
+            : aiStack.length ? (isIdentity(recipe) ? pixelText : `${pixelText} · ${summary}`)
+            : dirty || !isIdentity(recipe) ? summary : 'Hold the photo to see the original'}
         </span>
+        <button
+          type="button" className="pe-chip" onClick={openStudio} disabled={!work || busy || aiBusy || studioBusy}
+          aria-label="Advanced editing in Studio" title="Advanced (Studio): layers, brushes, clone, text, shapes"
+        >
+          {studioBusy ? <span className="pe-spinner" aria-hidden="true" /> : <Layers size={16} aria-hidden="true" />} Studio
+        </button>
         <button type="button" className="pe-chip" onClick={resetAll} disabled={isIdentity(recipe) || busy}>
           <RotateCcw size={16} aria-hidden="true" /> Reset all
         </button>
       </div>
 
-      <div className="pe-panel" role="tabpanel" id={`pe-panel-${tab}`} aria-labelledby={`pe-tab-${tab}`}>
+      {/* The AI panel stays mounted (hidden) so a running AI job survives switching tabs. */}
+      <div className="pe-panel" role="tabpanel" id="pe-panel-ai" aria-labelledby="pe-tab-ai" hidden={tab !== 'ai'}>
+        <AiPanel
+          active={tab === 'ai'} work={work} layer={aiLayer} steps={aiStack.map((s) => s.label)}
+          applyBase={applyBase} undoBase={undoBase} clearBase={clearBase} runAuto={runAuto} autoText={autoText}
+          setFlat={setFlat} setJobBusy={setAiBusy} saving={busy} say={say}
+        />
+      </div>
+      {tab !== 'ai' && <div className="pe-panel" role="tabpanel" id={`pe-panel-${tab}`} aria-labelledby={`pe-tab-${tab}`}>
         {tab === 'presets' && <PresetsPanel recipe={recipe} work={work} change={change} commit={commit} say={say} />}
         {(tab === 'light' || tab === 'color' || tab === 'effects') && (
-          <AdjustPanel group={tab} recipe={recipe} setAdjust={setAdjust} commit={commit} />
+          <AdjustPanel group={tab} recipe={recipe} setAdjust={setAdjust} commit={commit} onAuto={tab === 'light' && work ? runAuto : null} />
         )}
         {tab === 'crop' && (
           <CropPanel
@@ -282,7 +422,7 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
             rotate={rotate} flip={flip} resetCrop={resetCrop}
           />
         )}
-      </div>
+      </div>}
 
       {(error || allowBeforeAfter) && (
         <div className="pe-foot">
@@ -292,7 +432,7 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
               <input type="checkbox" checked={pair} onChange={(e) => setPair(e.target.checked)} disabled={busy} />
               <span>
                 Post as before &amp; after
-                <small>{isIdentity(recipe) ? 'Make an edit first. ' : ''}The original becomes the “before”.</small>
+                <small>{isIdentity(recipe) && !aiStack.length ? 'Make an edit first. ' : ''}The original becomes the “before”{aiStack.length ? `, the ${aiStack.every((s) => s.kind === 'studio') ? 'Studio' : 'AI'} edit the “after”` : ''}.</small>
               </span>
             </label>
           )}
@@ -301,6 +441,13 @@ export default function PhotoEditor({ source, initialRecipe = null, onDone, onCa
 
       <Tabs tab={tab} setTab={setTab} />
       <div className="pe-sr" aria-live="polite" role="status">{message}</div>
+
+      {studio && (
+        <StudioLayer
+          source={studio.blob} name="Photo" onDone={studioDone} onCancel={() => setStudio(null)}
+          doneLabel="Apply" note="Your edit so far opens here. Apply brings it back to the editor."
+        />
+      )}
 
       <Sheet open={confirmCancel} onClose={() => setConfirmCancel(false)} title="Discard your edits?">
         <p className="muted small">The photo stays as it was.</p>
@@ -377,11 +524,17 @@ function Slider({ id, label, value, min, max, step = 1, format, onInput, onCommi
   )
 }
 
-function AdjustPanel({ group, recipe, setAdjust, commit }) {
+function AdjustPanel({ group, recipe, setAdjust, commit, onAuto = null }) {
   const preset = recipe.filter && getPreset(recipe.filter.id)
   const uid = useId()
   return (
     <div className="pe-sliders">
+      {onAuto && (
+        <div className="pe-auto-row">
+          <button type="button" className="pe-chip" onClick={onAuto}><WandSparkles size={15} aria-hidden="true" /> Auto</button>
+          <span className="pe-note">Sets these and the white balance for you.</span>
+        </div>
+      )}
       {preset && (
         <p className="pe-note">On top of the {preset.name} look{recipe.filter.strength < 100 ? ` (${recipe.filter.strength}%)` : ''}. Dots show what the look adds.</p>
       )}

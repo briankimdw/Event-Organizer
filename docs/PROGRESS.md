@@ -20,6 +20,26 @@ Where the project stands, what was decided, and what's next. Update this file at
 
 ---
 
+## 2026-10-19: Studio (Photoshop-style editor, web)
+
+- **What:** miniPaint v4.14.3 (MIT), with layers, brushes, clone, selections, text, shapes and
+  effects, in a same-origin iframe. Decision, API and limitations: `docs/STUDIO.md`. Licences:
+  `THIRD_PARTY_NOTICES.md`.
+- **Licence catch:** miniPaint's prebuilt bundle includes AlertifyJS, which is **GPL-3.0**.
+  `tools/studio/build.mjs` rebuilds miniPaint from its pinned source with an MIT shim instead.
+  The build checks every bundled package's licence and fails if one isn't allowed.
+- **Entry points:**
+  - the **Studio** chip in the photo editor: the result becomes the new working image, and posting
+    keeps it as `item.pixels`, so the editor reopens on it;
+  - **Studio** on each photo in "Edit photos" for a posted photo: `saveEdit` with `recipe: null`.
+    "Original" now shows for every photo that has an original.
+- **Bundle:** main +1.9 kB (+0.7 kB gzipped); Studio's own chunk is 4.3 kB. miniPaint
+  (`public/studio/minipaint.js`, 1.05 MB) loads only when Studio opens.
+- **Unverified:** a real phone, and a signed-in save against the live DB. The flows were checked in
+  headless Chrome with harnesses.
+
+---
+
 ## 2026-10-18: back to photography only ("Photo & video")
 
 **Decision (Brian):** the product is a photography marketplace again. Photographers and videographers are one vertical, **"Photo & video"** (slug `photography`): a creator can sell photo and/or video work. The rest of the event platform is archived, not deleted: `archive/event-platform/README.md` lists what's there and how to restore a piece; the tag `multi-vendor-snapshot` (commit c7028db) has the whole previous state.

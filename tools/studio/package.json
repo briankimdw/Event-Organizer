@@ -1,0 +1,30 @@
+{
+  "name": "photomatch-studio-build",
+  "private": true,
+  "description": "Build-only manifest for the vendored miniPaint Studio (see docs/STUDIO.md). build.mjs copies this into a scratch folder and installs it there with --ignore-scripts; nothing here is installed into the repo.",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/runtime": "7.29.2",
+    "blueimp-canvas-to-blob": "3.29.0",
+    "exif-js": "2.3.0",
+    "file-saver": "2.0.5",
+    "fuzzysort": "1.9.0",
+    "gif.js.optimized": "1.0.1",
+    "hermite-resize": "https://codeload.github.com/viliusle/Hermite-resize/tar.gz/fae53290d2b03520a6fc81d734c3028902a599c0",
+    "jquery": "3.7.1",
+    "pica": "7.1.1",
+    "semver-compare": "1.0.0",
+    "uuid": "8.3.2",
+    "webfontloader": "1.6.28"
+  },
+  "devDependencies": {
+    "@babel/core": "7.29.0",
+    "@babel/plugin-transform-runtime": "7.29.0",
+    "@babel/preset-env": "7.29.2",
+    "babel-loader": "8.4.1",
+    "css-loader": "5.2.7",
+    "style-loader": "2.0.0",
+    "webpack": "5.106.2",
+    "webpack-cli": "7.0.2"
+  }
+}

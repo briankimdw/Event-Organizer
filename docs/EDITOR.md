@@ -172,6 +172,11 @@ portals it into `#phone` through `components/upload/editorBridge.jsx`.
   - `blob`: a 2048 px JPEG display copy.
   - `recipe`: the compact form, or `null` when nothing changed. A `blob` is still returned in that case.
   - `makeBeforeAfter: true`: only when the box is ticked and there is an actual edit.
+  - `pixelEdited: true` + `pixelBase { blob, recipe }`: after an AI tool or **Studio** changed the
+    pixels; `recipe` is then `null`. Reopen with `pixelEdited` (prop) on `pixelBase`
+    (`editorBridge.jsx` `editorPropsFor`).
+- **Studio** (the chip under the preview): opens the current render in the layers editor
+  (docs/STUDIO.md); its result becomes the new working base and the sliders restart from zero.
 
 **Layout** (dark, like Lightroom mobile and VSCO):
 
@@ -272,3 +277,51 @@ the original.
 - **Saving:** pass an `ArrayBuffer` or `Uint8Array` as `blob` to `saveEdit` and `revertEdit`, with
   explicit `width` and `height` (there is no `createImageBitmap` on React Native). `crypto.randomUUID`
   falls back to `Math.random` on Hermes.
+
+## AI tab and auto-enhance
+
+| File | What it does | Shared with mobile |
+|---|---|---|
+| `frontend/src/lib/editor/auto.js` | Auto-enhance: pixels in, slider values out (`autoEnhance`, `applyAuto`, `describeAuto`) | yes (plain JS) |
+| `frontend/src/api/ai.js` | Client for the ML service's AI tools (contract: `docs/AI_TOOLS.md`) | yes (plain JS) |
+| `frontend/src/components/editor/ai/` | `AiPanel.jsx` (the tab), `MaskPainter.jsx` (erase brush / area), `aiImage.js` (canvas helpers) | web |
+
+Tests: `node --test frontend/src/lib/editor/tests/auto.test.js` (synthetic photos: well exposed, −2 EV,
++1.3 EV, warm / blue / green casts, B&W, transparency, crop region).
+
+**Auto-enhance** (`auto.js`, also the **Auto** chip at the top of Light): give it a ~256 px RGBA copy
+(`AUTO_SAMPLE_EDGE`) and optionally the crop's region; it returns integer values for exposure,
+contrast, highlights, shadows, whites, blacks, temperature, tint and vibrance. `applyAuto` sets only
+those sliders (clarity, effects, the look and the crop stay). It measures through `applyToPixel`, so
+its numbers mean what the renderer does. Conservative by design:
+- White balance from "grey pixels" (pixels whose local contrast is equal in R, G and B are neutral
+  surfaces whatever the light); no neutral surface found → no correction; half strength in low-key
+  scenes; capped at ±35 temperature / ±20 tint; B&W photos get none.
+- Exposure only when the median luma is outside 0.40–0.55; brightening goes 70% of the way (max +1 EV)
+  and stops before the brightest 0.5% passes 0.97, so lights stay lights (shadows are lifted instead).
+- Highlights / shadows / whites / blacks / contrast / vibrance only when the histogram calls for it
+  (never saturation); a final simulated render scales things back if clipping got worse.
+
+**AI tools** (`api/ai.js`): `aiCapabilities({ force })` never throws and returns
+`{ ok, error?, tools: { removeBackground, erase, upscale: { available, reason, maxInputEdge, scales? } }, limits }`;
+`removeBackground(image, { output, signal })`, `eraseObject(image, mask, { signal })` and
+`upscale(image, scale, { signal })` resolve to `{ blob, width, height, downscaled, ms }` and throw an
+`AiError` whose `code` is `not_configured | signed_out | offline | timeout | cancelled | too_large |
+unavailable | busy | rate_limited | bad_input | server` and whose `message` can be shown as is.
+The base URL is `VITE_ML_URL` (else port 8000 on the page's host); the token is the Supabase session's
+(refreshed and retried once on 401). `configureAi({ url, accessToken })` overrides both.
+
+**How AI results fit the non-destructive model:**
+- AI tools work on the upright, **uncropped** working photo (≤ 2048 px; the AI tab shows the whole
+  photo while painting a mask or previewing a cut-out). Each result becomes the editor's new
+  **working base**; the recipe (crop, sliders, look) keeps applying on top, so nothing is reset.
+- The base is a stack: "Undo AI edit" / "Remove all" in the AI tab. Compare shows the real original.
+- `onDone` returns `recipe: null` and `pixelEdited: true` (see above): a recipe can't reproduce the
+  result alone. The private original is never touched, so Revert still returns to it, and "Post as
+  before & after" uses the original as the before and the AI edit as the after.
+- Remove background: preview on a checkerboard, then a colour, a blurred copy of the photo, or a
+  transparent PNG download (posts are JPEGs, so transparent can't be posted).
+- Erase: brush (size 1–12% of the photo, undo strokes, clear) or, for keyboard and screen-reader
+  users, an **area** box (arrows move it, Shift + arrows resize, Enter adds it). Repeatable.
+- Upscale ×2 / ×4 with the output size shown; disabled with the reason when the photo is over the
+  service's 1024 px input limit (it is then already enough for a 2048 px post).

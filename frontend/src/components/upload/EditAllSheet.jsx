@@ -24,7 +24,9 @@ export default function EditAllSheet({ photos, items, onClose, announce }) {
 
   const recipeFor = (item, id = pick) => {
     const { normalize, defaultRecipe, toStorable } = mods.recipes
-    const base = item.recipe ? normalize(item.recipe) : defaultRecipe()
+    // A pixel edit (AI / Studio) keeps its pixels: the look goes on top of item.pixels.
+    const own = item.pixels ? item.pixels.recipe : item.recipe
+    const base = own ? normalize(own) : defaultRecipe()
     const full = { ...base, filter: id ? { id, strength } : null }
     return { full, storable: toStorable(full) }
   }
@@ -37,7 +39,7 @@ export default function EditAllSheet({ photos, items, onClose, announce }) {
     const t = setTimeout(async () => {
       try {
         const { full } = recipeFor(first)
-        const out = await mods.renderer.exportEdit(first.source || first.file, full, { maxEdge: 480, quality: 0.8 })
+        const out = await mods.renderer.exportEdit(first.pixels?.blob || first.source || first.file, full, { maxEdge: 480, quality: 0.8 })
         if (!live) return
         url = URL.createObjectURL(out.blob)
         setPreview(url)
@@ -57,10 +59,11 @@ export default function EditAllSheet({ photos, items, onClose, announce }) {
     try {
       for (const item of items) {
         const { full, storable } = recipeFor(item)
-        if (!storable) photos.clearEdit(item.id)
+        if (!storable && !item.pixels) photos.clearEdit(item.id)
         else {
-          const out = await mods.renderer.exportEdit(item.source || item.file, full)
-          await photos.setEdit(item.id, { blob: out.blob, recipe: storable, width: out.width, height: out.height })
+          const out = await mods.renderer.exportEdit(item.pixels?.blob || item.source || item.file, full)
+          const pixels = item.pixels ? { pixelEdited: true, pixelBase: { blob: item.pixels.blob, recipe: storable } } : null
+          await photos.setEdit(item.id, { blob: out.blob, recipe: storable, width: out.width, height: out.height, ...pixels })
         }
         setBusy({ done: ++done, total: items.length })
       }

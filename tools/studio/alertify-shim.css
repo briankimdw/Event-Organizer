@@ -1,0 +1,14 @@
+/* photomatch Studio: notices from alertify-shim.js (MIT). */
+.pm-notices {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 100000;
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  width: max-content; max-width: calc(100vw - 32px); pointer-events: none;
+}
+.pm-notice {
+  pointer-events: auto; cursor: pointer;
+  padding: 10px 14px; border-radius: 12px; font: 600 13px/1.35 Inter, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: #232323; color: #f3f3f3; box-shadow: 0 6px 24px rgba(0, 0, 0, .45); border: 1px solid #2c2c2c;
+}
+.pm-notice-error { border-color: #b91c1c; }
+.pm-notice-success { border-color: #15803d; }
+.pm-notice-warning { border-color: #b45309; }

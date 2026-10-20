@@ -1,12 +1,12 @@
-// The editor's bottom tool tabs: Presets · Light · Color · Effects · Crop.
+// The editor's bottom tool tabs: Presets · Light · Color · Effects · Crop · AI.
 // A real tab list for screen readers ("tab, 2 of 5, selected"), 44pt+ targets.
-import { Aperture, Crop, Palette, Sparkles, Sun, type LucideIcon } from 'lucide-react-native'
+import { Aperture, Crop, Palette, Sparkles, Sun, WandSparkles, type LucideIcon } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
 
 import { Text } from '@/components'
 import { makeStyles, useTheme } from '@/theme'
 
-export type ToolId = 'presets' | 'light' | 'color' | 'effects' | 'crop'
+export type ToolId = 'presets' | 'light' | 'color' | 'effects' | 'crop' | 'ai'
 
 export const TOOLS: { id: ToolId; label: string; icon: LucideIcon }[] = [
   { id: 'presets', label: 'Presets', icon: Sparkles },
@@ -14,6 +14,7 @@ export const TOOLS: { id: ToolId; label: string; icon: LucideIcon }[] = [
   { id: 'color', label: 'Color', icon: Palette },
   { id: 'effects', label: 'Effects', icon: Aperture },
   { id: 'crop', label: 'Crop', icon: Crop },
+  { id: 'ai', label: 'AI', icon: WandSparkles },
 ]
 
 export function ToolTabs({ value, onChange, edited }: { value: ToolId; onChange: (t: ToolId) => void; edited: Partial<Record<ToolId, boolean>> }) {
