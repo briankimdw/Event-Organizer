@@ -6,7 +6,7 @@
 // Email links: the app passes Linking.createURL('/auth/callback') as the redirect.
 // For the link (not the code) to open the app, that URL must be in Supabase Auth >
 // URL Configuration > Redirect URLs, and /auth/callback must exchange the token
-// (TODO: port AuthCallback). Entering the code from the email works without any of that.
+// (handled by src/screens/account/AuthCallback.tsx). Entering the code from the email works without any of that.
 // Google: Supabase's OAuth page in an in-app browser session (works in Expo Go); the
 // redirect back to Linking.createURL('/auth/callback') must be an allowed Redirect URL
 // (exp://** for Expo Go, eventorganizer://** for builds). Native Google account picker

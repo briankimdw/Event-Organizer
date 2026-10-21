@@ -101,7 +101,7 @@ real device to confirm; NOTE = works, with a remark.
 | Long-press a message → report / block | PHONE | The bubble's text is `selectable`; check long-press still opens the sheet on iOS and Android |
 | KeyboardView keeps the composer above the keyboard | PHONE | |
 
-## Events and planner
+## Events and planner (archived 2026-10-18; these screens moved to archive/event-platform/)
 
 | Feature | Result | Notes |
 | --- | --- | --- |

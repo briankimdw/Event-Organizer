@@ -69,7 +69,7 @@ const SERVICE_GROUPS = [
   { kind: 'video', label: 'Video' },
 ]
 
-// The setup form. Also used by /upload the first time someone posts. onDone(provider) gets
+// The setup form (only /new-listing uses it; Upload links here when someone has no listing yet). onDone(provider) gets
 // the new providers row (+ `vertical`). (initialVertical / lockVertical are accepted for old
 // callers; there's one vertical.)
 export function ListingSetup({ onDone, title }) {

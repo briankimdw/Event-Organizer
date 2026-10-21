@@ -2,7 +2,7 @@
 
 Where the project stands, what was decided, and what's next. Update this file at the end of each work session.
 
-**Last updated:** 2026-10-18
+**Last updated:** 2026-10-20
 
 ---
 
@@ -86,7 +86,7 @@ Where the project stands, what was decided, and what's next. Update this file at
   - Tap targets at least 44px.
   - Singular/plural counts ("1 person").
   - "Tagged in" on vendor profiles.
-- **To apply (not yet on the hosted project):** paste `supabase/demo/sharing_events_credits_setup.sql` into the SQL editor.
+- **Applied** (since archived as `archive/event-platform/supabase/demo/sharing_events_credits_setup.sql`): it contained:
   - It contains `share_cards`, `event_groups` and `post_credits`.
   - Tested in PGlite: it runs twice cleanly, and 40/40 share and event tests pass.
   - Until it's applied, the app hides these features.
@@ -104,8 +104,8 @@ Where the project stands, what was decided, and what's next. Update this file at
   - `providers.max_concurrent`, enforced by a slot-based overlap rule: capacity 1 still means no overlaps at all.
   - JSON Schemas per vertical in `seed.sql`.
   - 34 test vendors (`docs/test-users.json`) and demo data.
-- **To apply** (the Supabase MCP is disconnected), in order:
-  1. Paste `supabase/demo/all_verticals_setup.sql` into the SQL editor. It includes the two pending messaging/portfolio migrations.
+- **Applied** (the setup file is now archived as `archive/event-platform/supabase/demo/all_verticals_setup.sql`), in order:
+  1. Paste `all_verticals_setup.sql` into the SQL editor. It includes the two pending messaging/portfolio migrations.
   2. Run `cd frontend && node scripts/seed-test-users.mjs`.
   3. Paste `supabase/demo/demo_data.sql`.
   4. Optionally run `supabase/tests/verticals_test.sql`.

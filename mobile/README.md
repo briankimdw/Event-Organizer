@@ -230,7 +230,7 @@ swipe deck (use gesture-handler + reanimated), `navigator.share` (RN `Share`), G
 | `/sign-in` | SignIn.jsx | **Ported** (Google via browser session) | C |
 | `/me` | Me.jsx (+ Dashboard.jsx) | **Ported**: hero + edit, Hiring/Business switch, client view, checklist, stat tiles, Dashboard tabs (requests, calendar + blackouts, service area, packages (fixed / hourly / quote; photo + video fields), portfolio). `?tab=` opens a tab | C |
 | `/discover` | Discover.jsx (+ components/discover) | **Ported** (swipe deck on gesture-handler + reanimated, service chips, sheets, match moment, vendor cards for photographers without posts; Explore masonry with service filters) | A |
-| `/gallery/:personId`, `/post/:id` | Gallery.jsx | **Ported** (paged albums/photos, pinch-peek zoom, hold to hide UI; TODO: persistent zoom, before/after, owner edit, report, collections) | A |
+| `/gallery/:personId`, `/post/:id` | Gallery.jsx | **Ported** (paged albums/photos, pinch-peek zoom, hold to hide UI, before & after slider; TODO: persistent zoom, report, collections) | A |
 | `/book/:providerId` | BookingRequest.jsx | **Ported** | B |
 | `/bookings` | Bookings.jsx | **Ported** | B |
 | `/bookings/:id` | BookingDetail.jsx | **Ported** | B |
@@ -239,7 +239,7 @@ swipe deck (use gesture-handler + reanimated), `navigator.share` (RN `Share`), G
 | `/inbox` | Inbox.jsx | **Ported** (live via `subscribeToInbox`, unread dots, tab badge) | C |
 | `/inbox/new` | NewMessage.jsx (+ PeoplePicker) | **Ported** | C |
 | `/inbox/:id` | Chat.jsx | **Ported** (realtime, optimistic send/retry, day separators, receipts, typing, ChatInfo, report/block on long-press) | C |
-| `/upload` | Upload.jsx (+ components/upload) | **Ported** (photos and video stills: expo-image-picker multi-select, arrows to reorder; date is a YYYY-MM-DD field). **Upload untested on device** | C |
+| `/upload` | Upload.jsx (+ components/upload) | **Ported** (photos and video stills: expo-image-picker multi-select + camera, drag-to-reorder grid, photo editor + before & after, resumable upload queue). **Upload untested on device** | C |
 | `/my-work` | MyWork.jsx | **Ported** (grid, reorder, `?post=` owner view + edit/delete; TODO: reuse the Gallery viewer) | C |
 | `/new-listing` | NewListing.jsx | **Ported** (straight to the photo & video listing setup) | C |
 | `/verify` | Verify.jsx | **Ported** | C |

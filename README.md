@@ -15,6 +15,7 @@ The main rule across all the docs still holds: **the booking core is category-ag
 | Database + auth | Supabase set up and tested (`supabase/`, design in [`docs/DATABASE.md`](docs/DATABASE.md)). Switching the hosted project to photography only: [`docs/PHOTOGRAPHY_ONLY_RUNBOOK.md`](docs/PHOTOGRAPHY_ONLY_RUNBOOK.md) |
 | `services/ml/` | SigLIP embeddings + auto-tags for the Discover feed, and the AI photo tools for the editor ([`services/ml/README.md`](services/ml/README.md), API: [`docs/AI_TOOLS.md`](docs/AI_TOOLS.md)) |
 | Docs | Two design docs, not yet reconciled (see below). Session-by-session status: [`docs/PROGRESS.md`](docs/PROGRESS.md) |
+| Codebase map | Every file: what it's for, when it was made, and where it's used: [`docs/CODEBASE_MAP.md`](docs/CODEBASE_MAP.md) |
 
 ## Docs
 

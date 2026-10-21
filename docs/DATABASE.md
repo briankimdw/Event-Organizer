@@ -1,7 +1,7 @@
 # Database & Auth Plan (Supabase)
 
 **Status:** phases 0–2 **applied** to the hosted project on 2026-10-08 and passing a 22-check end-to-end test (`supabase/tests/smoke_test.sql`). Payments, deliveries and the multi-vendor planner tables come later. The open questions in section 8 were answered with the defaults below; change them with a new migration if you disagree.
-**Project:** Supabase "Event Organizer" (`ktjvbajrfrbwpndforcy`, us-east-1, Postgres 17). It is currently empty.
+**Project:** Supabase "Event Organizer" (`ktjvbajrfrbwpndforcy`, us-east-1, Postgres 17). Migrations up to `20261013000000` are applied (checked 2026-10-20); see the rollout table below.
 
 **Goal:** launch with **photographers only**, while designing the schema so that adding **musicians, caterers, venues, makeup artists, florists** and an **event planner** later needs new rows and settings, not new tables or rewrites.
 
@@ -250,8 +250,9 @@ Each step is one migration file in `supabase/migrations/`, reviewed in a pull re
 | **2** | `20261010000000_all_verticals` | Price types `per_person` / `per_item` / `daily`, package quantities, `bookings.quantity`, `providers.max_concurrent` + slot-based capacity | Applied (core; the verticals themselves are now archived) |
 | **2** | `20261011000000_share_cards` | Post / vendor / event cards in chat | Applied |
 | **2** | `20261011000100_event_groups`, `20261011000200_post_credits`, `20261013000000_discover_all_verticals` | Events with friends, post credits, vendor-card Discover | Archived features: their tables and functions are dropped by `photography_only` (copies in `archive/event-platform/supabase/migrations/`) |
-| **2** | `20261012000100_feed_v2` | Discover feed v2 (centred taste, several tastes) | Written |
+| **2** | `20261012000100_feed_v2` | Discover feed v2 (centred taste, several tastes) | Applied |
 | **2** | `20261018000000_photography_only` | Merge videography into "Photo & video", drop the archived features, delete the other verticals' data | **To paste**: `supabase/demo/photography_only_setup.sql` after the backup (`docs/PHOTOGRAPHY_ONLY_RUNBOOK.md`) |
+| **2** | `20261020000000_photo_edits` | `photos.edit_recipe` (non-destructive editor recipes), owner grants, re-embed on display change | **Not applied yet** (safe to run; the app works without it) |
 | **3** | *(next)* `payments_deliveries` | Payments, payouts, stripe_events, disputes, deliveries + `deliveries` / `dispute-evidence` buckets, cleanup cron | When Stripe work starts |
 | **Later** | | `event_needs` + `event_plan_drafts`, `photo_embeddings` (pgvector), `ai_review_cases`, Pro subscriptions, contact masking | |
 
