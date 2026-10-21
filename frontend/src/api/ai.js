@@ -14,11 +14,12 @@
 import { supabase } from '../lib/supabase.js'
 
 // VITE_ML_URL wins (mobile maps EXPO_PUBLIC_ML_URL onto it); otherwise port 8000 on the page's
-// host, so a phone on the LAN reaches the dev machine too. Empty (e.g. mobile without it) = off.
+// host, so a phone on the LAN reaches the dev machine too. Only on http pages: an https site
+// can't call http (mixed content), so production needs VITE_ML_URL. Empty = off.
 const envUrl = (() => {
   try { return import.meta.env?.VITE_ML_URL || '' } catch { return '' }
 })()
-const pageHost = typeof location !== 'undefined' && location?.hostname ? `http://${location.hostname}:8000` : ''
+const pageHost = typeof location !== 'undefined' && location?.protocol === 'http:' && location.hostname ? `http://${location.hostname}:8000` : ''
 let baseUrl = String(envUrl || pageHost).trim().replace(/\/+$/, '')
 let getToken = async () => {
   const { data } = await supabase.auth.getSession()

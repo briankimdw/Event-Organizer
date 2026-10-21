@@ -23,6 +23,11 @@ ML_WEBHOOK_SECRET = os.getenv("ML_WEBHOOK_SECRET", "")
 # How many photos to embed per model call.
 BATCH_SIZE = int(os.getenv("ML_BATCH_SIZE", "16"))
 
+# Run the worker loop inside the API process (one-container hosts such as Hugging Face Spaces),
+# instead of a separate `python -m app.worker`. Seconds between checks.
+WORKER_IN_API = os.getenv("ML_WORKER_IN_API", "0") == "1"
+WORKER_INTERVAL_S = int(os.getenv("ML_WORKER_INTERVAL_S", "30"))
+
 # --- Browser access (CORS) -------------------------------------------------------
 # Origins allowed to call the API from a browser (comma-separated), plus a regex for
 # http://<LAN IP>:5173 so the dev site also works when opened on a phone on the same Wi-Fi.

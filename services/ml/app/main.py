@@ -18,6 +18,7 @@ archive/event-platform/services/ml-planner/.)
 from __future__ import annotations
 
 import hmac
+import logging
 import threading
 from contextlib import asynccontextmanager
 from io import BytesIO
@@ -35,6 +36,19 @@ from .store import Store
 from .worker import run_once
 
 state: dict = {}
+log = logging.getLogger("ml.api")
+
+
+def _worker_loop(stop: threading.Event) -> None:
+    """ML_WORKER_IN_API=1: analyse waiting photos every ML_WORKER_INTERVAL_S, like app.worker."""
+    store = state.setdefault("store", Store())
+    while not stop.is_set():
+        try:
+            while run_once(state["engine"], store) > 0 and not stop.is_set():
+                pass
+        except Exception as exc:  # network blip, Supabase down: try again next round
+            log.warning("worker round failed: %s", exc)
+        stop.wait(config.WORKER_INTERVAL_S)
 
 
 @asynccontextmanager
@@ -42,7 +56,11 @@ async def lifespan(_app: FastAPI):
     if config.AI_PRELOAD:  # AI tool models: in the background, the API is usable meanwhile
         threading.Thread(target=get_services().registry.preload, name="ai-preload", daemon=True).start()
     state["engine"] = SigLIP()  # load once at startup (a few seconds)
+    stop = threading.Event()
+    if config.WORKER_IN_API:
+        threading.Thread(target=_worker_loop, args=(stop,), name="ml-worker", daemon=True).start()
     yield
+    stop.set()
 
 
 app = FastAPI(title="photomatch ML", lifespan=lifespan)
