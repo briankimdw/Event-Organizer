@@ -48,7 +48,8 @@ export function discard(uri: string | null | undefined) {
       if (uri.startsWith('blob:')) URL.revokeObjectURL(uri)
       return
     }
-    if (uri.startsWith('file:') && uri.includes('/ai-')) {
+    // Only files we wrote: AI results (ai-*) and Studio results (studio-*, studio/files.ts).
+    if (uri.startsWith('file:') && (uri.includes('/ai-') || uri.includes('/studio-'))) {
       const f = new File(uri)
       if (f.exists) f.delete()
     }

@@ -174,6 +174,66 @@ height })`.
 Keyboard users can still move through the menus and tool buttons with Tab, apply effects from the
 menus, and press Done or Cancel.
 
+## Mobile (Expo app)
+
+The phone loads the same page, `${EXPO_PUBLIC_STUDIO_URL}/studio/index.html`, in a full-screen
+`react-native-webview` (included in Expo Go for SDK 57). `EXPO_PUBLIC_STUDIO_URL` is the deployed web
+app's origin in production. When it's empty, the Studio buttons are dimmed and say why.
+
+| Path | What |
+|---|---|
+| `mobile/src/screens/editor/studio/bridge.ts` | The app ↔ page protocol (pure, no imports) |
+| `mobile/src/screens/editor/studio/StudioSheet.tsx` | The modal: WebView, Cancel/Done, loading/error/retry, discard check |
+| `mobile/src/screens/editor/studio/StudioSheet.web.tsx` | Expo web target: says "Studio is available on the website" (no WebView there) |
+| `mobile/src/screens/editor/studio/files.ts` | Photo → base64 JPEG ≤ 2048 px (expo-image-manipulator); result → cache file |
+| `mobile/src/screens/editor/studio/config.ts` | Page URL, size, shared wording |
+
+**Bridge.** There is no shared JS realm, so `window.studioBridge` is driven by messages:
+
+- **Startup.** The WebView's `injectedJavaScript` (`PAGE_SCRIPT`) installs `window.__pmStudio`. It waits
+  for `studioBridge.ready`, then posts `{ source: 'pm-studio', type: 'ready' }`. It also forwards
+  `onChange` as `change` and `onEscape` as `escape`.
+- **Opening.** The app sends the image with `injectJavaScript`: `begin(n)`, then `n` ×
+  `part(i, "<base64>")` of at most 256 K characters each, then `open(name)`. The page joins the parts
+  into a `data:` URL, calls `studioBridge.open`, and posts `opened { width, height }` (or
+  `error { stage: 'open' }`).
+- **Done.** `exportImage({ id, maxEdge: 2048, quality: 0.9 })` flattens the image to a JPEG and reads it
+  as base64. The page posts it back as `export-begin { n, width, height, changed, length }`, then
+  `n` × `export-part`, then `export-end`. The app checks the length, writes a `studio-*.jpg` cache
+  file and returns `{ uri, width, height, changed }`.
+- **Why chunks.** No single `evaluateJavaScript` call or `postMessage` carries megabytes. A
+  2048 px photo is about 0.4–2 MB of base64, so 2–8 parts.
+
+**Where it's used:**
+
+- **The photo editor** has a **Studio** pill next to the summary. It opens the current render (the base
+  plus crop and sliders, ≤ 2048 px). **Apply** pushes the result onto the AI tab's pixel-base stack
+  (`ai.applyStudio`), and the sliders restart from zero. That is one history step, so **Undo** brings
+  back the old photo and the old sliders together. "Remove Studio edits" (or "AI & Studio edits")
+  restores the sliders from before Studio. Done returns `recipe: null, pixelEdited: true`, the same
+  as after an AI step. `aiEdits` contains `"Edited in Studio"`.
+- **Posted photos** (My work → a post → **Studio**) open the public copy. **Save** calls
+  `saveEdit(id, { recipe: null, … })` (`postApi.saveStudioEdit`), with `STUDIO_RECIPE_NOTE` in the
+  header and a line under the tools. **Revert** now shows for every photo that has an original,
+  like on the web.
+
+**Safety and behaviour:**
+
+- The WebView stays on the Studio page. Other http(s) links open in the browser.
+- miniPaint's own File → Save (a `blob:`/`data:` download) is blocked, because it would navigate away
+  and lose the work. Use Done instead.
+- A load error after the photo is open is ignored, so it never drops work.
+- `keyboardDisplayRequiresUserAction={false}` lets the text tool's hidden textarea raise the keyboard.
+
+**Tests.** `bridge.ts` is plain enough for `node` to import directly. A headless-Chrome run loads the
+Studio page and checks the following with the exact injected strings:
+
+- ready;
+- a 4-part open, and the size it reports;
+- dirty tracking from a brush stroke;
+- export at 2048 and 1024, with the base64 decoded and its JPEG SOF size checked;
+- incomplete-transfer and empty-open errors.
+
 ## Limitations
 
 - **Output size.** The longest edge is 2048 px. Studio works on the display-size render, not on the
@@ -186,9 +246,13 @@ menus, and press Done or Cancel.
   There it re-renders the same copy, so it does no harm.
 - **Layers are not kept.** Studio's layers exist only while Studio is open; what gets saved is the
   flattened image. You can use miniPaint's File → Save As → JSON to keep a project file.
+- **Mobile accessibility.** Our modal is labelled, the discard question is a native alert, and
+  motion follows Reduce Motion. miniPaint's UI inside the WebView has the same gaps as on the web
+  (see Accessibility). VoiceOver can reach the menus and buttons, but painting needs a finger.
 - **miniPaint's own UI** is desktop-first. On phones it uses its mobile layout, with drawer toggles
   for the tools and the layers. It works with touch, but it is tight at 390 px.
 - **Cookies.** miniPaint stores its settings in same-origin cookies (theme, toggles, language).
-- **Web only.** Mobile (Expo) doesn't have Studio.
+- **Mobile runs the same page in a WebView** (see Mobile below), so it needs the web app's origin
+  (`EXPO_PUBLIC_STUDIO_URL`) and a connection.
 - **Undoing a Studio step.** In the photo editor, a Studio result is undone through the AI tab's
   step list (the pixel-base stack), not through the top-bar Undo, which only covers the sliders.

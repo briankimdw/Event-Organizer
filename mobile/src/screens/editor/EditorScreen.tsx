@@ -1,10 +1,11 @@
 // The editor itself (loaded lazily by PhotoEditor.tsx once Skia is ready).
-// Layout: top bar (Cancel · undo / redo / reset · Done), the photo, a one-line summary +
+// Layout: top bar (Cancel · undo / redo / reset · Done), the photo, a one-line summary + Studio
+// (studio/StudioSheet.tsx: the layers editor; its result is a new base like an AI step) +
 // "Before & after" switch, the active tool's panel, the tool tabs.
 // The history holds a Work: the recipe + which photo it applies to (0 = the original, or an AI
 // result, see ai/work.ts), so Undo also steps back over AI steps.
 import { Canvas, FilterMode, Group, ImageShader, MipmapMode, Rect, Shader, type SkImage } from '@shopify/react-native-skia'
-import { Redo2, RotateCcw, Undo2, X } from 'lucide-react-native'
+import { Layers, Redo2, RotateCcw, Undo2, X } from 'lucide-react-native'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, PixelRatio, Platform, Pressable, StyleSheet, Switch, View, type LayoutChangeEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -25,13 +26,15 @@ import { downscale, loadFull, loadPreview } from './loadImage'
 import { AdjustPanel, CropPanel, PresetPanel } from './panels'
 import { AiOverlay } from './ai/AiOverlay'
 import { AiPanel } from './ai/AiPanel'
-import { decodeImage } from './ai/files'
+import { decodeImage, discard, writeImage } from './ai/files'
 import { useAiEditor, type Work } from './ai/useAiEditor'
 import { getEffect, makeBlur, uniformsFor, type Frame } from './pipeline'
 import { EDITOR_BG, EDITOR_BG_RGB } from './chrome'
 import { ToolTabs, type ToolId } from './ToolTabs'
 import type { PhotoEditorProps } from './types'
 import { useHistory } from './useHistory'
+import { STUDIO_MAX_EDGE, studioUnavailableReason } from './studio/config'
+import { StudioSheet, type StudioResult } from './studio/StudioSheet'
 
 const PANEL_H = 236
 const SAMPLING = { filter: FilterMode.Linear, mipmap: MipmapMode.None }
@@ -171,6 +174,46 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
     announce('All edits reset')
   }, [h])
 
+  // ---- Studio (docs/STUDIO.md): the current render goes in, what comes back is the new base ----
+  const [studio, setStudio] = useState<{ uri: string; width: number; height: number } | null>(null)
+  const [studioPrep, setStudioPrep] = useState(false)
+  const openStudio = useCallback(async () => {
+    if (busy || !!ai.job || studioPrep || !preview) return
+    const reason = Platform.OS === 'web' ? null : studioUnavailableReason()
+    if (reason) {
+      Alert.alert('Studio isn’t available', reason)
+      return
+    }
+    if (Platform.OS === 'web') return setStudio({ uri: '', width: 0, height: 0 }) // says "use the website"
+    setStudioPrep(true)
+    announce('Opening Studio')
+    try {
+      await new Promise((r) => setTimeout(r, 30)) // let the spinner paint before the GPU work
+      const w = hRef.current.committed
+      const aiBase = ai.baseOf(w.base)
+      const full = aiBase ? await decodeImage(aiBase.uri) : await loadFull(source.uri)
+      const out = renderToImage(full, normalize(w.recipe), { maxEdge: STUDIO_MAX_EDGE })
+      const file = writeImage(out.image, 'image/jpeg', 95)
+      full.dispose?.()
+      out.image.dispose?.()
+      setStudio({ uri: file.uri, width: file.width, height: file.height })
+    } catch (e: any) {
+      const msg = e?.message || 'Couldn’t open Studio. Try again.'
+      Alert.alert('Couldn’t open Studio', msg)
+      announce(msg)
+    } finally {
+      setStudioPrep(false)
+    }
+  }, [busy, ai, studioPrep, preview, source.uri])
+  const closeStudio = useCallback(() => {
+    if (studio) discard(studio.uri) // the render we sent in
+    setStudio(null)
+  }, [studio])
+  const studioDone = useCallback(async (res: StudioResult) => {
+    if (res.changed) await ai.applyStudio({ uri: res.uri })
+    closeStudio()
+  }, [ai, closeStudio])
+
   // ---- frame on screen ---------------------------------------------------------
   const cropMode = tool === 'crop' && !comparing
   const shown: EditRecipe = comparing ? defaultRecipe() : recipe
@@ -213,6 +256,7 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
   const changed = !sameRecipe(recipe, initial) || work.base !== 0
   const aiBusy = !!ai.job
   const cancel = useCallback(() => {
+    if (studioPrep) return
     if (aiBusy) return ai.cancel() // first stop the running AI tool
     if (!changed || busy) return onCancel()
     const title = mode === 'reedit' ? 'Discard changes?' : 'Discard edits?'
@@ -224,10 +268,10 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
       { text: 'Keep editing', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: onCancel },
     ])
-  }, [changed, busy, aiBusy, ai, mode, onCancel])
+  }, [changed, busy, aiBusy, studioPrep, ai, mode, onCancel])
 
   const done = useCallback(async () => {
-    if (busy || aiBusy) return
+    if (busy || aiBusy || studioPrep) return
     setBusy(true)
     announce('Saving the photo')
     try {
@@ -268,7 +312,7 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
     } finally {
       setBusy(false)
     }
-  }, [busy, aiBusy, ai, source, pixelEdited, onDone, beforeAfter])
+  }, [busy, aiBusy, studioPrep, ai, source, pixelEdited, onDone, beforeAfter])
 
   const onArea = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout
@@ -377,6 +421,19 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
             <Text variant="tiny" weight="600">{comparing ? 'Showing original' : 'Show original'}</Text>
           </Pressable>
         ) : null}
+        <Pressable
+          onPress={openStudio}
+          disabled={busy || aiBusy || studioPrep || !preview}
+          hitSlop={6}
+          style={({ pressed }) => [s.studio, { borderColor: t.c.line }, (busy || aiBusy || studioPrep || !preview) && { opacity: 0.4 }, pressed && { opacity: 0.6 }, Platform.OS !== 'web' && !!studioUnavailableReason() && { opacity: 0.4 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Advanced editing in Studio"
+          accessibilityHint={studioUnavailableReason() ?? 'Opens this photo with your edits in Studio: layers, brushes, clone, text and shapes'}
+          accessibilityState={{ disabled: busy || aiBusy || studioPrep || !preview, busy: studioPrep }}
+        >
+          {studioPrep ? <ActivityIndicator size="small" color={t.c.ink} /> : <Layers size={14} color={t.c.ink} />}
+          <Text variant="tiny" weight="600" style={{ color: t.c.ink }}>Studio</Text>
+        </Pressable>
         {allowBeforeAfter ? (
           <View style={s.ba}>
             <Text variant="tiny" weight="600" style={{ color: t.c.ink }} importantForAccessibility="no" accessibilityElementsHidden>Before & after</Text>
@@ -418,6 +475,17 @@ export default function EditorScreen({ source, initialRecipe, mode = 'post', all
       <View style={{ backgroundColor: t.c.bg, paddingBottom: insets.bottom }}>
         <ToolTabs value={tool} onChange={setTool} edited={edited} />
       </View>
+      {studio ? (
+        <StudioSheet
+          visible
+          source={studio}
+          name="Photo"
+          doneLabel="Apply"
+          note="Your edit so far opens here. Apply brings it back to the editor."
+          onDone={studioDone}
+          onCancel={closeStudio}
+        />
+      ) : null}
     </View>
   )
 }
@@ -433,6 +501,7 @@ const useStyles = makeStyles((t) => ({
   badge: { position: 'absolute', top: 12, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: t.radius.pill },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, paddingHorizontal: t.space.lg, minHeight: 40, backgroundColor: t.c.bg, borderTopWidth: 1, borderTopColor: t.c.line },
   ba: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  studio: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 28, paddingHorizontal: 10, borderRadius: t.radius.pill, borderWidth: 1 },
   srCompare: { paddingHorizontal: 8, paddingVertical: 6 },
   panel: { height: PANEL_H },
 }))

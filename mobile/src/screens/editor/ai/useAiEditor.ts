@@ -5,7 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Platform, Share } from 'react-native'
 
 import { announce } from '@/lib/a11y'
-import type { EditRecipe } from '../contract'
+import { defaultRecipe, type EditRecipe } from '../contract'
+import { STUDIO_STEP } from '../studio/config'
 import { applyAuto, autoFor, describeAuto, isAutoApplied } from './auto'
 import {
   aiCapabilities, eraseObject, isCancel, makeAiError, removeBackground, upscale, UPSCALE_MAX_INPUT_EDGE,
@@ -14,7 +15,7 @@ import {
 import { backdropLabel, flatten, type Backdrop } from './composite'
 import { decodeImage, discard, writeImage } from './files'
 import { AREAS, coverage, type Stroke } from './mask'
-import { makeBase, maskForInput, workingEdge, workingInput, type Base } from './work'
+import { makeBase, makeBaseFromFile, maskForInput, pixelEditsLabel, workingEdge, workingInput, type Base } from './work'
 
 export type AiTool = 'auto' | 'background' | 'erase' | 'upscale'
 export type Work = { recipe: EditRecipe; base: number }
@@ -112,10 +113,14 @@ export function useAiEditor({ source, original, committed, work, commit }: Deps)
 
   const edgeFor = (t: Exclude<AiTool, 'auto'>) => caps?.tools?.[TOOL_KEY[t]]?.maxInputEdge || DEFAULT_EDGE
 
-  const addBase = useCallback((b: Base, from: Work, announceText: string) => {
+  // recipe: what applies on top of the new base (Studio: a fresh recipe, its render has the sliders in).
+  const addBase = useCallback((b0: Base, from: Work, announceText: string, recipe: EditRecipe = from.recipe) => {
+    // Carry the slider state from before the first Studio step along the chain (see Base.restore).
+    const prev = from.base ? basesRef.current[from.base] : null
+    const b = !b0.restore && prev?.restore ? { ...b0, restore: prev.restore } : b0
     setBases((m) => ({ ...m, [b.id]: b }))
     basesRef.current = { ...basesRef.current, [b.id]: b }
-    commit({ recipe: from.recipe, base: b.id })
+    commit({ recipe, base: b.id })
     announce(announceText)
   }, [commit])
 
@@ -129,9 +134,24 @@ export function useAiEditor({ source, original, committed, work, commit }: Deps)
   const removeAll = useCallback(() => {
     const w = committed()
     if (!w.base) return
-    commit({ ...w, base: 0 })
-    announce('AI edits removed. Undo brings them back.')
+    const b = basesRef.current[w.base]
+    // After Studio the sliders were baked in and restarted: bring back the ones from before it.
+    commit({ recipe: b?.restore ?? w.recipe, base: 0 })
+    announce(`${pixelEditsLabel(b?.steps ?? [])} removed. Undo brings them back.`)
   }, [committed, commit])
+
+  // ---- Studio (studio/StudioSheet.tsx) ------------------------------------------------------
+  /**
+   * A Studio result (the current render, edited in Studio) becomes the new working photo. Its
+   * render already has the sliders, look and crop in it, so the recipe restarts from zero; one
+   * history step, so Undo brings back the previous photo and sliders together.
+   */
+  const applyStudio = useCallback(async (file: { uri: string }) => {
+    const w = committed()
+    const prev = baseOf(w.base)
+    const b = await makeBaseFromFile(file, [...(prev?.steps ?? []), STUDIO_STEP], prev?.restore ?? w.recipe)
+    addBase(b, w, 'Studio edits applied. Undo brings back the photo and sliders as they were.', defaultRecipe())
+  }, [committed, baseOf, addBase])
 
   // ---- Auto-enhance (on the phone, no server) -------------------------------------------
   const [lastAuto, setLastAuto] = useState<{ adjust: Parameters<typeof isAutoApplied>[1]; text: string } | null>(null)
@@ -277,14 +297,14 @@ export function useAiEditor({ source, original, committed, work, commit }: Deps)
     caps, loadCaps, reasonFor,
     tool, setTool,
     job, cancel, error, clearError,
-    baseOf, keepBase, removeAll,
-    /** The AI result being edited (null = the original). */
+    baseOf, keepBase, removeAll, applyStudio,
+    /** The AI / Studio result being edited (null = the original). */
     base: current,
     auto: { run: runAuto, applied: autoApplied, text: lastAuto?.text ?? null },
     background: { run: runBackground, cut, backdrop, setBackdrop, use: applyCutout, discard: discardCutout, share: canSharePng ? sharePng : null },
     erase: { run: runErase, strokes, addStroke, toggleArea, undo: undoStroke, clear: clearMask, mode: maskMode, setMode: setMaskMode, size: brushSize, setSize: setBrushSize, covered },
     upscale: { run: runUpscale, scale, setScale, scales: caps?.tools?.upscale?.scales ?? [2, 4], tooBig: upscaleTooBig, edge },
-  }), [caps, loadCaps, reasonFor, tool, job, cancel, error, clearError, baseOf, keepBase, removeAll, current, runAuto, autoApplied, lastAuto, runBackground, cut, backdrop, applyCutout, discardCutout, canSharePng, sharePng, runErase, strokes, addStroke, toggleArea, undoStroke, clearMask, maskMode, brushSize, covered, runUpscale, scale, upscaleTooBig, edge])
+  }), [caps, loadCaps, reasonFor, tool, job, cancel, error, clearError, baseOf, keepBase, removeAll, applyStudio, current, runAuto, autoApplied, lastAuto, runBackground, cut, backdrop, applyCutout, discardCutout, canSharePng, sharePng, runErase, strokes, addStroke, toggleArea, undoStroke, clearMask, maskMode, brushSize, covered, runUpscale, scale, upscaleTooBig, edge])
 }
 
 export type AiEditor = ReturnType<typeof useAiEditor>

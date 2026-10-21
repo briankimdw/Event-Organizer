@@ -2,6 +2,7 @@
 //   openForEdit(photoId)              -> { url, recipe, fromOriginal }   (the private original + saved recipe)
 //   saveReedit(photoId, result)       the editor's render (resized to the public copy) -> saveEdit
 //   revertPhoto(photoId, photo)       a fresh public copy from the original -> revertEdit
+//   saveStudioEdit(photoId, result)   a Studio result (pixel edit) -> saveEdit with recipe null
 // edits.js takes the display copy as bytes on native (supabase-js uploads an ArrayBuffer /
 // Uint8Array reliably in React Native, a Blob from fetch() not always), so files are read here.
 import { Platform } from 'react-native'
@@ -35,6 +36,15 @@ export async function openForEdit(photoId: string): Promise<{ url: string; recip
 export async function saveReedit(photoId: string, result: Render & { recipe: unknown }) {
   const display = await makeDisplayFile(result)
   return saveEdit(photoId, { recipe: result.recipe, blob: await bytesOf(display.uri), width: display.width, height: display.height } as any)
+}
+
+/**
+ * Save a Studio result as the public copy (docs/STUDIO.md). A pixel edit: the recipe becomes null
+ * (a slider recipe can't describe it). The private original is untouched, so Revert still works.
+ * The Studio JPEG is already at most 2048 px, the public copy's size.
+ */
+export async function saveStudioEdit(photoId: string, result: Render) {
+  return saveEdit(photoId, { recipe: null, blob: await bytesOf(result.uri), width: result.width, height: result.height } as any)
 }
 
 /** Back to the unedited original. */

@@ -13,6 +13,7 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import { Platform } from 'react-native'
 
 import { geometryMatrix, mat3, outputSize, type EditRecipe } from '../contract'
+import { STUDIO_STEP } from '../studio/config'
 import { downscale, PREVIEW_EDGE } from '../loadImage'
 import { makeBlur } from '../pipeline'
 import { makeSurface, quiet } from '../surface'
@@ -28,8 +29,13 @@ export type Base = {
   preview: SkImage
   blur: SkImage
   thumb: SkImage
-  /** AI steps so far, oldest first ("Background removed", "Erased", "Upscaled 2×"). */
+  /** AI / Studio steps so far, oldest first ("Background removed", "Erased", "Upscaled 2×", "Edited in Studio"). */
   steps: string[]
+  /**
+   * Studio bakes the sliders into its result (the recipe restarts from zero on top of it). This is
+   * the recipe the first Studio step in the chain replaced: "Remove AI edits" brings it back.
+   */
+  restore?: EditRecipe
 }
 
 /** The working photo as a file of at most `maxEdge` px (upright), plus its Skia image. */
@@ -104,7 +110,24 @@ export function maskForInput(strokes: Stroke[], recipe: EditRecipe, w: number, h
   return writeImage(img, 'image/png')
 }
 
+/** What to call the pixel edits in `steps`: "AI edits", "Studio edits" or "AI & Studio edits". */
+export function pixelEditsLabel(steps: string[]): string {
+  const studio = steps.filter((x) => x === STUDIO_STEP).length
+  if (!studio) return 'AI edits'
+  return studio === steps.length ? 'Studio edits' : 'AI & Studio edits'
+}
+
 let nextId = 1
+
+/** A finished image that's already a file of ours (a Studio result) as a new working base. */
+export async function makeBaseFromFile(file: { uri: string }, steps: string[], restore?: EditRecipe): Promise<Base> {
+  const full = await decodeImage(file.uri)
+  const preview = quiet(downscale(full, PREVIEW_EDGE))
+  return {
+    id: nextId++, uri: file.uri, width: full.width(), height: full.height(),
+    preview, blur: makeBlur(preview), thumb: quiet(downscale(preview, 220)), steps, restore,
+  }
+}
 
 /** A finished AI image (encoded bytes or an already-decoded image) as a new working base. */
 export async function makeBase(from: { bytes: Uint8Array; type: 'image/png' | 'image/jpeg' } | { image: SkImage; type: 'image/png' | 'image/jpeg' }, steps: string[]): Promise<Base> {

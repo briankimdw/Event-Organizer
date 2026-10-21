@@ -6,11 +6,15 @@ const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? ''
 // The ML service (services/ml) that runs the editor's AI tools (docs/AI_TOOLS.md). On a phone this
 // must be the PC's LAN address (http://192.168.x.y:8000): localhost is the phone itself.
 const ML_URL = (process.env.EXPO_PUBLIC_ML_URL ?? '').trim().replace(/\/+$/, '')
+// Where Studio's static page is served (docs/STUDIO.md): the page is `${STUDIO_URL}/studio/index.html`.
+// In production this is the deployed web app's origin. Empty = Studio is off in the app.
+const STUDIO_URL = (process.env.EXPO_PUBLIC_STUDIO_URL ?? '').trim().replace(/\/+$/, '')
 
 export const ENV = {
   supabaseUrl: SUPABASE_URL,
   supabaseKey: SUPABASE_KEY,
   mlUrl: ML_URL,
+  studioUrl: STUDIO_URL,
 }
 
 // What `import.meta.env` looks like to shared files. DEV is false on purpose:

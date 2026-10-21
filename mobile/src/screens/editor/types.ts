@@ -18,10 +18,10 @@ export type PhotoEditorResult = {
   height: number
   /** The "Post as before & after" switch (always false unless allowBeforeAfter). */
   makeBeforeAfter: boolean
-  /** AI steps baked into `uri` ("Background removed", "Erased", "Upscaled 2×"); [] when none. */
+  /** AI / Studio steps baked into `uri` ("Background removed", "Erased", "Upscaled 2×", "Edited in Studio"); [] when none. */
   aiEdits: string[]
   /**
-   * The pixels changed (an AI tool, or the editor was opened with pixelEdited): recipe is null.
+   * The pixels changed (an AI tool or Studio, or the editor was opened with pixelEdited): recipe is null.
    * pixelBase is the pixel-edited working photo + the recipe on top of it, to reopen the editor
    * where the user left off (<PhotoEditor source={pixelBase} initialRecipe={pixelBase.recipe} pixelEdited />).
    */

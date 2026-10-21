@@ -1,15 +1,16 @@
 // The photos of one of your posts, editable in place (My work -> a post):
 //   album: tap a photo to select it; hold and drag to reorder (the first is the cover); tools for the
 //          selected photo: Edit (the photo editor on the private original + its saved recipe),
+//          Studio (the layers editor on the public copy; a pixel edit, saved with recipe null),
 //          Revert (back to the original), Replace (a new photo from the library), Make cover, Remove.
 //   before & after: the comparison slider, then Edit / Revert / Replace for the before and the
 //          after, and Swap.
 // Data: the shared api/portfolio.js (getPostPhotos, reorderPostPhotos, setPostCover,
 // replacePostPhoto, removePostPhoto, convertPost) and api/edits.js through ./postApi.
 import * as ImagePicker from 'expo-image-picker'
-import { ArrowLeftRight, ImageUp, RotateCcw, SlidersHorizontal, Star, Trash2 } from 'lucide-react-native'
+import { ArrowLeftRight, ImageUp, Layers, RotateCcw, SlidersHorizontal, Star, Trash2 } from 'lucide-react-native'
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, View } from 'react-native'
+import { ActivityIndicator, Alert, Platform, Pressable, View } from 'react-native'
 
 import { invalidate } from '@shared/api/catalog.js'
 import { convertPost, getAlbum, getPostPhotos, removePostPhoto, replacePostPhoto, reorderPostPhotos, setPostCover, toViewerAlbum } from '@shared/api/portfolio.js'
@@ -17,10 +18,12 @@ import { BeforeAfter } from '@/components/BeforeAfter'
 import { Button, ErrorState, Photo, Sheet, Text } from '@/components'
 import { forgetBeforePhoto } from '@/lib/beforeAfter'
 import { PhotoEditorModal, type PhotoEditorResult } from '@/screens/editor/PhotoEditor'
+import { STUDIO_RECIPE_NOTE, studioUnavailableReason } from '@/screens/editor/studio/config'
+import { StudioSheet, type StudioResult } from '@/screens/editor/studio/StudioSheet'
 import { fileBlob, fileExtension, makeDisplayFile, readCameraSettings, toCompatible, type PickedPhoto } from '@/shims/images'
 import { useStore } from '@/state/store'
 import { makeStyles, useTheme } from '@/theme'
-import { openForEdit, revertPhoto, saveReedit } from './postApi'
+import { openForEdit, revertPhoto, saveReedit, saveStudioEdit } from './postApi'
 import { SortableGrid } from './SortableGrid'
 
 type Row = {
@@ -41,6 +44,7 @@ export function PostPhotos({ album, userId, onUpdated }: { album: ViewerAlbum; u
   const [selId, setSelId] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null) // what's happening, e.g. "Saving your edit…"
   const [editing, setEditing] = useState<{ row: Row; url: string; recipe: any } | null>(null)
+  const [studioFor, setStudioFor] = useState<{ row: Row; name: string } | null>(null) // Studio open on a posted photo
   const [confirmRemove, setConfirmRemove] = useState<Row | null>(null)
   const [width, setWidth] = useState(0)
   const ba = album.kind === 'before_after'
@@ -109,6 +113,21 @@ export function PostPhotos({ album, userId, onUpdated }: { album: ViewerAlbum; u
     setEditing(null)
     if (row) run('Saving your edit…', () => saveReedit(row.id, r), 'Edit saved')
   }
+  // "Edit in Studio": the public copy (what clients see, with any slider edits in it) opens in Studio.
+  // Saving is a pixel edit: recipe null replaces the slider recipe; the original stays private and
+  // Revert still restores it.
+  const openStudio = (row: Row, name: string) => {
+    const reason = Platform.OS === 'web' ? null : studioUnavailableReason()
+    if (reason) return Alert.alert('Studio isn’t available', reason)
+    setStudioFor({ row, name })
+  }
+  const finishStudio = async (r: StudioResult) => {
+    const row = studioFor?.row
+    if (!row || !r.changed) return setStudioFor(null)
+    await saveStudioEdit(row.id, r) // a throw keeps Studio open and shows the message
+    setStudioFor(null)
+    await run('Updating…', async () => {}, 'Studio edit saved')
+  }
   const revert = (row: Row) => run('Going back to the original…', () => revertPhoto(row.id, row), 'Back to the original')
   const replace = async (row: Row) => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], exif: true, quality: 1 }).catch((e) => {
@@ -140,7 +159,8 @@ export function PostPhotos({ album, userId, onUpdated }: { album: ViewerAlbum; u
     <View style={s.tools}>
       {!!label && <Text variant="label" style={s.toolLabel}>{label}</Text>}
       <Tool icon={SlidersHorizontal} text={row.edit_recipe ? 'Edit again' : 'Edit'} label={`${row.edit_recipe ? 'Edit again' : 'Edit'}${label ? ` the ${label.toLowerCase()}` : ''}`} onPress={() => edit(row)} />
-      {!!row.edit_recipe && <Tool icon={RotateCcw} text="Revert" label={`Revert${label ? ` the ${label.toLowerCase()}` : ''} to the original`} onPress={() => revert(row)} />}
+      <Tool icon={Layers} text="Studio" label={`Edit${label ? ` the ${label.toLowerCase()}` : ' this photo'} in Studio`} onPress={() => openStudio(row, label || 'Photo')} />
+      {(!!row.edit_recipe || !!row.original_path) && <Tool icon={RotateCcw} text="Revert" label={`Revert${label ? ` the ${label.toLowerCase()}` : ''} to the original`} onPress={() => revert(row)} />}
       <Tool icon={ImageUp} text="Replace" label={`Replace${label ? ` the ${label.toLowerCase()}` : ' this photo'}`} onPress={() => replace(row)} />
       {!ba && rows.length > 1 && (
         <>
@@ -203,6 +223,10 @@ export function PostPhotos({ album, userId, onUpdated }: { album: ViewerAlbum; u
         </>
       )}
 
+      <Text variant="tiny" muted>
+        Studio (layers, brushes, clone, text) saves a pixel edit that replaces the slider edits. Edit starts again from your original, and Revert brings the original back.
+      </Text>
+
       {!!busy && (
         <View style={s.busy} accessibilityLiveRegion="polite" accessibilityLabel={busy}>
           <ActivityIndicator color={c.ink} />
@@ -218,6 +242,18 @@ export function PostPhotos({ album, userId, onUpdated }: { album: ViewerAlbum; u
           mode="reedit"
           onDone={onEdited}
           onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {!!studioFor && (
+        <StudioSheet
+          visible
+          source={{ uri: studioFor.row.src, width: studioFor.row.width ?? undefined, height: studioFor.row.height ?? undefined }}
+          name={studioFor.name}
+          doneLabel="Save"
+          note={STUDIO_RECIPE_NOTE}
+          onDone={finishStudio}
+          onCancel={() => setStudioFor(null)}
         />
       )}
 

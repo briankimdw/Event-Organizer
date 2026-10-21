@@ -60,6 +60,8 @@ npx expo start              # scan the QR code with Expo Go
 | --- | --- |
 | `EXPO_PUBLIC_SUPABASE_URL` | Same project as `frontend/.env.local` |
 | `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The **publishable** key only (safe in a client; RLS protects data). Never a service-role key. |
+| `EXPO_PUBLIC_ML_URL` | The AI tools' service (docs/AI_TOOLS.md). Empty = AI tools off |
+| `EXPO_PUBLIC_STUDIO_URL` | Origin serving Studio's page (`<url>/studio/index.html`, docs/STUDIO.md "Mobile"); in production the web app's origin. Empty = Studio buttons off |
 
 Checks (run before you hand work back):
 

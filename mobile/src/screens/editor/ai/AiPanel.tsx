@@ -13,6 +13,7 @@ import { makeStyles, useTheme } from '@/theme'
 import { EditSlider } from '../EditSlider'
 import { BACKDROP_COLORS, backdropLabel, type Backdrop } from './composite'
 import type { AiEditor, AiTool } from './useAiEditor'
+import { pixelEditsLabel } from './work'
 
 const TOOLS: { id: AiTool; label: string; icon: LucideIcon; hint: string }[] = [
   { id: 'auto', label: 'Auto', icon: WandSparkles, hint: 'Balances light and colour' },
@@ -47,7 +48,13 @@ export function AiPanel({ ai }: { ai: AiEditor }) {
           )
         })}
         {ai.base && !busy ? (
-          <Chip label="Remove AI edits" icon={Undo2} onPress={ai.removeAll} asButton accessibilityHint={`Goes back to the original photo (${ai.base.steps.join(', ')}); your sliders stay`} />
+          <Chip
+            label={`Remove ${pixelEditsLabel(ai.base.steps)}`}
+            icon={Undo2}
+            onPress={ai.removeAll}
+            asButton
+            accessibilityHint={`Goes back to the original photo (${ai.base.steps.join(', ')}); ${ai.base.restore ? 'your sliders come back as they were before Studio' : 'your sliders stay'}`}
+          />
         ) : null}
       </ScrollView>
       <View style={s.body}>
